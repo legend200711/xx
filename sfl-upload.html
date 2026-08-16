@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Upload Video — Shadow Fire Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.upload-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+.upload-drop {
+  border: 2px dashed var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 52px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--sfl-t), border-color var(--sfl-t);
+  background: rgba(0,174,239,0.03);
+  position: relative;
+}
+.upload-drop.drag-over { background: rgba(0,174,239,0.09); border-color: var(--sfl-blue-bright); }
+.upload-drop input[type="file"] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%; }
+.upload-drop-icon { font-size: 48px; margin-bottom: 14px; }
+.upload-drop-title { font-size: 17px; font-weight: 700; color: var(--sfl-text); margin-bottom: 6px; }
+.upload-drop-sub { font-size: 13px; color: var(--sfl-text-muted); }
+
+.upload-preview-wrap {
+  background: #000;
+  border-radius: var(--sfl-r-md);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 20px;
+  aspect-ratio: 16/9;
+  display: flex; align-items: center; justify-content: center;
+}
+.upload-preview-wrap video { width: 100%; height: 100%; object-fit: contain; }
+
+.upload-progress-bar {
+  height: 4px;
+  background: var(--sfl-border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sfl-blue) 0%, var(--sfl-flame-hot) 100%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+.upload-status { font-size: 12px; color: var(--sfl-text-muted); margin-bottom: 16px; }
+
+.upload-thumb-row {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.upload-thumb-preview {
+  width: 140px; height: 79px;
+  border-radius: var(--sfl-r-sm);
+  object-fit: cover;
+  border: 1px solid var(--sfl-border);
+  background: var(--sfl-bg-card);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--sfl-text-faint);
+}
+.upload-thumb-preview img { width:100%;height:100%;object-fit:cover;border-radius:var(--sfl-r-sm); }
+
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag-pill {
+  background: var(--sfl-bg-active);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-full);
+  padding: 4px 10px;
+  font-size: 12px; color: var(--sfl-blue);
+  display: flex; align-items: center; gap: 5px;
+  cursor: default;
+}
+.tag-pill-rm { cursor: pointer; opacity: 0.7; transition: opacity 0.15s; }
+.tag-pill-rm:hover { opacity: 1; color: #ff4455; }
+
+.vis-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.vis-opt {
+  flex: 1; min-width: 120px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  cursor: pointer;
+  transition: border-color var(--sfl-t), background var(--sfl-t);
+  text-align: center;
+}
+.vis-opt.selected { border-color: var(--sfl-border-hot); background: var(--sfl-bg-active); }
+.vis-opt-icon { font-size: 22px; margin-bottom: 4px; }
+.vis-opt-label { font-size: 13px; font-weight: 600; color: var(--sfl-text); }
+.vis-opt-sub { font-size: 11px; color: var(--sfl-text-muted); margin-top: 2px; }
+
+.page-head {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sfl-border);
+}
+.page-head-back {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sfl-text); font-size: 18px;
+  cursor: pointer; text-decoration: none;
+  transition: background var(--sfl-t);
+  flex-shrink: 0;
+}
+.page-head-back:hover { background: var(--sfl-bg-hover); }
+.page-head-title { font-size: 18px; font-weight: 800; }
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<!-- Auth gate overlay -->
+<div class="sfl-modal-overlay sfl-hidden" id="authGate">
+  <div class="sfl-modal" style="max-width:380px;text-align:center;">
+    <div class="sfl-modal-body" style="padding:32px 24px;">
+      <div style="font-size:40px;margin-bottom:14px;">🔐</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Sign In Required</div>
+      <p style="font-size:13px;color:var(--sfl-text-label);margin-bottom:20px;line-height:1.6;">
+        You need a Shadow Fire Live account to upload videos.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <a href="sfl-login.html" class="sfl-btn sfl-btn-primary">Sign In</a>
+        <a href="sfl-home.html" class="sfl-btn sfl-btn-ghost">Go Back</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="padding-top:0;min-height:100vh;">
+<div class="upload-page" id="uploadPage">
+
+  <div class="page-head">
+    <a href="sfl-home.html" class="page-head-back" aria-label="Back">←</a>
+    <div class="page-head-title">📤 Upload Video</div>
+  </div>
+
+  <!-- Step 1: File picker -->
+  <div id="stepPick">
+    <div class="upload-drop" id="dropZone">
+      <input type="file" id="videoFileInput" accept="video/*" aria-label="Choose video file">
+      <div class="upload-drop-icon">🎬</div>
+      <div class="upload-drop-title">Drag & drop your video here</div>
+      <div class="upload-drop-sub">Or click to browse · MP4, MOV, WebM, MKV · Max 2 GB</div>
+    </div>
+  </div>
+
+  <!-- Step 2: Metadata form (hidden until file chosen) -->
+  <div id="stepMeta" class="sfl-hidden">
+
+    <!-- Video preview -->
+    <div class="upload-preview-wrap" id="videoPreviewWrap">
+      <video id="videoPreview" controls preload="metadata" playsinline></video>
+    </div>
+
+    <!-- Upload progress -->
+    <div id="progressWrap" class="sfl-hidden">
+      <div class="upload-progress-bar"><div class="upload-progress-fill" id="progressFill"></div></div>
+      <div class="upload-status" id="progressLabel">Preparing upload…</div>
+    </div>
+
+    <!-- Thumbnail -->
+    <div class="sfl-form-group">
+      <label class="sfl-label">Thumbnail</label>
+      <div class="upload-thumb-row">
+        <div class="upload-thumb-preview" id="thumbPreview">🖼</div>
+        <div style="flex:1;">
+          <input type="file" id="thumbInput" accept="image/*" class="sfl-input" style="padding:7px 10px;font-size:12px;">
+          <div style="font-size:11px;color:var(--sfl-text-muted);margin-top:6px;">
+            Optional · JPG, PNG, WebP · Recommended: 1280×720
+          </div>
+          <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="autoThumbBtn" style="margin-top:8px;" type="button">
+            📸 Capture from video
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <div class="sfl-form-group">
+      <label class="sfl-label" for="videoTitle">Title <span style="color:var(--sfl-live);">*</span></label>
+      <input class="sfl-input" id="videoTitle" type="text" maxlength="100"
+        placeholder="Give your video a great title…" autocomplete="off">
+      <div class="sfl-char-count"><span id="titleCount">0</span>/100</div>
+    </div>
+
+    <!-- Description -->
+    <div class="sfl-form-group">
+      <label class="sfl-label" for="videoDesc">Description</label>
+      <textarea class="sfl-textarea sfl-input" id="videoDesc" maxlength="2000" rows="4"
+        placeholder="Tell viewers about your video…"></textarea>
+      <div class="sfl-char-count"><span id="descCount">0</span>/2000</div>
+    </div>
+
+    <!-- Category + Tags row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="videoCategory">Category</label>
+        <select class="sfl-input sfl-select" id="videoCategory">
+          <option value="">Select category…</option>
+          <option value="gaming">🎮 Gaming</option>
+          <option value="music">🎵 Music</option>
+          <option value="art">🎨 Art</option>
+          <option value="tech">💻 Tech</option>
+          <option value="sports">⚽ Sports</option>
+          <option value="education">📚 Education</option>
+          <option value="lifestyle">✨ Lifestyle</option>
+          <option value="comedy">😂 Comedy</option>
+          <option value="news">📰 News</option>
+          <option value="other">🔷 Other</option>
+        </select>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="tagInput">Tags</label>
+        <input class="sfl-input" id="tagInput" type="text" maxlength="40"
+          placeholder="Type tag + Enter">
+        <div class="tag-list" id="tagList"></div>
+      </div>
+    </div>
+
+    <!-- Visibility -->
+    <div class="sfl-form-group">
+      <label class="sfl-label">Visibility</label>
+      <div class="vis-row" id="visRow">
+        <div class="vis-opt selected" data-vis="public">
+          <div class="vis-opt-icon">🌐</div>
+          <div class="vis-opt-label">Public</div>
+          <div class="vis-opt-sub">Anyone can watch</div>
+        </div>
+        <div class="vis-opt" data-vis="followers">
+          <div class="vis-opt-icon">👥</div>
+          <div class="vis-opt-label">Followers</div>
+          <div class="vis-opt-sub">Followers only</div>
+        </div>
+        <div class="vis-opt" data-vis="private">
+          <div class="vis-opt-icon">🔒</div>
+          <div class="vis-opt-label">Private</div>
+          <div class="vis-opt-sub">Only you</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="publishBtn">🚀 Publish Video</button>
+      <button class="sfl-btn sfl-btn-ghost" id="cancelUploadBtn" type="button">Cancel</button>
+    </div>
+
+  </div><!-- /stepMeta -->
+
+</div><!-- /uploadPage -->
+</div>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, addDoc, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:'horr-a08f4.firebaseapp.com',
+  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:'horr-a08f4',
+  storageBucket:'horr-a08f4.firebasestorage.app',
+  messagingSenderId:'933810617818',
+  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+};
+const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
+
+const $ = id => document.getElementById(id);
+const toast = (msg, dur=3500) => {
+  const t = $('sfl-toast'); t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
+};
+
+let _user = null, _userData = null;
+let _videoFile = null, _thumbFile = null, _tags = [], _visibility = 'public';
+
+/* ── Auth gate ── */
+onAuthStateChanged(auth, async u => {
+  _user = u;
+  if (!u) { $('authGate').classList.remove('sfl-hidden'); return; }
+  $('authGate').classList.add('sfl-hidden');
+  try {
+    const { getDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(db,'users',u.uid));
+    if (snap.exists()) _userData = snap.data();
+  } catch(e) {}
+});
+
+/* ── Drag & drop / file pick ── */
+const dropZone = $('dropZone');
+const fileInput = $('videoFileInput');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  if (!file.type.startsWith('video/')) { toast('Please select a video file.'); return; }
+  if (file.size > 2*1024*1024*1024) { toast('File too large. Max 2 GB.'); return; }
+  _videoFile = file;
+  const url = URL.createObjectURL(file);
+  $('videoPreview').src = url;
+  $('stepPick').classList.add('sfl-hidden');
+  $('stepMeta').classList.remove('sfl-hidden');
+  // Try to get duration
+  $('videoPreview').onloadedmetadata = () => {
+    const dur = Math.round($('videoPreview').duration);
+    if (!isNaN(dur)) $('videoPreview').dataset.duration = dur;
+  };
+}
+
+/* ── Thumbnail ── */
+$('thumbInput').addEventListener('change', () => {
+  const f = $('thumbInput').files[0];
+  if (!f) return;
+  _thumbFile = f;
+  const preview = $('thumbPreview');
+  preview.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
+});
+
+$('autoThumbBtn').addEventListener('click', () => {
+  const video = $('videoPreview');
+  if (!video.src) { toast('Load a video first.'); return; }
+  video.currentTime = Math.min(video.duration * 0.25, 5);
+  video.onseeked = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      _thumbFile = new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
+      $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
+      toast('Thumbnail captured!');
+    }, 'image/jpeg', 0.88);
+  };
+});
+
+/* ── Char counts ── */
+$('videoTitle').addEventListener('input', () => $('titleCount').textContent = $('videoTitle').value.length);
+$('videoDesc').addEventListener('input',  () => $('descCount').textContent  = $('videoDesc').value.length);
+
+/* ── Tags ── */
+$('tagInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = $('tagInput').value.trim().replace(/,/g,'').toLowerCase();
+    if (val && !_tags.includes(val) && _tags.length < 10) {
+      _tags.push(val);
+      renderTags();
+    }
+    $('tagInput').value = '';
+  }
+});
+function renderTags() {
+  $('tagList').innerHTML = _tags.map((t,i) =>
+    `<div class="tag-pill">#${t}<span class="tag-pill-rm" data-i="${i}">✕</span></div>`
+  ).join('');
+  $('tagList').querySelectorAll('.tag-pill-rm').forEach(btn =>
+    btn.addEventListener('click', () => { _tags.splice(+btn.dataset.i,1); renderTags(); })
+  );
+}
+
+/* ── Visibility ── */
+document.querySelectorAll('.vis-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.vis-opt').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    _visibility = opt.dataset.vis;
+  });
+});
+
+/* ── Cancel ── */
+$('cancelUploadBtn').addEventListener('click', () => {
+  _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
+  $('videoPreview').src = '';
+  $('videoTitle').value = '';
+  $('videoDesc').value = '';
+  $('tagList').innerHTML = '';
+  $('thumbPreview').innerHTML = '🖼';
+  $('titleCount').textContent = '0';
+  $('descCount').textContent = '0';
+  $('stepMeta').classList.add('sfl-hidden');
+  $('stepPick').classList.remove('sfl-hidden');
+  $('progressWrap').classList.add('sfl-hidden');
+});
+
+/* ── Publish ── */
+$('publishBtn').addEventListener('click', async () => {
+  if (!_user) { toast('Sign in to upload.'); return; }
+  if (!_videoFile) { toast('Please select a video.'); return; }
+  const title = $('videoTitle').value.trim();
+  if (!title) { toast('Please enter a title.'); $('videoTitle').focus(); return; }
+
+  $('publishBtn').disabled = true;
+  $('publishBtn').textContent = '⏳ Uploading…';
+  $('progressWrap').classList.remove('sfl-hidden');
+
+  try {
+    // 1. Upload video
+    const uid = _user.uid;
+    const ext = _videoFile.name.split('.').pop() || 'mp4';
+    const vidPath = `videos/${uid}/${Date.now()}.${ext}`;
+    const vidRef = storageRef(storage, vidPath);
+    const vidTask = uploadBytesResumable(vidRef, _videoFile);
+
+    const videoUrl = await new Promise((resolve, reject) => {
+      vidTask.on('state_changed',
+        snap => {
+          const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
+          $('progressFill').style.width = `${Math.min(pct, 85)}%`;
+          $('progressLabel').textContent = `Uploading video… ${pct}%`;
+        },
+        reject,
+        async () => { resolve(await getDownloadURL(vidTask.snapshot.ref)); }
+      );
+    });
+
+    // 2. Upload thumbnail
+    let thumbnailUrl = '';
+    if (_thumbFile) {
+      $('progressLabel').textContent = 'Uploading thumbnail…';
+      $('progressFill').style.width = '88%';
+      const tPath = `thumbnails/${uid}/${Date.now()}.jpg`;
+      const tRef = storageRef(storage, tPath);
+      const tTask = uploadBytesResumable(tRef, _thumbFile);
+      thumbnailUrl = await new Promise((resolve, reject) => {
+        tTask.on('state_changed', null, reject, async () => {
+          resolve(await getDownloadURL(tTask.snapshot.ref));
+        });
+      });
+    }
+
+    // 3. Save metadata to Firestore
+    $('progressLabel').textContent = 'Saving video…';
+    $('progressFill').style.width = '95%';
+
+    const meta = {
+      title,
+      description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '',
+      tags: _tags,
+      visibility: _visibility,
+      videoUrl,
+      thumbnailUrl,
+      duration: +($('videoPreview').dataset.duration || 0) || null,
+      creatorId: uid,
+      creatorName: _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+      creatorAvatar: _userData?.avatar || _user.photoURL || '',
+      views: 0,
+      likes: 0,
+      comments: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(collection(db,'videos'), meta);
+
+    $('progressFill').style.width = '100%';
+    $('progressLabel').textContent = 'Published!';
+    toast('🎉 Video published!');
+
+    setTimeout(() => {
+      window.location.href = `sfl-player.html?v=${docRef.id}`;
+    }, 1200);
+
+  } catch(e) {
+    console.error('Upload error:', e);
+    toast('Upload failed. Please try again.');
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    $('progressWrap').classList.add('sfl-hidden');
+  }
+});
+</script>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

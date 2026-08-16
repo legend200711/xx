@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Settings — Shadow Fire Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.settings-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+.settings-head { font-size: 20px; font-weight: 800; margin-bottom: 24px; }
+.settings-section { margin-bottom: 24px; }
+.settings-section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--sfl-text-muted);
+  margin-bottom: 8px; padding: 0 4px;
+}
+.settings-card {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  overflow: hidden;
+}
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--sfl-border);
+  gap: 14px;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-info { flex: 1; min-width: 0; }
+.settings-row-label { font-size: 14px; font-weight: 600; color: var(--sfl-text); }
+.settings-row-sub { font-size: 12px; color: var(--sfl-text-muted); margin-top: 2px; }
+.settings-row-link {
+  cursor: pointer; text-decoration: none;
+  color: inherit; display: flex; width: 100%;
+  align-items: center; justify-content: space-between;
+  gap: 14px;
+}
+.settings-row-link:hover .settings-row-label { color: var(--sfl-blue); }
+.settings-chevron { color: var(--sfl-text-faint); font-size: 14px; flex-shrink: 0; }
+
+/* Toggle switch */
+.sfl-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.sfl-toggle input { opacity: 0; width: 0; height: 0; }
+.sfl-toggle-slider {
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.12);
+  border-radius: 12px; cursor: pointer;
+  transition: background 0.2s;
+}
+.sfl-toggle-slider::before {
+  content: '';
+  position: absolute; left: 3px; top: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.sfl-toggle input:checked + .sfl-toggle-slider { background: var(--sfl-blue); }
+.sfl-toggle input:checked + .sfl-toggle-slider::before { transform: translateX(20px); }
+
+/* Danger zone */
+.settings-danger .settings-card { border-color: rgba(255,50,50,0.2); }
+.settings-danger .settings-row-label { color: #ff5566; }
+
+@media (max-width: 768px) {
+  .settings-page { padding: 16px 12px calc(58px + 16px); padding-top: calc(60px + 16px); }
+}
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<header class="sfl-topbar">
+  <div class="sfl-topbar-title">⚙️ Settings</div>
+  <div></div>
+</header>
+
+<aside class="sfl-sidebar" aria-label="Main navigation">
+  <div class="sfl-logo">
+    <a href="sfl-home.html" style="text-decoration:none;">
+      <div class="sfl-logo-text">🔥 SHADOW FIRE LIVE</div>
+      <div class="sfl-logo-sub">Video · Live · Connect</div>
+    </a>
+  </div>
+  <nav class="sfl-sidebar-nav">
+    <a href="sfl-home.html"   class="sfl-nav-item"><span class="sfl-nav-icon">🏠</span> Home</a>
+    <a href="sfl-search.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔍</span> Discover</a>
+    <a href="live.html"       class="sfl-nav-item"><span class="sfl-nav-icon">📡</span> Live</a>
+    <a href="sfl-upload.html" class="sfl-nav-item"><span class="sfl-nav-icon">📤</span> Upload</a>
+    <a href="sfl-notifications.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔔</span> Notifications</a>
+    <a href="sfl-profile.html" class="sfl-nav-item"><span class="sfl-nav-icon">👤</span> Profile</a>
+  </nav>
+  <div class="sfl-sidebar-footer">
+    <a href="sfl-settings.html" class="sfl-nav-item active"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+  </div>
+</aside>
+
+<div class="sfl-layout">
+  <main class="sfl-main" role="main">
+    <div class="settings-page">
+      <div class="settings-head">⚙️ Settings</div>
+
+      <!-- Account -->
+      <div class="settings-section">
+        <div class="settings-section-title">Account</div>
+        <div class="settings-card">
+          <div class="settings-row" id="accountInfoRow">
+            <div class="settings-row-info">
+              <div class="settings-row-label" id="settingsUserName">Loading…</div>
+              <div class="settings-row-sub" id="settingsUserEmail"></div>
+            </div>
+            <a href="sfl-profile.html" class="sfl-btn sfl-btn-ghost sfl-btn-sm">Edit Profile</a>
+          </div>
+          <div class="settings-row">
+            <a href="sfl-settings.html" class="settings-row-link">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Account Settings</div>
+                <div class="settings-row-sub">Email, password, security</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Settings -->
+      <div class="settings-section">
+        <div class="settings-section-title">Video</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Autoplay</div>
+              <div class="settings-row-sub">Automatically play next video</div>
+            </div>
+            <label class="sfl-toggle" aria-label="Autoplay toggle">
+              <input type="checkbox" id="toggleAutoplay" checked>
+              <span class="sfl-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Video Quality</div>
+              <div class="settings-row-sub">Default playback quality</div>
+            </div>
+            <select class="sfl-input sfl-select" id="videoQuality" style="width:auto;padding:6px 12px;font-size:13px;">
+              <option value="auto">Auto</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Captions</div>
+              <div class="settings-row-sub">Show captions when available</div>
+            </div>
+            <label class="sfl-toggle" aria-label="Captions toggle">
+              <input type="checkbox" id="toggleCaptions">
+              <span class="sfl-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="settings-section">
+        <div class="settings-section-title">Notifications</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Live Notifications</div>
+              <div class="settings-row-sub">Notify when followed creators go live</div>
+            </div>
+            <label class="sfl-toggle" aria-label="Live notifications toggle">
+              <input type="checkbox" id="toggleLiveNotifs" checked>
+              <span class="sfl-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">New Videos</div>
+              <div class="settings-row-sub">Notify when followed creators upload</div>
+            </div>
+            <label class="sfl-toggle" aria-label="New video notifications toggle">
+              <input type="checkbox" id="toggleVideoNotifs" checked>
+              <span class="sfl-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Comments & Likes</div>
+              <div class="settings-row-sub">Activity on your videos</div>
+            </div>
+            <label class="sfl-toggle" aria-label="Comments notifications toggle">
+              <input type="checkbox" id="toggleInteractNotifs" checked>
+              <span class="sfl-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Push Notifications</div>
+              <div class="settings-row-sub">Background alerts on this device</div>
+            </div>
+            <button class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnPushNotifs">Enable</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy -->
+      <div class="settings-section">
+        <div class="settings-section-title">Privacy</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Default Video Visibility</div>
+              <div class="settings-row-sub">Default for new uploads</div>
+            </div>
+            <select class="sfl-input sfl-select" id="defaultVisibility" style="width:auto;padding:6px 12px;font-size:13px;">
+              <option value="public">Public</option>
+              <option value="followers">Followers</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Comment Controls</div>
+              <div class="settings-row-sub">Who can comment on your videos</div>
+            </div>
+            <select class="sfl-input sfl-select" id="commentControl" style="width:auto;padding:6px 12px;font-size:13px;">
+              <option value="all">Everyone</option>
+              <option value="followers">Followers</option>
+              <option value="none">No one</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <a href="sfl-settings.html" class="settings-row-link">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Blocked Users</div>
+                <div class="settings-row-sub">Manage who you've blocked</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="settings-section">
+        <div class="settings-section-title">Navigation</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <a href="index.html" class="settings-row-link">
+              <div class="settings-row-info">
+                <div class="settings-row-label">🔥 Shadow Fire Live Home</div>
+                <div class="settings-row-sub">Go to the video home page</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </a>
+          </div>
+          <div class="settings-row">
+            <a href="sfl-settings.html" class="settings-row-link">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Full Account Settings</div>
+                <div class="settings-row-sub">All account options in one place</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Install App -->
+      <div class="settings-section" id="installAppSection">
+        <div class="settings-section-title">App</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label" id="installRowLabel">🔥 Install Shadow Fire Live</div>
+              <div class="settings-row-sub" id="installRowSub">Add to your home screen or desktop for quick access</div>
+            </div>
+            <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnInstallApp">Install</button>
+          </div>
+          <div class="settings-row" id="installInstalledRow" style="display:none;">
+            <div class="settings-row-info">
+              <div class="settings-row-label">✓ App Installed</div>
+              <div class="settings-row-sub">Shadow Fire Live is installed on this device</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- About -->
+      <div class="settings-section">
+        <div class="settings-section-title">About</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Shadow Fire Live</div>
+              <div class="settings-row-sub" id="settingsVersion">Version 1.0.0 · Shadow Fire Live</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sign Out -->
+      <div class="settings-section settings-danger">
+        <div class="settings-section-title">Account</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <button class="settings-row-link" id="signOutBtn" style="background:none;border:none;width:100%;cursor:pointer;padding:14px 16px;">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Sign Out</div>
+                <div class="settings-row-sub" style="color:var(--sfl-text-muted);">Sign out of your account</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<nav class="sfl-bottom-nav">
+  <a href="sfl-home.html" class="sfl-bn-item"><span class="sfl-bn-icon">🏠</span><span>Home</span></a>
+  <a href="sfl-search.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔍</span><span>Discover</span></a>
+  <a href="sfl-upload.html" class="sfl-bn-item"><span class="sfl-bn-icon">📤</span><span>Upload</span></a>
+  <a href="sfl-notifications.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔔</span><span>Alerts</span></a>
+  <a href="sfl-profile.html" class="sfl-bn-item"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
+</nav>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signOut }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, getDoc, updateDoc }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:'horr-a08f4.firebaseapp.com',
+  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:'horr-a08f4',
+  storageBucket:'horr-a08f4.firebasestorage.app',
+  messagingSenderId:'933810617818',
+  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+const toast = (msg,dur=3000) => {
+  const t=$('sfl-toast');t.textContent=msg;t.classList.add('visible');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('visible'),dur);
+};
+
+/* ── Save pref to localStorage ── */
+const PREFS_KEY = 'sfl_prefs';
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY)||'{}'); } catch(e) { return {}; }
+}
+function savePrefs(prefs) {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e) {}
+}
+
+function applyPrefs() {
+  const p = loadPrefs();
+  $('toggleAutoplay').checked     = p.autoplay    !== false;
+  $('toggleLiveNotifs').checked   = p.liveNotifs  !== false;
+  $('toggleVideoNotifs').checked  = p.videoNotifs !== false;
+  $('toggleInteractNotifs').checked = p.interactNotifs !== false;
+  $('toggleCaptions').checked     = p.captions    === true;
+  $('videoQuality').value         = p.quality     || 'auto';
+  $('defaultVisibility').value    = p.visibility  || 'public';
+  $('commentControl').value       = p.commentCtrl || 'all';
+}
+
+function bindToggle(id, key) {
+  $(id).addEventListener('change', () => {
+    const p = loadPrefs(); p[key] = $(id).checked; savePrefs(p);
+    toast('Setting saved.');
+  });
+}
+function bindSelect(id, key) {
+  $(id).addEventListener('change', () => {
+    const p = loadPrefs(); p[key] = $(id).value; savePrefs(p);
+    toast('Setting saved.');
+  });
+}
+
+bindToggle('toggleAutoplay',       'autoplay');
+bindToggle('toggleLiveNotifs',     'liveNotifs');
+bindToggle('toggleVideoNotifs',    'videoNotifs');
+bindToggle('toggleInteractNotifs', 'interactNotifs');
+bindToggle('toggleCaptions',       'captions');
+bindSelect('videoQuality',         'quality');
+bindSelect('defaultVisibility',    'visibility');
+bindSelect('commentControl',       'commentCtrl');
+
+applyPrefs();
+
+/* ── Push notifications ── */
+$('btnPushNotifs').addEventListener('click', async () => {
+  if(!('Notification' in window)) { toast('Push notifications not supported in this browser.'); return; }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted') {
+    toast('Push notifications enabled!');
+    $('btnPushNotifs').textContent = '✓ Enabled';
+    $('btnPushNotifs').disabled = true;
+  } else {
+    toast('Permission denied. Please enable notifications in browser settings.');
+  }
+});
+
+/* ── Auth ── */
+onAuthStateChanged(auth, async user => {
+  if(!user) return;
+  try {
+    const snap = await getDoc(doc(db,'users',user.uid));
+    const data = snap.exists() ? snap.data() : {};
+    $('settingsUserName').textContent  = data.displayName || data.username || user.displayName || 'User';
+    $('settingsUserEmail').textContent = user.email || '';
+    if(Notification.permission === 'granted') {
+      $('btnPushNotifs').textContent = '✓ Enabled';
+      $('btnPushNotifs').disabled = true;
+    }
+  } catch(e) {}
+});
+
+/* ── Install App button ── */
+function _initInstallRow() {
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  if (isStandalone) {
+    $('installInstalledRow').style.display = '';
+    $('installAppSection').querySelector('.settings-row:first-child').style.display = 'none';
+    return;
+  }
+
+  $('btnInstallApp').addEventListener('click', () => {
+    if (window._SFLInstall) {
+      window._SFLInstall.triggerInstall();
+    } else {
+      /* pwa-install.js not yet loaded — show basic iOS instructions */
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if (isIOS) {
+        toast('Tap the Share button ⬆️ in Safari, then "Add to Home Screen".');
+      } else {
+        toast('Look for "Install App" in your browser menu (⋮).');
+      }
+    }
+  });
+
+  /* Update label depending on platform */
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS) {
+    $('installRowSub').textContent = 'Tap Share ⬆️ in Safari → Add to Home Screen';
+  }
+}
+_initInstallRow();
+
+/* ── SW version ── */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then(reg => {
+    reg.active?.postMessage({ type: 'GET_VERSION' });
+  });
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_VERSION' && $('settingsVersion')) {
+      $('settingsVersion').textContent = `Version 1.0.0 · Cache ${e.data.version}`;
+    }
+  });
+}
+
+/* ── Sign out ── */
+$('signOutBtn').addEventListener('click', async () => {
+  if(!confirm('Sign out of Shadow Fire Live?')) return;
+  try { await signOut(auth); window.location.href = 'sfl-login.html'; }
+  catch(e) { toast('Error signing out.'); }
+});
+</script>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

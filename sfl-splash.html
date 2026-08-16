@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shadow Fire Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; width: 100%;
+  background: #060d18;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Radial background glow */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 60%, rgba(0,100,200,0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(0,174,239,0.10) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.splash {
+  position: relative; z-index: 1;
+  text-align: center;
+  padding: 0 32px;
+  animation: splashFadeIn 0.5s ease both;
+}
+
+@keyframes splashFadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+/* Logo flame */
+.splash-flame {
+  font-size: 64px;
+  display: block;
+  margin: 0 auto 20px;
+  filter: drop-shadow(0 0 24px rgba(0,174,239,0.7));
+  animation: flamePulse 2s ease-in-out infinite;
+}
+
+@keyframes flamePulse {
+  0%,100% { filter: drop-shadow(0 0 20px rgba(0,174,239,0.6)); transform: scale(1);    }
+  50%     { filter: drop-shadow(0 0 36px rgba(0,174,239,0.9)); transform: scale(1.05); }
+}
+
+/* App name */
+.splash-title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 0 20px rgba(0,174,239,0.7), 0 0 48px rgba(0,100,200,0.4);
+  margin-bottom: 8px;
+}
+
+.splash-sub {
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(0,174,239,0.6);
+  margin-bottom: 40px;
+}
+
+/* Loading bar */
+.splash-bar-wrap {
+  width: 160px; height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+.splash-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #0055cc, #00aeef);
+  border-radius: 3px;
+  animation: splashLoad 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  transform-origin: left;
+}
+
+@keyframes splashLoad {
+  0%   { width: 0%; }
+  60%  { width: 75%; }
+  100% { width: 100%; }
+}
+
+/* Floating particles */
+.particle {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: pFloat linear infinite;
+}
+@keyframes pFloat {
+  0%   { transform: translateY(110vh); opacity: 0;   }
+  8%   { opacity: 0.6; }
+  90%  { opacity: 0.3; }
+  100% { transform: translateY(-10vh); opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Particles -->
+<div class="particle" style="width:3px;height:3px;background:rgba(0,174,239,0.7);left:18%;animation-duration:12s;animation-delay:-3s;"></div>
+<div class="particle" style="width:2px;height:2px;background:rgba(0,174,239,0.5);left:40%;animation-duration:9s;animation-delay:-6s;"></div>
+<div class="particle" style="width:2px;height:2px;background:rgba(0,100,200,0.6);left:65%;animation-duration:14s;animation-delay:-1s;"></div>
+<div class="particle" style="width:3px;height:3px;background:rgba(0,174,239,0.4);left:82%;animation-duration:11s;animation-delay:-8s;"></div>
+<div class="particle" style="width:2px;height:2px;background:rgba(0,174,239,0.5);left:55%;animation-duration:16s;animation-delay:-4s;"></div>
+
+<div class="splash">
+  <span class="splash-flame" aria-hidden="true">🔥</span>
+  <div class="splash-title">Shadow Fire Live</div>
+  <div class="splash-sub">Video &middot; Live &middot; Connect</div>
+  <div class="splash-bar-wrap" role="progressbar" aria-label="Loading">
+    <div class="splash-bar"></div>
+  </div>
+</div>
+
+<script>
+/* Redirect to the home page after the splash animation completes */
+(function () {
+  /* Only show the splash when launched from the PWA (standalone mode) */
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  const params = new URLSearchParams(location.search);
+  const forced = params.get('force') === '1';
+
+  if (!isStandalone && !forced) {
+    /* Not in standalone mode — skip splash and go straight to home */
+    window.location.replace('sfl-home.html');
+    return;
+  }
+
+  /* Redirect after the loading bar animation (1.4 s) + short pause */
+  setTimeout(function () {
+    const next = params.get('next') || 'sfl-home.html';
+    window.location.replace(next);
+  }, 1800);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Notifications — Shadow Fire Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.notif-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+.notif-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.notif-head h1 { font-size: 20px; font-weight: 800; }
+.notif-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  margin-bottom: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--sfl-t), border-color var(--sfl-t);
+  animation: sflFadeUp 0.2s ease;
+}
+.notif-item.unread {
+  border-color: rgba(0,174,239,0.3);
+  background: rgba(0,174,239,0.05);
+}
+.notif-item:hover { background: var(--sfl-bg-hover); }
+.notif-icon {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.notif-content { flex: 1; min-width: 0; }
+.notif-text { font-size: 13px; color: var(--sfl-text); line-height: 1.45; }
+.notif-text strong { color: var(--sfl-blue); font-weight: 700; }
+.notif-time { font-size: 11px; color: var(--sfl-text-faint); margin-top: 4px; }
+.notif-unread-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sfl-blue); flex-shrink: 0; margin-top: 6px;
+  box-shadow: 0 0 8px rgba(0,174,239,0.6);
+}
+
+@media (max-width: 768px) {
+  .notif-page { padding: 16px 12px calc(58px + 16px); padding-top: calc(60px + 16px); }
+}
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<header class="sfl-topbar">
+  <div class="sfl-topbar-title">🔔 Notifications</div>
+  <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="markAllRead">Mark all read</button>
+</header>
+
+<aside class="sfl-sidebar" aria-label="Main navigation">
+  <div class="sfl-logo">
+    <a href="sfl-home.html" style="text-decoration:none;">
+      <div class="sfl-logo-text">🔥 SHADOW FIRE LIVE</div>
+      <div class="sfl-logo-sub">Video · Live · Connect</div>
+    </a>
+  </div>
+  <nav class="sfl-sidebar-nav">
+    <a href="sfl-home.html"   class="sfl-nav-item"><span class="sfl-nav-icon">🏠</span> Home</a>
+    <a href="sfl-search.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔍</span> Discover</a>
+    <a href="live.html"       class="sfl-nav-item"><span class="sfl-nav-icon">📡</span> Live</a>
+    <a href="sfl-upload.html" class="sfl-nav-item"><span class="sfl-nav-icon">📤</span> Upload</a>
+    <a href="sfl-notifications.html" class="sfl-nav-item active"><span class="sfl-nav-icon">🔔</span> Notifications</a>
+    <a href="sfl-profile.html" class="sfl-nav-item"><span class="sfl-nav-icon">👤</span> Profile</a>
+  </nav>
+  <div class="sfl-sidebar-footer">
+    <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+  </div>
+</aside>
+
+<div class="sfl-layout">
+  <main class="sfl-main" role="main">
+    <div class="notif-page">
+      <div class="notif-head">
+        <h1>🔔 Notifications</h1>
+        <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="markAllReadDesktop">Mark all read</button>
+      </div>
+
+      <div class="sfl-loader-wrap" id="notifLoader"><div class="sfl-spinner"></div></div>
+
+      <div id="notifContainer" class="sfl-hidden"></div>
+
+      <div class="sfl-empty sfl-hidden" id="notifEmpty">
+        <div class="sfl-empty-icon">🔔</div>
+        <div class="sfl-empty-title">No notifications</div>
+        <div class="sfl-empty-sub">You're all caught up!</div>
+      </div>
+
+      <div class="sfl-empty sfl-hidden" id="notifAuthWall">
+        <div class="sfl-empty-icon">🔐</div>
+        <div class="sfl-empty-title">Sign in to see notifications</div>
+        <div class="sfl-empty-sub">Sign in to your Shadow Fire Live account.</div>
+        <div style="margin-top:16px;"><a href="sfl-login.html" class="sfl-btn sfl-btn-primary">Sign In</a></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<nav class="sfl-bottom-nav">
+  <a href="sfl-home.html" class="sfl-bn-item"><span class="sfl-bn-icon">🏠</span><span>Home</span></a>
+  <a href="sfl-search.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔍</span><span>Discover</span></a>
+  <a href="sfl-upload.html" class="sfl-bn-item"><span class="sfl-bn-icon">📤</span><span>Upload</span></a>
+  <a href="sfl-notifications.html" class="sfl-bn-item active"><span class="sfl-bn-icon">🔔</span><span>Alerts</span></a>
+  <a href="sfl-profile.html" class="sfl-bn-item"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
+</nav>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {
+  getFirestore, collection, query, orderBy, limit, onSnapshot,
+  doc, updateDoc, writeBatch, getDocs, where
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:'horr-a08f4.firebaseapp.com',
+  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:'horr-a08f4',
+  storageBucket:'horr-a08f4.firebasestorage.app',
+  messagingSenderId:'933810617818',
+  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+let _user = null;
+
+function timeAgo(ts){if(!ts)return'';const d=ts.toDate?ts.toDate():new Date(ts);const s=(Date.now()-d.getTime())/1000;if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`;}
+
+const NOTIF_ICONS = {
+  follow:     '👤',
+  like:       '❤️',
+  comment:    '💬',
+  mention:    '📣',
+  live:       '📡',
+  video:      '🎬',
+  system:     '🔔',
+  message:    '✉️',
+  friendRequest: '🤝',
+};
+
+function buildNotif(id, data) {
+  const icon = NOTIF_ICONS[data.type] || '🔔';
+  const isUnread = !data.read;
+  const a = document.createElement('a');
+  a.className = `notif-item${isUnread ? ' unread' : ''}`;
+  // Determine navigation link
+  let href = '#';
+  if (data.type === 'follow') {
+    // Use fromProfile if provided, otherwise construct from fromUid
+    href = data.fromProfile || (data.fromUid ? `sfl-profile.html?uid=${data.fromUid}` : '#');
+  } else if (data.type === 'like' || data.type === 'comment') {
+    href = data.videoId ? `sfl-player.html?v=${data.videoId}` : '#';
+  } else if (data.type === 'live') {
+    href = data.roomId ? `live.html?room=${data.roomId}` : '#';
+  } else if (data.type === 'message') {
+    href = 'sfl-search.html';
+  }
+  a.href = href;
+  a.dataset.id = id;
+
+  // Build avatar or icon
+  const avatarHTML = data.fromAvatar
+    ? `<img src="${data.fromAvatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--sfl-border);" alt="" onerror="this.outerHTML='<div class=notif-icon>${icon}</div>'">`
+    : `<div class="notif-icon">${icon}</div>`;
+
+  const textHTML = data.message
+    ? data.message.replace(/^(\S+)/, '<strong>$1</strong>')
+    : buildNotifText(data);
+
+  a.innerHTML = `
+    ${avatarHTML}
+    <div class="notif-content">
+      <div class="notif-text">${textHTML}</div>
+      <div class="notif-time">${timeAgo(data.ts || data.createdAt)}</div>
+    </div>
+    ${isUnread ? '<div class="notif-unread-dot"></div>' : ''}
+  `;
+  a.addEventListener('click', () => markRead(id));
+  return a;
+}
+
+function buildNotifText(data) {
+  const from = data.fromName ? `<strong>${data.fromName}</strong>` : 'Someone';
+  switch(data.type) {
+    case 'follow':        return `${from} started following you`;
+    case 'like':          return `${from} liked your video`;
+    case 'comment':       return `${from} commented on your video`;
+    case 'mention':       return `${from} mentioned you`;
+    case 'live':          return `${from} is now live`;
+    case 'video':         return `${from} uploaded a new video`;
+    case 'message':       return `${from} sent you a message`;
+    case 'friendRequest': return `${from} sent you a friend request`;
+    default:              return data.text || 'New notification';
+  }
+}
+
+async function markRead(notifId) {
+  if(!_user) return;
+  try {
+    await updateDoc(doc(db,'notifications',_user.uid,'items',notifId), { read: true });
+  } catch(e) {}
+}
+
+async function markAllRead() {
+  if(!_user) return;
+  try {
+    const snap = await getDocs(
+      query(collection(db,'notifications',_user.uid,'items'), where('read','==',false))
+    );
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  } catch(e) {}
+}
+
+$('markAllReadDesktop').addEventListener('click', markAllRead);
+$('markAllRead').addEventListener('click', markAllRead);
+
+onAuthStateChanged(auth, user => {
+  _user = user;
+  $('notifLoader').classList.remove('sfl-hidden');
+  $('notifAuthWall').classList.add('sfl-hidden');
+  if(!user) {
+    $('notifLoader').classList.add('sfl-hidden');
+    $('notifAuthWall').classList.remove('sfl-hidden');
+    return;
+  }
+  const q = query(
+    collection(db,'notifications',user.uid,'items'),
+    orderBy('createdAt','desc'), limit(60)
+  );
+  onSnapshot(q, snap => {
+    $('notifLoader').classList.add('sfl-hidden');
+    const container = $('notifContainer');
+    container.innerHTML = '';
+    if(snap.empty) { $('notifEmpty').classList.remove('sfl-hidden'); return; }
+    $('notifEmpty').classList.add('sfl-hidden');
+    container.classList.remove('sfl-hidden');
+    snap.docs.forEach(d => container.appendChild(buildNotif(d.id, d.data())));
+  });
+});
+</script>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>
