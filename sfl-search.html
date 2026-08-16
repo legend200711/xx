@@ -90,8 +90,41 @@
 .search-no-results { text-align: center; padding: 60px 20px; color: var(--sfl-text-muted); }
 .search-no-results .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.6; }
 
+/* People search results */
+.srch-people-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 24px; }
+.srch-person-card {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 12px; border-radius: var(--sfl-r-md);
+  transition: background var(--sfl-t);
+}
+.srch-person-card:hover { background: var(--sfl-bg-hover); }
+.srch-person-link {
+  display: flex; align-items: center; gap: 12px;
+  flex: 1; min-width: 0; text-decoration: none; color: inherit;
+}
+.srch-person-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+  border: 2px solid var(--sfl-border);
+  background: var(--sfl-bg-card);
+}
+.srch-person-avatar-ph {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.srch-person-info { flex: 1; min-width: 0; }
+.srch-person-name { font-size: 14px; font-weight: 700; color: var(--sfl-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srch-person-handle { font-size: 12px; color: var(--sfl-text-muted); margin-top: 1px; }
+.srch-person-subs { font-size: 11px; color: var(--sfl-text-faint); margin-top: 2px; }
+.srch-person-btn { flex-shrink: 0; }
+
+/* Follow button states */
+.sfl-btn.is-following { color: var(--sfl-text-muted); border-color: var(--sfl-border); }
+.sfl-btn.is-following:hover { border-color: var(--sfl-live); color: var(--sfl-live); }
+
 @media (max-width: 768px) {
   .search-page { padding: 16px 12px calc(58px + 16px); padding-top: calc(60px + 16px); }
+  .srch-person-card { padding: 8px 4px; }
 }
 </style>
 </head>
@@ -212,7 +245,7 @@ import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, collection, query, where, orderBy, limit,
-  getDocs, onSnapshot
+  getDocs, onSnapshot, doc, getDoc, updateDoc, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -229,18 +262,25 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 
 const $ = id => document.getElementById(id);
-const toast = (msg,dur=3000) => {
-  const t=$('sfl-toast');t.textContent=msg;t.classList.add('visible');
-  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('visible'),dur);
+const toast = (msg, dur=3000) => {
+  const t = $('sfl-toast'); t.textContent = msg; t.classList.add('visible');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
 };
 
 let _activeFilter = 'all';
-let _searchTimer = null;
-let _user = null;
+let _searchTimer  = null;
+let _user         = null;
+// Track follow state for people shown in search results: uid → boolean
+let _followState  = {};
 
 function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(n>=1e3)return(n/1e3).toFixed(1).replace(/\.0$/,'')+'K';return String(n||0);}
 function timeAgo(ts){if(!ts)return'';const d=ts.toDate?ts.toDate():new Date(ts);const s=(Date.now()-d.getTime())/1000;if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`;}
 function fmtTime(s){if(!s)return'';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;if(h)return`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;return`${m}:${String(sec).padStart(2,'0')}`;}
+
+// Safe text escape to avoid XSS when injecting into innerHTML
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 /* ── Load default trending ── */
 async function loadDefault() {
@@ -250,8 +290,7 @@ async function loadDefault() {
 }
 
 async function loadLiveCreators() {
-  const row    = $('liveCreatorRow');
-  const loader = $('liveCreatorsLoader');
+  const row = $('liveCreatorRow');
   try {
     const q = query(
       collection(db,'liveRooms'),
@@ -260,10 +299,7 @@ async function loadLiveCreators() {
     );
     onSnapshot(q, snap => {
       row.innerHTML = '';
-      if(snap.empty) {
-        $('liveCreatorsWrap').style.display = 'none';
-        return;
-      }
+      if(snap.empty) { $('liveCreatorsWrap').style.display = 'none'; return; }
       $('liveCreatorsWrap').style.display = '';
       snap.docs.forEach(d => {
         const data = d.data();
@@ -278,17 +314,23 @@ async function loadLiveCreators() {
           </div>
           <div class="sfl-live-info">
             <div class="sfl-live-info-row">
-              ${data.hostAvatar ? `<img src="${data.hostAvatar}" class="sfl-live-avatar" alt="" loading="lazy">` : `<div class="sfl-live-avatar" style="font-size:12px;display:flex;align-items:center;justify-content:center;">👤</div>`}
-              <span class="sfl-live-creator sfl-truncate">${data.hostName||'Creator'}</span>
+              ${data.hostAvatar ? `<img src="${esc(data.hostAvatar)}" class="sfl-live-avatar" alt="" loading="lazy">` : `<div class="sfl-live-avatar" style="font-size:12px;display:flex;align-items:center;justify-content:center;">👤</div>`}
+              <span class="sfl-live-creator sfl-truncate">${esc(data.hostName||'Creator')}</span>
             </div>
-            <div class="sfl-live-title">${data.title||'Live stream'}</div>
-            ${data.category ? `<div class="sfl-live-category">${data.category}</div>` : ''}
+            <div class="sfl-live-title">${esc(data.title||'Live stream')}</div>
+            ${data.category ? `<div class="sfl-live-category">${esc(data.category)}</div>` : ''}
           </div>
         `;
         row.appendChild(a);
       });
+    }, err => {
+      console.warn('loadLiveCreators snapshot error:', err.code, err.message);
+      $('liveCreatorsWrap').style.display = 'none';
     });
-  } catch(e) { $('liveCreatorsWrap').style.display = 'none'; }
+  } catch(e) {
+    console.warn('loadLiveCreators error:', e.code, e.message);
+    $('liveCreatorsWrap').style.display = 'none';
+  }
 }
 
 async function loadTrending() {
@@ -303,9 +345,15 @@ async function loadTrending() {
     const snap = await getDocs(q);
     loader.classList.add('sfl-hidden');
     grid.innerHTML = '';
-    snap.docs.forEach(d => grid.appendChild(buildVideoCard(d.id, d.data())));
-    if(snap.empty) grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--sfl-text-muted);padding:24px;">No videos yet.</div>';
-  } catch(e) { loader.classList.add('sfl-hidden'); }
+    if(snap.empty) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--sfl-text-muted);padding:24px;">No videos yet.</div>';
+    } else {
+      snap.docs.forEach(d => grid.appendChild(buildVideoCard(d.id, d.data())));
+    }
+  } catch(e) {
+    console.warn('loadTrending error:', e.code, e.message);
+    loader.classList.add('sfl-hidden');
+  }
 }
 
 async function loadCreators() {
@@ -323,16 +371,19 @@ async function loadCreators() {
       a.href = `sfl-profile.html?uid=${d.id}`;
       a.className = `creator-pill${data.isLive ? ' is-live' : ''}`;
       const avatarEl = data.avatar
-        ? `<img src="${data.avatar}" class="creator-pill-avatar" alt="" loading="lazy">`
+        ? `<img src="${esc(data.avatar)}" class="creator-pill-avatar" alt="" loading="lazy">`
         : `<div class="creator-pill-avatar">👤</div>`;
       a.innerHTML = `
         ${avatarEl}
-        <div class="creator-pill-name">${data.displayName || data.username || 'User'}</div>
+        <div class="creator-pill-name">${esc(data.displayName || data.username || 'User')}</div>
         <div class="creator-pill-subs">${fmtNum(data.followerCount||0)}</div>
       `;
       row.appendChild(a);
     });
-  } catch(e) { $('creatorsWrap').style.display='none'; }
+  } catch(e) {
+    console.warn('loadCreators error:', e.code, e.message);
+    $('creatorsWrap').style.display='none';
+  }
 }
 
 /* ── Video card builder ── */
@@ -341,7 +392,7 @@ function buildVideoCard(id, data) {
   a.href  = `sfl-player.html?v=${id}`;
   a.className = 'sfl-video-card sfl-fade-up';
   const thumb = data.thumbnailUrl
-    ? `<img src="${data.thumbnailUrl}" alt="${data.title||''}" loading="lazy">`
+    ? `<img src="${esc(data.thumbnailUrl)}" alt="${esc(data.title||'')}" loading="lazy">`
     : `<div class="sfl-video-thumb-placeholder">🎬</div>`;
   const dur = data.duration ? `<div class="sfl-video-duration">${fmtTime(data.duration)}</div>` : '';
   a.innerHTML = `
@@ -351,10 +402,12 @@ function buildVideoCard(id, data) {
       ${dur}
     </div>
     <div class="sfl-video-info">
-      ${data.creatorAvatar ? `<img src="${data.creatorAvatar}" class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" alt="" loading="lazy">` : `<div class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`}
+      ${data.creatorAvatar
+        ? `<img src="${esc(data.creatorAvatar)}" class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" alt="" loading="lazy">`
+        : `<div class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`}
       <div class="sfl-video-meta">
-        <div class="sfl-video-title">${data.title||'Untitled'}</div>
-        <div class="sfl-video-creator-name sfl-truncate">${data.creatorName||''}</div>
+        <div class="sfl-video-title">${esc(data.title||'Untitled')}</div>
+        <div class="sfl-video-creator-name sfl-truncate">${esc(data.creatorName||'Unknown Creator')}</div>
         <div class="sfl-video-stats">
           <span>${fmtNum(data.views||0)} views</span>
           <span>${timeAgo(data.createdAt)}</span>
@@ -365,119 +418,353 @@ function buildVideoCard(id, data) {
   return a;
 }
 
+/* ── People card builder (full row with follow button) ── */
+function buildPersonCard(uid, data) {
+  const isMe       = _user && _user.uid === uid;
+  const isFollowing = !isMe && !!_followState[uid];
+  const avatarHTML = data.avatar
+    ? `<img src="${esc(data.avatar)}" class="srch-person-avatar" alt="" loading="lazy">`
+    : `<div class="srch-person-avatar srch-person-avatar-ph">👤</div>`;
+  let btnHTML;
+  if(isMe) {
+    btnHTML = `<a href="sfl-profile.html" class="sfl-btn sfl-btn-sm sfl-btn-outline">Edit Profile</a>`;
+  } else if(isFollowing) {
+    btnHTML = `<button class="sfl-btn sfl-btn-sm sfl-btn-outline srch-follow-btn is-following" data-uid="${esc(uid)}" aria-label="Following — click to unfollow">✓ Following</button>`;
+  } else {
+    btnHTML = `<button class="sfl-btn sfl-btn-sm sfl-btn-primary srch-follow-btn" data-uid="${esc(uid)}" aria-label="Follow ${esc(data.displayName||data.username||'User')}">Follow</button>`;
+  }
+  const card = document.createElement('div');
+  card.className = 'srch-person-card';
+  card.innerHTML = `
+    <a href="sfl-profile.html?uid=${esc(uid)}" class="srch-person-link">
+      ${avatarHTML}
+      <div class="srch-person-info">
+        <div class="srch-person-name">${esc(data.displayName || data.username || 'Unknown')}</div>
+        ${data.username ? `<div class="srch-person-handle">@${esc(data.username)}</div>` : ''}
+        ${data.followerCount ? `<div class="srch-person-subs">${fmtNum(data.followerCount)} followers</div>` : ''}
+      </div>
+    </a>
+    <div class="srch-person-btn">${btnHTML}</div>
+  `;
+  return card;
+}
+
+/* ── Follow / Unfollow from search results ── */
+async function handleFollowToggle(btn) {
+  if(!_user) { toast('Sign in to follow creators.'); return; }
+  const uid = btn.dataset.uid;
+  if(!uid || uid === _user.uid) return;
+  btn.disabled = true;
+  const wasFollowing = btn.classList.contains('is-following');
+  try {
+    const targetRef = doc(db, 'users', uid);
+    const myRef     = doc(db, 'users', _user.uid);
+    if(wasFollowing) {
+      await updateDoc(targetRef, { followers: arrayRemove(_user.uid) });
+      await updateDoc(myRef,     { following: arrayRemove(uid) });
+      _followState[uid] = false;
+      btn.textContent = 'Follow';
+      btn.className   = 'sfl-btn sfl-btn-sm sfl-btn-primary srch-follow-btn';
+      btn.removeAttribute('aria-label');
+      btn.setAttribute('aria-label', 'Follow');
+    } else {
+      await updateDoc(targetRef, { followers: arrayUnion(_user.uid) });
+      await updateDoc(myRef,     { following: arrayUnion(uid) });
+      _followState[uid] = true;
+      btn.textContent = '✓ Following';
+      btn.className   = 'sfl-btn sfl-btn-sm sfl-btn-outline srch-follow-btn is-following';
+      btn.setAttribute('aria-label', 'Following — click to unfollow');
+    }
+  } catch(e) {
+    console.error('Follow toggle error:', e.code, e.message);
+    toast('Could not update follow. Please try again.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── Deduplicate docs by id ── */
+function mergeDocs(primary, secondary) {
+  const seen = new Set(primary.map(d => d.id));
+  secondary.forEach(d => { if(!seen.has(d.id)) { seen.add(d.id); primary.push(d); } });
+  return primary;
+}
+
 /* ── Search ── */
-async function runSearch(query_text, filter) {
+async function runSearch(rawQuery, filter) {
   $('defaultView').classList.add('sfl-hidden');
   $('queryResults').classList.remove('sfl-hidden');
   const container = $('queryResults');
-  container.innerHTML = '<div class="sfl-loader-wrap" style="padding:40px;"><div class="sfl-spinner"></div></div>';
 
-  if(!query_text.trim()) {
+  const trimmed = rawQuery.trim();
+  if(!trimmed) {
     $('defaultView').classList.remove('sfl-hidden');
     $('queryResults').classList.add('sfl-hidden');
     return;
   }
 
-  try {
-    const q_lower = query_text.toLowerCase();
-    let html = '';
+  container.innerHTML = '<div class="sfl-loader-wrap" style="padding:40px;"><div class="sfl-spinner"></div></div>';
 
-    // Search videos by title prefix (Firestore doesn't support full text search natively
-    // so we use range queries as approximation)
-    if(filter === 'all' || filter === 'videos' || (!['creators','live'].includes(filter))) {
-      const q = query(
-        collection(db,'videos'),
-        where('visibility','==','public'),
-        orderBy('title'),
-        where('title','>=',query_text),
-        where('title','<=',query_text + '\uf8ff'),
-        limit(30)
-      );
-      const snap = await getDocs(q);
-      // Also search by tag if not many results
-      let docs = snap.docs;
-      if(docs.length < 5) {
-        const q2 = query(
+  // Firestore range queries are case-sensitive; store lowercase prefix and end sentinel
+  const q_lower = trimmed.toLowerCase();
+  const q_upper = q_lower + '\uf8ff';
+
+  // Track whether any section was rendered
+  let hasResults = false;
+
+  try {
+    /* ────────────────────────────────────────
+       VIDEOS  (filter: all | videos | gaming | music | art | tech)
+    ──────────────────────────────────────── */
+    const isCategoryFilter = ['gaming','music','art','tech'].includes(filter);
+    const showVideos = filter === 'all' || filter === 'videos' || isCategoryFilter;
+
+    if(showVideos) {
+      let videoDocs = [];
+      const videoErrors = [];
+
+      // 1. Title prefix search — uses titleLower field (stored lowercase) for case-insensitive match
+      //    Falls back to original-case title if titleLower doesn't exist yet on older docs
+      try {
+        const titleLowerSnap = await getDocs(query(
           collection(db,'videos'),
           where('visibility','==','public'),
-          where('tags','array-contains',q_lower),
-          orderBy('views','desc'), limit(20)
-        );
+          orderBy('titleLower'),
+          where('titleLower','>=', q_lower),
+          where('titleLower','<=', q_upper),
+          limit(30)
+        ));
+        videoDocs = titleLowerSnap.docs;
+      } catch(e1) {
+        // titleLower index may not exist; fall back to original-case title field
+        console.warn('titleLower query failed, falling back to title field:', e1.code);
         try {
-          const snap2 = await getDocs(q2);
-          snap2.docs.forEach(d => { if(!docs.find(x=>x.id===d.id)) docs.push(d); });
-        } catch(e2) {}
+          const titleSnap = await getDocs(query(
+            collection(db,'videos'),
+            where('visibility','==','public'),
+            orderBy('title'),
+            where('title','>=', trimmed),
+            where('title','<=', trimmed + '\uf8ff'),
+            limit(30)
+          ));
+          videoDocs = titleSnap.docs;
+        } catch(e2) {
+          console.warn('title fallback query failed:', e2.code, e2.message);
+          videoErrors.push(e2);
+        }
       }
-      if(docs.length) {
-        const gridId = `videoResultGrid_${Date.now()}`;
-        html += `<div class="search-section-head" style="margin-top:8px;">🎬 Videos (${docs.length})</div><div class="sfl-video-grid" id="${gridId}"></div>`;
-        container.innerHTML = html;
-        const grid = document.getElementById(gridId);
-        if(grid) docs.forEach(d => grid.appendChild(buildVideoCard(d.id, d.data())));
-        html = container.innerHTML;
-      }
-    }
 
-    // Search creators
-    if(filter === 'all' || filter === 'creators') {
-      const q = query(
-        collection(db,'users'),
-        orderBy('displayName'),
-        where('displayName','>=',query_text),
-        where('displayName','<=',query_text + '\uf8ff'),
-        limit(15)
-      );
-      const snap = await getDocs(q);
-      if(!snap.empty) {
-        let crHtml = `<div class="search-section-head" style="margin-top:20px;">👤 Creators</div><div class="creator-row">`;
-        snap.docs.forEach(d => {
-          const data = d.data();
-          const avatarEl = data.avatar
-            ? `<img src="${data.avatar}" class="creator-pill-avatar" alt="" loading="lazy">`
-            : `<div class="creator-pill-avatar">👤</div>`;
-          crHtml += `<a href="sfl-profile.html?uid=${d.id}" class="creator-pill${data.isLive ? ' is-live' : ''}">
-            ${avatarEl}
-            <div class="creator-pill-name">${data.displayName||data.username||'User'}</div>
-            <div class="creator-pill-subs">${fmtNum(data.followerCount||0)}</div>
-          </a>`;
+      // 2. Tag search to supplement
+      try {
+        const tagSnap = await getDocs(query(
+          collection(db,'videos'),
+          where('visibility','==','public'),
+          where('tags','array-contains', q_lower),
+          orderBy('views','desc'), limit(20)
+        ));
+        videoDocs = mergeDocs(videoDocs, tagSnap.docs);
+      } catch(e3) {
+        // tags index optional — ignore silently
+        console.warn('tags query failed:', e3.code);
+      }
+
+      // 3. Category filter (if a specific category pill was clicked)
+      if(isCategoryFilter && filter !== 'all') {
+        videoDocs = videoDocs.filter(d => {
+          const cat = (d.data().category || '').toLowerCase();
+          const tags = (d.data().tags || []).map(t => t.toLowerCase());
+          return cat.includes(filter) || tags.includes(filter);
         });
-        crHtml += '</div>';
-        container.innerHTML += crHtml;
       }
-    }
 
-    // Live streams
-    if(filter === 'all' || filter === 'live') {
-      const q = query(
-        collection(db,'liveRooms'),
-        where('status','==','live'),
-        limit(15)
-      );
-      const snap = await getDocs(q);
-      const liveMatches = snap.docs.filter(d => {
-        const data = d.data();
-        return !query_text || (data.title||'').toLowerCase().includes(q_lower) || (data.hostName||'').toLowerCase().includes(q_lower);
+      // 4. Client-side filter to ensure the term actually matches the title/description/tags
+      //    (Firestore prefix only matches from the start; this catches mid-string matches from tags)
+      videoDocs = videoDocs.filter(d => {
+        const vd = d.data();
+        return (vd.title||'').toLowerCase().includes(q_lower)
+          || (vd.description||'').toLowerCase().includes(q_lower)
+          || (vd.titleLower||'').includes(q_lower)
+          || (Array.isArray(vd.tags) && vd.tags.some(t => t.toLowerCase().includes(q_lower)));
       });
-      if(liveMatches.length) {
-        container.innerHTML += `<div class="search-section-head" style="margin-top:20px;">📡 Live Streams</div><div class="sfl-live-row" id="liveSearchRow"></div>`;
-        const row = container.querySelector('#liveSearchRow');
-        if(row) liveMatches.forEach(d => {
-          const data = d.data();
-          const a = document.createElement('a');
-          a.href = `live.html?room=${d.id}`;
-          a.className = 'sfl-live-card';
-          a.innerHTML = `<div class="sfl-live-thumb"><div class="sfl-live-thumb-placeholder">📡</div><div class="sfl-live-badge">LIVE</div><div class="sfl-live-viewers">👁 ${fmtNum(data.viewerCount||0)}</div></div><div class="sfl-live-info"><div class="sfl-live-title">${data.title||'Live'}</div><div class="sfl-live-creator">${data.hostName||''}</div></div>`;
-          row.appendChild(a);
+
+      if(videoDocs.length) {
+        hasResults = true;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `<div class="search-section-head" style="margin-top:8px;">🎬 Videos (${videoDocs.length})</div>`;
+        const grid = document.createElement('div');
+        grid.className = 'sfl-video-grid';
+        videoDocs.forEach(d => grid.appendChild(buildVideoCard(d.id, d.data())));
+        wrapper.appendChild(grid);
+        // Replace spinner on first result section; append on subsequent
+        if(container.querySelector('.sfl-spinner')) container.innerHTML = '';
+        container.appendChild(wrapper);
+      }
+    }
+
+    /* ────────────────────────────────────────
+       PEOPLE  (filter: all | creators)
+    ──────────────────────────────────────── */
+    if(filter === 'all' || filter === 'creators') {
+      let peopleDocs = [];
+
+      // Search by displayNameLower (case-insensitive) — preferred
+      try {
+        const dnLowerSnap = await getDocs(query(
+          collection(db,'users'),
+          orderBy('displayNameLower'),
+          where('displayNameLower','>=', q_lower),
+          where('displayNameLower','<=', q_upper),
+          limit(15)
+        ));
+        peopleDocs = dnLowerSnap.docs;
+      } catch(e1) {
+        console.warn('displayNameLower query failed, falling back:', e1.code);
+        // Fallback: original-case displayName
+        try {
+          const dnSnap = await getDocs(query(
+            collection(db,'users'),
+            orderBy('displayName'),
+            where('displayName','>=', trimmed),
+            where('displayName','<=', trimmed + '\uf8ff'),
+            limit(15)
+          ));
+          peopleDocs = dnSnap.docs;
+        } catch(e2) {
+          console.warn('displayName fallback query failed:', e2.code, e2.message);
+        }
+      }
+
+      // Also search by username field
+      try {
+        const unSnap = await getDocs(query(
+          collection(db,'users'),
+          orderBy('username'),
+          where('username','>=', q_lower),
+          where('username','<=', q_upper),
+          limit(15)
+        ));
+        peopleDocs = mergeDocs(peopleDocs, unSnap.docs);
+      } catch(e3) {
+        console.warn('username query failed:', e3.code);
+      }
+
+      // Client-side filter: ensure the term actually matches
+      peopleDocs = peopleDocs.filter(d => {
+        const ud = d.data();
+        return (ud.displayName||'').toLowerCase().includes(q_lower)
+          || (ud.displayNameLower||'').includes(q_lower)
+          || (ud.username||'').toLowerCase().includes(q_lower);
+      });
+
+      if(peopleDocs.length) {
+        hasResults = true;
+
+        // Seed follow state from current user's data
+        if(_user) {
+          try {
+            const mySnap = await getDoc(doc(db,'users',_user.uid));
+            if(mySnap.exists()) {
+              const myFollowing = mySnap.data().following || [];
+              peopleDocs.forEach(d => {
+                _followState[d.id] = Array.isArray(myFollowing) && myFollowing.includes(d.id);
+              });
+            }
+          } catch(fe) { console.warn('Could not load follow state:', fe.code); }
+        }
+
+        const section = document.createElement('div');
+        section.innerHTML = `<div class="search-section-head" style="margin-top:${hasResults && !container.querySelector('.search-section-head') ? '8' : '20'}px;">👤 People (${peopleDocs.length})</div>`;
+        const list = document.createElement('div');
+        list.className = 'srch-people-list';
+        peopleDocs.forEach(d => list.appendChild(buildPersonCard(d.id, d.data())));
+        section.appendChild(list);
+        if(container.querySelector('.sfl-spinner')) container.innerHTML = '';
+        container.appendChild(section);
+
+        // Wire follow buttons
+        list.addEventListener('click', e => {
+          const btn = e.target.closest('.srch-follow-btn');
+          if(btn) { e.preventDefault(); handleFollowToggle(btn); }
         });
       }
     }
 
-    if(!container.innerHTML || container.innerHTML.includes('sfl-spinner')) {
-      container.innerHTML = `<div class="search-no-results"><div class="icon">🔍</div><div style="font-size:16px;font-weight:700;margin-bottom:6px;">No results for "${query_text}"</div><div style="font-size:13px;">Try a different search term or browse trending content.</div></div>`;
+    /* ────────────────────────────────────────
+       LIVE STREAMS  (filter: all | live)
+    ──────────────────────────────────────── */
+    if(filter === 'all' || filter === 'live') {
+      try {
+        const liveSnap = await getDocs(query(
+          collection(db,'liveRooms'),
+          where('status','==','live'),
+          limit(30)
+        ));
+        const liveMatches = liveSnap.docs.filter(d => {
+          const ld = d.data();
+          return (ld.title||'').toLowerCase().includes(q_lower)
+            || (ld.hostName||'').toLowerCase().includes(q_lower)
+            || (ld.category||'').toLowerCase().includes(q_lower);
+        });
+        if(liveMatches.length) {
+          hasResults = true;
+          const section = document.createElement('div');
+          section.innerHTML = `<div class="search-section-head" style="margin-top:20px;">📡 Live Streams (${liveMatches.length})</div>`;
+          const row = document.createElement('div');
+          row.className = 'sfl-live-row';
+          liveMatches.forEach(d => {
+            const ld = d.data();
+            const a = document.createElement('a');
+            a.href = `live.html?room=${d.id}`;
+            a.className = 'sfl-live-card';
+            a.innerHTML = `
+              <div class="sfl-live-thumb">
+                <div class="sfl-live-thumb-placeholder">📡</div>
+                <div class="sfl-live-badge">LIVE</div>
+                <div class="sfl-live-viewers">👁 ${fmtNum(ld.viewerCount||0)}</div>
+              </div>
+              <div class="sfl-live-info">
+                <div class="sfl-live-info-row">
+                  ${ld.hostAvatar ? `<img src="${esc(ld.hostAvatar)}" class="sfl-live-avatar" alt="" loading="lazy">` : `<div class="sfl-live-avatar" style="font-size:12px;display:flex;align-items:center;justify-content:center;">👤</div>`}
+                  <span class="sfl-live-creator sfl-truncate">${esc(ld.hostName||'Creator')}</span>
+                </div>
+                <div class="sfl-live-title">${esc(ld.title||'Live')}</div>
+              </div>
+            `;
+            row.appendChild(a);
+          });
+          section.appendChild(row);
+          if(container.querySelector('.sfl-spinner')) container.innerHTML = '';
+          container.appendChild(section);
+        }
+      } catch(le) {
+        console.warn('liveRooms search error:', le.code, le.message);
+      }
     }
+
+    /* ────────────────────────────────────────
+       No results
+    ──────────────────────────────────────── */
+    if(!hasResults) {
+      container.innerHTML = `
+        <div class="search-no-results">
+          <div class="icon">🔍</div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">No results for "${esc(trimmed)}"</div>
+          <div style="font-size:13px;color:var(--sfl-text-muted);">Try different words, or browse trending content below.</div>
+        </div>`;
+    }
+
   } catch(e) {
-    console.error('Search error:', e);
-    container.innerHTML = `<div class="search-no-results"><div class="icon">⚠️</div><div style="font-size:14px;">Search failed. Please try again.</div></div>`;
+    // Unexpected top-level error
+    console.error('Search error:', e.code, e.message, e);
+    const isPermission = e.code === 'permission-denied' || e.code === 'PERMISSION_DENIED';
+    const isUnavailable = e.code === 'unavailable' || e.code === 'resource-exhausted';
+    let userMsg = 'Search is temporarily unavailable. Please try again.';
+    if(isPermission) userMsg = 'Search is not available right now. Please sign in and try again.';
+    container.innerHTML = `
+      <div class="search-no-results">
+        <div class="icon">⚠️</div>
+        <div style="font-size:14px;">${userMsg}</div>
+      </div>`;
   }
 }
 
@@ -486,13 +773,28 @@ $('searchInput').addEventListener('input', () => {
   const val = $('searchInput').value;
   $('searchClear').classList.toggle('visible', !!val);
   clearTimeout(_searchTimer);
+  if(!val.trim()) {
+    $('defaultView').classList.remove('sfl-hidden');
+    $('queryResults').classList.add('sfl-hidden');
+    return;
+  }
   _searchTimer = setTimeout(() => runSearch(val, _activeFilter), 400);
 });
+
+$('searchInput').addEventListener('keydown', e => {
+  if(e.key === 'Enter') {
+    clearTimeout(_searchTimer);
+    const val = $('searchInput').value;
+    if(val.trim()) runSearch(val, _activeFilter);
+  }
+});
+
 $('searchClear').addEventListener('click', () => {
   $('searchInput').value = '';
   $('searchClear').classList.remove('visible');
   $('defaultView').classList.remove('sfl-hidden');
   $('queryResults').classList.add('sfl-hidden');
+  $('searchInput').focus();
 });
 
 /* ── Filter pills ── */
@@ -502,7 +804,7 @@ document.querySelectorAll('.search-filter').forEach(pill => {
     pill.classList.add('active');
     _activeFilter = pill.dataset.filter;
     const q = $('searchInput').value;
-    if(q) runSearch(q, _activeFilter);
+    if(q.trim()) runSearch(q, _activeFilter);
     else {
       $('defaultView').classList.remove('sfl-hidden');
       $('queryResults').classList.add('sfl-hidden');
