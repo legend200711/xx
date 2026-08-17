@@ -580,15 +580,18 @@ async function loadVideos(tab, category) {
       const batch = following.slice(0,30);
       q = query(videosRef,
         where('creatorId','in', batch),
+        where('status','==','published'),
         where('visibility','==','public'),
         orderBy('createdAt','desc'), limit(30));
     } else if (tab === 'trending') {
       q = query(videosRef,
+        where('status','==','published'),
         where('visibility','==','public'),
         orderBy('views','desc'), limit(40));
     } else {
       // Recommended (newest public)
       q = query(videosRef,
+        where('status','==','published'),
         where('visibility','==','public'),
         orderBy('createdAt','desc'), limit(40));
     }

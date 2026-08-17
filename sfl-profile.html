@@ -801,6 +801,7 @@ async function loadVideos(tab) {
       const isOwnProfile = _user && _user.uid === _targetUid;
       const constraints  = [
         where('creatorId', '==', _targetUid),
+        ...(!isOwnProfile ? [where('status', '==', 'published')] : []),
         ...(!isOwnProfile ? [where('visibility', '==', 'public')] : []),
         orderBy('createdAt', 'desc'),
         limit(40),

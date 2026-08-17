@@ -835,6 +835,7 @@ async function loadRelated(category, creatorId) {
     let q = query(
       collection(db,'videos'),
       where('creatorId','==',creatorId),
+      where('status','==','published'),
       where('visibility','==','public'),
       orderBy('createdAt','desc'), limit(8)
     );
@@ -843,6 +844,7 @@ async function loadRelated(category, creatorId) {
     if(docs.length < 4 && category) {
       const q2 = query(
         collection(db,'videos'),
+        where('status','==','published'),
         where('category','==',category),
         where('visibility','==','public'),
         orderBy('views','desc'), limit(12)

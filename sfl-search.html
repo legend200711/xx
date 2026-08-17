@@ -339,6 +339,7 @@ async function loadTrending() {
   try {
     const q = query(
       collection(db,'videos'),
+      where('status','==','published'),
       where('visibility','==','public'),
       orderBy('views','desc'), limit(20)
     );
@@ -528,6 +529,7 @@ async function runSearch(rawQuery, filter) {
       try {
         const titleLowerSnap = await getDocs(query(
           collection(db,'videos'),
+          where('status','==','published'),
           where('visibility','==','public'),
           orderBy('titleLower'),
           where('titleLower','>=', q_lower),
@@ -541,6 +543,7 @@ async function runSearch(rawQuery, filter) {
         try {
           const titleSnap = await getDocs(query(
             collection(db,'videos'),
+            where('status','==','published'),
             where('visibility','==','public'),
             orderBy('title'),
             where('title','>=', trimmed),
@@ -558,6 +561,7 @@ async function runSearch(rawQuery, filter) {
       try {
         const tagSnap = await getDocs(query(
           collection(db,'videos'),
+          where('status','==','published'),
           where('visibility','==','public'),
           where('tags','array-contains', q_lower),
           orderBy('views','desc'), limit(20)
