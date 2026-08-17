@@ -471,23 +471,9 @@ function spawnParticles() {
    Build video card HTML
    ══════════════════════════════ */
 function buildVideoCard(id, data) {
-  // Use thumbnailUrl when available; otherwise show a branded placeholder.
-  // Never render a broken <img> — treat empty string and null the same way.
-  const thumb = (data.thumbnailUrl && data.thumbnailUrl.length > 0)
-    ? `<img src="${data.thumbnailUrl}" alt="${data.title || 'Video'}" loading="lazy"
-         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-       ><div class="sfl-video-thumb-placeholder" style="display:none;">
-         <svg width="48" height="32" viewBox="0 0 48 32" fill="none" aria-hidden="true">
-           <rect width="48" height="32" rx="4" fill="rgba(0,174,239,0.08)"/>
-           <path d="M18 10 L18 22 L32 16 Z" fill="rgba(0,174,239,0.45)"/>
-         </svg>
-       </div>`
-    : `<div class="sfl-video-thumb-placeholder">
-         <svg width="48" height="32" viewBox="0 0 48 32" fill="none" aria-hidden="true">
-           <rect width="48" height="32" rx="4" fill="rgba(0,174,239,0.08)"/>
-           <path d="M18 10 L18 22 L32 16 Z" fill="rgba(0,174,239,0.45)"/>
-         </svg>
-       </div>`;
+  const thumb = data.thumbnailUrl
+    ? `<img src="${data.thumbnailUrl}" alt="${data.title || 'Video'}" loading="lazy">`
+    : `<div class="sfl-video-thumb-placeholder">🎬</div>`;
   const dur = data.duration ? `<div class="sfl-video-duration">${fmtDuration(data.duration)}</div>` : '';
   const views  = data.views  != null ? `${fmtNum(data.views)} views` : '';
   const likes  = data.likes  != null ? `❤ ${fmtNum(data.likes)}` : '';
@@ -609,18 +595,15 @@ async function loadVideos(tab, category) {
       q = query(videosRef,
         where('creatorId','in', batch),
         where('visibility','==','public'),
-        where('status','==','ready'),
         orderBy('createdAt','desc'), limit(30));
     } else if (tab === 'trending') {
       q = query(videosRef,
         where('visibility','==','public'),
-        where('status','==','ready'),
         orderBy('views','desc'), limit(40));
     } else {
       // Recommended (newest public)
       q = query(videosRef,
         where('visibility','==','public'),
-        where('status','==','ready'),
         orderBy('createdAt','desc'), limit(40));
     }
 

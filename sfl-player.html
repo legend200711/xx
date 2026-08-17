@@ -811,22 +811,9 @@ async function loadRelated(category, creatorId) {
       const a    = document.createElement('a');
       a.href = `sfl-player.html?v=${d.id}`;
       a.className = 'related-card';
-      const rThumb = (data.thumbnailUrl && data.thumbnailUrl.length > 0)
-        ? `<img src="${data.thumbnailUrl}" alt="" loading="lazy"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
-           ><div class="related-thumb-placeholder" style="display:none;">
-             <svg width="32" height="22" viewBox="0 0 32 22" fill="none" aria-hidden="true">
-               <path d="M11 6 L11 16 L22 11 Z" fill="rgba(0,174,239,0.45)"/>
-             </svg>
-           </div>`
-        : `<div class="related-thumb-placeholder">
-             <svg width="32" height="22" viewBox="0 0 32 22" fill="none" aria-hidden="true">
-               <path d="M11 6 L11 16 L22 11 Z" fill="rgba(0,174,239,0.45)"/>
-             </svg>
-           </div>`;
       a.innerHTML = `
         <div class="related-thumb">
-          ${rThumb}
+          ${data.thumbnailUrl ? `<img src="${data.thumbnailUrl}" alt="" loading="lazy">` : `<div class="related-thumb-placeholder">🎬</div>`}
           ${dur ? `<div class="related-dur">${dur}</div>` : ''}
         </div>
         <div class="related-info">

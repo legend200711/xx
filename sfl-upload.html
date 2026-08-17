@@ -55,33 +55,7 @@
   transition: width 0.3s ease;
   width: 0%;
 }
-.upload-status { font-size: 12px; color: var(--sfl-text-muted); margin-bottom: 8px; }
-.upload-error-msg {
-  font-size: 13px;
-  color: #ff4455;
-  background: rgba(255,68,85,0.08);
-  border: 1px solid rgba(255,68,85,0.25);
-  border-radius: var(--sfl-r-sm);
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  display: none;
-}
-.upload-error-msg.visible { display: block; }
-
-/* Thumbnail notice — informational, not an error */
-.upload-thumb-notice {
-  font-size: 12px;
-  color: var(--sfl-blue);
-  background: rgba(0,174,239,0.07);
-  border: 1px solid rgba(0,174,239,0.22);
-  border-radius: var(--sfl-r-sm);
-  padding: 8px 12px;
-  margin-top: 10px;
-  display: none;
-  line-height: 1.5;
-}
-.upload-thumb-notice.visible { display: flex; align-items: flex-start; gap: 8px; }
-.upload-thumb-notice-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.upload-status { font-size: 12px; color: var(--sfl-text-muted); margin-bottom: 16px; }
 
 .upload-thumb-row {
   display: flex; gap: 10px; align-items: flex-start;
@@ -198,12 +172,6 @@
     <div id="progressWrap" class="sfl-hidden">
       <div class="upload-progress-bar"><div class="upload-progress-fill" id="progressFill"></div></div>
       <div class="upload-status" id="progressLabel">Preparing upload…</div>
-      <div class="upload-error-msg" id="errorMsg"></div>
-      <!-- Thumbnail notice (informational only — never blocks publish) -->
-      <div class="upload-thumb-notice" id="thumbNotice">
-        <span class="upload-thumb-notice-icon">🖼</span>
-        <span id="thumbNoticeText"></span>
-      </div>
     </div>
 
     <!-- Thumbnail -->
@@ -293,14 +261,6 @@
       <button class="sfl-btn sfl-btn-ghost" id="cancelUploadBtn" type="button">Cancel</button>
     </div>
 
-    <!-- Retry thumbnail (shown after publish when thumbnail failed) -->
-    <div id="retryThumbWrap" class="sfl-hidden" style="margin-top:12px;">
-      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="retryThumbBtn" type="button">
-        🔄 Retry Thumbnail Upload
-      </button>
-      <span style="font-size:11px;color:var(--sfl-text-muted);margin-left:10px;" id="retryThumbLabel"></span>
-    </div>
-
   </div><!-- /stepMeta -->
 
 </div><!-- /uploadPage -->
@@ -308,38 +268,26 @@
 
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, browserLocalPersistence, setPersistence }
+import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, updateDoc, doc, serverTimestamp }
+import { getFirestore, collection, addDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
-  apiKey:           'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:       'horr-a08f4.firebaseapp.com',
-  databaseURL:      'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:        'horr-a08f4',
-  storageBucket:    'horr-a08f4.firebasestorage.app',
+  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:'horr-a08f4.firebaseapp.com',
+  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:'horr-a08f4',
+  storageBucket:'horr-a08f4.firebasestorage.app',
   messagingSenderId:'933810617818',
-  appId:            '1:933810617818:web:efb24f123337dd987c14e3'
+  appId:'1:933810617818:web:efb24f123337dd987c14e3'
 };
 const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth    = getAuth(app);
 const db      = getFirestore(app);
 const storage = getStorage(app);
-
-// ── Ensure session survives navigation / PWA restarts ─────────────────────────
-setPersistence(auth, browserLocalPersistence).catch(() => {/* already set */});
-
-// ── Dev logging (safe — no credentials, tokens, or keys exposed) ──────────────
-function log(tag, data) {
-  console.log(`[SFL_UPLOAD] ${tag}`, data !== undefined ? data : '');
-}
-
-// ── Log project identity once on load so mismatches are obvious ───────────────
-log('FIREBASE_PROJECT', FIREBASE_CONFIG.projectId);
-log('FIREBASE_STORAGE_BUCKET', FIREBASE_CONFIG.storageBucket);
 
 const $ = id => document.getElementById(id);
 const toast = (msg, dur=3500) => {
@@ -348,209 +296,84 @@ const toast = (msg, dur=3500) => {
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
 };
 
-function showError(msg) {
-  const el = $('errorMsg');
-  el.textContent = msg;
-  el.classList.add('visible');
-  $('progressLabel').textContent = 'Upload failed.';
-}
+let _user = null, _userData = null;
+let _videoFile = null, _thumbFile = null, _tags = [], _visibility = 'public';
 
-function hideError() {
-  const el = $('errorMsg');
-  el.textContent = '';
-  el.classList.remove('visible');
-}
-
-// Show an informational notice (blue) — never blocks progress, never says "failed"
-function showThumbNotice(msg) {
-  const el   = $('thumbNotice');
-  const text = $('thumbNoticeText');
-  if (!el || !text) return;
-  text.textContent = msg;
-  el.classList.add('visible');
-}
-
-function hideThumbNotice() {
-  const el = $('thumbNotice');
-  if (el) el.classList.remove('visible');
-}
-
-// ── Categorise Firebase Storage / Firestore errors ───────────────────────────
-// Differentiate between auth problems, rules rejections, and network issues
-// so the user sees a meaningful message and doesn't loop endlessly through login.
-function describeError(err) {
-  if (!err) return 'Unknown error.';
-  const code = err.code || '';
-  // ── Storage errors ──
-  if (code === 'storage/unauthorized' || code === 'storage/unauthenticated')
-    return 'Storage access denied. Make sure you are signed in with a full account.';
-  if (code === 'storage/quota-exceeded')
-    return 'Storage quota exceeded. Please contact support.';
-  if (code === 'storage/invalid-checksum')
-    return 'File was corrupted during upload. Please try again.';
-  if (code === 'storage/canceled')
-    return 'Upload was cancelled.';
-  if (code === 'storage/unknown')
-    return 'Unknown storage error. Check your network and retry.';
-  if (code === 'storage/retry-limit-exceeded')
-    return 'Network too slow or unstable. Check your connection and retry.';
-  if (code === 'storage/invalid-argument')
-    return 'Invalid file. Please select a valid video file.';
-  // ── Firestore errors ──
-  // "permission-denied" does NOT always mean "sign in again" — the user may be
-  // signed in and the Firestore rules just rejected the specific operation.
-  if (code === 'permission-denied') {
-    if (!_user) {
-      return 'Your session has expired. Please sign in again.';
-    }
-    return 'Your account is signed in, but this action was rejected by the server. '
-      + 'This may be a temporary issue — please try again or contact support.';
-  }
-  if (code === 'unauthenticated')
-    return 'Your session has expired. Please sign in again.';
-  if (code === 'network-request-failed' || (err.message && err.message.includes('network')))
-    return 'Network failure. Check your connection and retry.';
-  if (code === 'resource-exhausted')
-    return 'Service temporarily busy. Please wait a moment and try again.';
-  if (code === 'invalid-argument')
-    return 'Invalid data submitted. Please check your inputs and try again.';
-  return err.message || String(err);
-}
-
-let _user        = null;
-let _userData    = null;
-let _authLoading = true;   // true until onAuthStateChanged fires for the first time
-let _videoFile  = null;
-let _thumbFile  = null;
-let _tags       = [];
-let _visibility = 'public';
-
-// After publish: track thumbnail state for optional retry
-let _publishedDocId  = null;  // Firestore doc ID once video is ready
-let _publishedUid    = null;  // UID used for the storage path
-let _publishedVidId  = null;  // videoId segment used in storage path
-let _thumbFailed     = false; // true when thumbnail was skipped due to error
-
-// Active upload task — kept for potential cancellation / stall detection
-let _activeTask       = null;
-let _isUploading      = false;
-let _stallTimer       = null;
-let _lastBytesTransferred = 0;
-let _lastProgressAt   = 0;
-const STALL_THRESHOLD_MS = 30000; // 30 s without progress = stalled
-
-// ── Auth gate — wait for Firebase to finish restoring the session ─────────────
-// onAuthStateChanged fires once when the SDK finishes initialising (resolved or
-// not).  Until that first callback arrives, _authLoading stays true and Publish
-// is blocked so we never fire a Firestore write before auth is confirmed.
+/* ── Auth gate ── */
 onAuthStateChanged(auth, async u => {
-  _authLoading = false;
   _user = u;
-
-  log('AUTH_STATE_CHANGED', {
-    signedIn:   !!u,
-    uid:        u?.uid ?? null,
-    provider:   u?.providerData?.[0]?.providerId ?? null,
-    isAnonymous: u?.isAnonymous ?? null,
-  });
-
-  if (!u) {
-    $('authGate').classList.remove('sfl-hidden');
-    return;
-  }
+  if (!u) { $('authGate').classList.remove('sfl-hidden'); return; }
   $('authGate').classList.add('sfl-hidden');
   try {
-    const { getDoc, doc: fsDoc } = await import(
-      'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'
-    );
-    const snap = await getDoc(fsDoc(db, 'users', u.uid));
+    const { getDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(db,'users',u.uid));
     if (snap.exists()) _userData = snap.data();
-  } catch(e) { /* non-critical — upload can proceed without profile data */ }
+  } catch(e) {}
 });
 
-// ── Drag & drop / file pick ───────────────────────────────────────────────────
-const dropZone  = $('dropZone');
+/* ── Drag & drop / file pick ── */
+const dropZone = $('dropZone');
 const fileInput = $('videoFileInput');
-dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault(); dropZone.classList.remove('drag-over');
   const f = e.dataTransfer.files[0];
   if (f) handleFile(f);
 });
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) handleFile(fileInput.files[0]);
-});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
 
 function handleFile(file) {
   if (!file.type.startsWith('video/')) { toast('Please select a video file.'); return; }
-  if (file.size > 2 * 1024 * 1024 * 1024) { toast('File too large. Max 2 GB.'); return; }
+  if (file.size > 2*1024*1024*1024) { toast('File too large. Max 2 GB.'); return; }
   _videoFile = file;
-  // Use object URL — never read into base64 / memory
   const url = URL.createObjectURL(file);
   $('videoPreview').src = url;
   $('stepPick').classList.add('sfl-hidden');
   $('stepMeta').classList.remove('sfl-hidden');
+  // Try to get duration
   $('videoPreview').onloadedmetadata = () => {
     const dur = Math.round($('videoPreview').duration);
-    if (!isNaN(dur)) $('videoPreview').dataset.duration = String(dur);
+    if (!isNaN(dur)) $('videoPreview').dataset.duration = dur;
   };
 }
 
-// ── Thumbnail ─────────────────────────────────────────────────────────────────
+/* ── Thumbnail ── */
 $('thumbInput').addEventListener('change', () => {
   const f = $('thumbInput').files[0];
   if (!f) return;
   _thumbFile = f;
-  $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
+  const preview = $('thumbPreview');
+  preview.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
 });
 
 $('autoThumbBtn').addEventListener('click', () => {
   const video = $('videoPreview');
-  if (!video.src || !video.duration) { toast('Load a video first.'); return; }
-
-  // Seek to 25% or 5 s, whichever is earlier
-  const target = Math.min(video.duration * 0.25, 5);
-  video.currentTime = isFinite(target) ? target : 0;
-
+  if (!video.src) { toast('Load a video first.'); return; }
+  video.currentTime = Math.min(video.duration * 0.25, 5);
   video.onseeked = () => {
-    video.onseeked = null; // clear so it only fires once
-    try {
-      const w = video.videoWidth  || 1280;
-      const h = video.videoHeight || 720;
-      if (!w || !h) { toast('Could not read video dimensions. Try again.'); return; }
-      const canvas = document.createElement('canvas');
-      canvas.width  = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { toast('Canvas unavailable. Cannot capture thumbnail.'); return; }
-      ctx.drawImage(video, 0, 0, w, h);
-      canvas.toBlob(blob => {
-        if (!blob || blob.size < 100) {
-          toast('Thumbnail capture produced an empty image — try seeking to a different point.');
-          return;
-        }
-        _thumbFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
-        $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
-        toast('Thumbnail captured!');
-        log('THUMB_CAPTURED', { width: w, height: h, size: blob.size });
-      }, 'image/jpeg', 0.88);
-    } catch (captureErr) {
-      log('THUMB_CAPTURE_ERROR', { error: captureErr.message });
-      toast('Could not capture thumbnail. Try using "Choose Photo" instead.');
-    }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      _thumbFile = new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
+      $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
+      toast('Thumbnail captured!');
+    }, 'image/jpeg', 0.88);
   };
 });
 
-// ── Char counts ───────────────────────────────────────────────────────────────
+/* ── Char counts ── */
 $('videoTitle').addEventListener('input', () => $('titleCount').textContent = $('videoTitle').value.length);
 $('videoDesc').addEventListener('input',  () => $('descCount').textContent  = $('videoDesc').value.length);
 
-// ── Tags ──────────────────────────────────────────────────────────────────────
+/* ── Tags ── */
 $('tagInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
-    const val = $('tagInput').value.trim().replace(/,/g, '').toLowerCase();
+    const val = $('tagInput').value.trim().replace(/,/g,'').toLowerCase();
     if (val && !_tags.includes(val) && _tags.length < 10) {
       _tags.push(val);
       renderTags();
@@ -559,15 +382,15 @@ $('tagInput').addEventListener('keydown', e => {
   }
 });
 function renderTags() {
-  $('tagList').innerHTML = _tags.map((t, i) =>
+  $('tagList').innerHTML = _tags.map((t,i) =>
     `<div class="tag-pill">#${t}<span class="tag-pill-rm" data-i="${i}">✕</span></div>`
   ).join('');
   $('tagList').querySelectorAll('.tag-pill-rm').forEach(btn =>
-    btn.addEventListener('click', () => { _tags.splice(+btn.dataset.i, 1); renderTags(); })
+    btn.addEventListener('click', () => { _tags.splice(+btn.dataset.i,1); renderTags(); })
   );
 }
 
-// ── Visibility ────────────────────────────────────────────────────────────────
+/* ── Visibility ── */
 document.querySelectorAll('.vis-opt').forEach(opt => {
   opt.addEventListener('click', () => {
     document.querySelectorAll('.vis-opt').forEach(o => o.classList.remove('selected'));
@@ -576,468 +399,106 @@ document.querySelectorAll('.vis-opt').forEach(opt => {
   });
 });
 
-// ── Reset form ────────────────────────────────────────────────────────────────
-function resetForm() {
+/* ── Cancel ── */
+$('cancelUploadBtn').addEventListener('click', () => {
   _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
-  _activeTask = null; _isUploading = false;
-  _publishedDocId = null; _publishedUid = null; _publishedVidId = null; _thumbFailed = false;
-  clearStallTimer();
   $('videoPreview').src = '';
   $('videoTitle').value = '';
-  $('videoDesc').value  = '';
+  $('videoDesc').value = '';
   $('tagList').innerHTML = '';
   $('thumbPreview').innerHTML = '🖼';
   $('titleCount').textContent = '0';
-  $('descCount').textContent  = '0';
-  $('progressFill').style.width = '0%';
-  hideError();
-  hideThumbNotice();
-  $('progressWrap').classList.add('sfl-hidden');
-  $('retryThumbWrap').classList.add('sfl-hidden');
+  $('descCount').textContent = '0';
   $('stepMeta').classList.add('sfl-hidden');
   $('stepPick').classList.remove('sfl-hidden');
-  // Reset file input so the same file can be re-selected
-  fileInput.value = '';
-  document.querySelectorAll('.vis-opt').forEach(o => o.classList.remove('selected'));
-  document.querySelector('.vis-opt[data-vis="public"]').classList.add('selected');
-}
-
-// ── Cancel ────────────────────────────────────────────────────────────────────
-$('cancelUploadBtn').addEventListener('click', () => {
-  if (_isUploading && _activeTask) {
-    _activeTask.cancel();
-  }
-  resetForm();
+  $('progressWrap').classList.add('sfl-hidden');
 });
 
-// ── Stall detection ───────────────────────────────────────────────────────────
-function clearStallTimer() {
-  if (_stallTimer) { clearInterval(_stallTimer); _stallTimer = null; }
-}
-
-function startStallTimer() {
-  clearStallTimer();
-  _lastBytesTransferred = 0;
-  _lastProgressAt = Date.now();
-  _stallTimer = setInterval(() => {
-    const now = Date.now();
-    const elapsed = now - _lastProgressAt;
-    if (elapsed > STALL_THRESHOLD_MS) {
-      clearStallTimer();
-      log('UPLOAD_STALLED', { elapsed });
-      showError('Upload appears to be stalled. Check your connection and try again.');
-      setUploading(false);
-      toast('Upload stalled — check your network connection.', 6000);
-    }
-  }, 5000);
-}
-
-function resetStallTimer(bytes) {
-  if (bytes !== _lastBytesTransferred) {
-    _lastBytesTransferred = bytes;
-    _lastProgressAt = Date.now();
-  }
-}
-
-// ── UI helpers ────────────────────────────────────────────────────────────────
-function setUploading(active) {
-  _isUploading = active;
-  const btn = $('publishBtn');
-  btn.disabled = active;
-  btn.textContent = active ? '⏳ Uploading…' : '🚀 Publish Video';
-}
-
-function setProgress(pct, label) {
-  $('progressFill').style.width = `${Math.max(0, Math.min(100, pct))}%`;
-  if (label) $('progressLabel').textContent = label;
-}
-
-// ── Publish ───────────────────────────────────────────────────────────────────
+/* ── Publish ── */
 $('publishBtn').addEventListener('click', async () => {
-  if (_isUploading) return;  // Prevent double-submit
-
-  // ── Auth guard: block if Firebase hasn't finished restoring the session ────
-  if (_authLoading) {
-    toast('Still loading your session — please wait a moment and try again.');
-    return;
-  }
-
-  // ── Verify auth.currentUser directly (belt-and-suspenders) ─────────────────
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    log('PUBLISH_BLOCKED', { reason: 'no_authenticated_user', _user_cached: !!_user });
-    toast('Your session has expired. Please sign in again.');
-    $('authGate').classList.remove('sfl-hidden');
-    return;
-  }
-
+  if (!_user) { toast('Sign in to upload.'); return; }
   if (!_videoFile) { toast('Please select a video.'); return; }
   const title = $('videoTitle').value.trim();
   if (!title) { toast('Please enter a title.'); $('videoTitle').focus(); return; }
 
-  // ── Use auth.currentUser.uid — never trust a stale cached value ────────────
-  const uid = currentUser.uid;
-
-  log('PUBLISH_INITIATED', {
-    projectId:  FIREBASE_CONFIG.projectId,
-    uid,
-    collection: 'videos',
-    provider:   currentUser.providerData?.[0]?.providerId ?? null,
-    isAnonymous: currentUser.isAnonymous,
-  });
-
-  setUploading(true);
-  hideError();
+  $('publishBtn').disabled = true;
+  $('publishBtn').textContent = '⏳ Uploading…';
   $('progressWrap').classList.remove('sfl-hidden');
-  setProgress(0, 'Starting upload…');
 
-  const videoId = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-  const ext = (_videoFile.name.split('.').pop() || 'mp4').toLowerCase();
-  const vidPath = `videos/${uid}/${videoId}/video.${ext}`;
-
-  log('UPLOAD_STARTED', {
-    fileName:   _videoFile.name,
-    fileSize:   _videoFile.size,
-    storagePath: vidPath,
-    firestoreCollection: 'videos',
-    creatorId:  uid,
-  });
-
-  // ── Create the Firestore doc immediately with status "uploading" ──────────
-  // This doc acts as a lock preventing duplicate submissions.
-  // creatorId is set to auth.currentUser.uid — the Firestore rule validates this.
-  let docRef;
   try {
-    docRef = await addDoc(collection(db, 'videos'), {
-      title,
-      description:   $('videoDesc').value.trim(),
-      category:      $('videoCategory').value || '',
-      tags:          _tags,
-      visibility:    _visibility,
-      videoUrl:      '',         // will be filled after Storage upload
-      storagePath:   vidPath,
-      thumbnailUrl:  '',
-      duration:      +($('videoPreview').dataset.duration || 0) || null,
-      creatorId:     uid,
-      creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
-      creatorAvatar: _userData?.avatar || _user.photoURL || '',
-      views:         0,
-      likes:         0,
-      comments:      0,
-      createdAt:     serverTimestamp(),
-      updatedAt:     serverTimestamp(),
-      status:        'uploading',   // lifecycle: uploading → processing → ready | failed
-      processingStatus: 'pending',
-    });
-    log('FIRESTORE_DOCUMENT_CREATED', {
-      docId:      docRef.id,
-      collection: 'videos',
-      status:     'uploading',
-      creatorId:  uid,
-    });
-  } catch (e) {
-    log('UPLOAD_FAILED', {
-      stage:     'firestore_create',
-      errorCode: e.code,
-      errorMsg:  e.message,
-      uid,
-      collection: 'videos',
-      authCurrentUser: auth.currentUser?.uid ?? null,
-    });
-    showError(describeError(e));
-    setUploading(false);
-    return;
-  }
+    // 1. Upload video
+    const uid = _user.uid;
+    const ext = _videoFile.name.split('.').pop() || 'mp4';
+    const vidPath = `videos/${uid}/${Date.now()}.${ext}`;
+    const vidRef = storageRef(storage, vidPath);
+    const vidTask = uploadBytesResumable(vidRef, _videoFile);
 
-  // ── Upload video to Firebase Storage (resumable, original Blob — no base64) ──
-  let videoUrl = '';
-  try {
-    const vidRef  = storageRef(storage, vidPath);
-    const metadata = { contentType: _videoFile.type || 'video/mp4' };
-    const vidTask = uploadBytesResumable(vidRef, _videoFile, metadata);
-    _activeTask = vidTask;
-
-    startStallTimer();
-
-    videoUrl = await new Promise((resolve, reject) => {
+    const videoUrl = await new Promise((resolve, reject) => {
       vidTask.on('state_changed',
-        snapshot => {
-          const pct = Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100);
-          resetStallTimer(snapshot.bytesTransferred);
-          // Show actual percentage 0–95% during video upload phase
-          setProgress(pct * 0.95, `Uploading video… ${pct}%`);
-          log('UPLOAD_PROGRESS', { pct, bytes: snapshot.bytesTransferred, total: snapshot.totalBytes });
+        snap => {
+          const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
+          $('progressFill').style.width = `${Math.min(pct, 85)}%`;
+          $('progressLabel').textContent = `Uploading video… ${pct}%`;
         },
-        err => {
-          clearStallTimer();
-          log('UPLOAD_FAILED', { stage: 'storage_upload', code: err.code, message: err.message });
-          reject(err);
-        },
-        async () => {
-          clearStallTimer();
-          log('UPLOAD_COMPLETED', { path: vidPath });
-          setProgress(95, 'Upload complete. Getting video URL…');
-          try {
-            const url = await getDownloadURL(vidTask.snapshot.ref);
-            if (!url) { reject(new Error('Download URL was empty.')); return; }
-            log('DOWNLOAD_URL_RECEIVED', { url: url.substring(0, 80) + '…' });
-            resolve(url);
-          } catch (urlErr) {
-            reject(urlErr);
-          }
-        }
+        reject,
+        async () => { resolve(await getDownloadURL(vidTask.snapshot.ref)); }
       );
     });
-  } catch (storageErr) {
-    log('UPLOAD_FAILED', {
-      stage:     'storage',
-      errorCode: storageErr.code,
-      errorMsg:  storageErr.message,
-      storagePath: vidPath,
-    });
-    const errMsg = describeError(storageErr);
-    showError(errMsg);
-    setUploading(false);
-    // Mark the Firestore doc as failed — do NOT delete; the Storage file may have
-    // been partially or fully uploaded and can be retried.
-    try {
-      await updateDoc(docRef, { status: 'failed', updatedAt: serverTimestamp() });
-    } catch (_) { /* non-critical */ }
-    return;
-  }
 
-  // ── Upload thumbnail (optional — NEVER blocks video publish) ─────────────
-  // Thumbnail failures are logged and shown as an informational notice.
-  // The video is always published regardless of thumbnail outcome.
-  let thumbnailUrl = null;
-  let thumbSkipped = false;
-
-  if (_thumbFile) {
-    // Re-verify auth immediately before the thumbnail upload.
-    // A long video upload can exhaust the 1-hour token window.
-    const thumbUser = auth.currentUser;
-    if (!thumbUser || thumbUser.uid !== uid) {
-      log('THUMB_SKIPPED', { reason: 'auth_lost_during_video_upload', thumbUser: thumbUser?.uid ?? null, expectedUid: uid });
-      thumbSkipped = true;
-      showThumbNotice('Thumbnail skipped — your session changed during upload. The video will publish normally.');
-    }
-
-    if (!thumbSkipped) {
-      setProgress(96, 'Uploading thumbnail…');
-
-      // Use the same videoId in the path so thumbnail and video are co-located.
-      // Path: thumbnails/{uid}/{videoId}/thumbnail.jpg
-      // Storage rule: match /thumbnails/{uid}/{allPaths=**} — this matches.
-      const tPath = `thumbnails/${uid}/${videoId}/thumbnail.jpg`;
-
-      // Determine the real content-type from the file; fall back to image/jpeg.
-      // Passing the correct MIME type avoids the Storage isValidImageType() rule
-      // rejecting the upload if the browser provides a different type.
-      const tContentType = (_thumbFile.type && _thumbFile.type.startsWith('image/'))
-        ? _thumbFile.type
-        : 'image/jpeg';
-
-      log('THUMB_UPLOAD_STARTED', {
-        storagePath: tPath,
-        contentType: tContentType,
-        fileSize:    _thumbFile.size,
-        uid,
-        authUid:     thumbUser.uid,
+    // 2. Upload thumbnail
+    let thumbnailUrl = '';
+    if (_thumbFile) {
+      $('progressLabel').textContent = 'Uploading thumbnail…';
+      $('progressFill').style.width = '88%';
+      const tPath = `thumbnails/${uid}/${Date.now()}.jpg`;
+      const tRef = storageRef(storage, tPath);
+      const tTask = uploadBytesResumable(tRef, _thumbFile);
+      thumbnailUrl = await new Promise((resolve, reject) => {
+        tTask.on('state_changed', null, reject, async () => {
+          resolve(await getDownloadURL(tTask.snapshot.ref));
+        });
       });
-
-      try {
-        const tRef  = storageRef(storage, tPath);
-        const tTask = uploadBytesResumable(tRef, _thumbFile, { contentType: tContentType });
-
-        thumbnailUrl = await new Promise((resolve, reject) => {
-          tTask.on('state_changed',
-            null,   // no progress needed for a small image
-            err => {
-              // Reject so the outer catch can log and show the informational notice
-              reject(err);
-            },
-            async () => {
-              try {
-                const url = await getDownloadURL(tTask.snapshot.ref);
-                resolve(url || null);
-              } catch (urlErr) {
-                reject(urlErr);
-              }
-            }
-          );
-        });
-
-        log('THUMB_UPLOAD_SUCCESS', { url: thumbnailUrl ? thumbnailUrl.substring(0,80)+'…' : null });
-      } catch (thumbErr) {
-        // ── Thumbnail failure is NON-FATAL ──────────────────────────────────
-        // Log the full error so it's visible in DevTools, but do NOT show the
-        // generic server-rejection message to the user.  The video will still
-        // be published with thumbnailUrl: null.
-        log('THUMB_UPLOAD_FAILED', {
-          errorCode:   thumbErr.code,
-          errorMsg:    thumbErr.message,
-          storagePath: tPath,
-          contentType: tContentType,
-          fileSize:    _thumbFile.size,
-          authUid:     auth.currentUser?.uid ?? null,
-        });
-        thumbnailUrl = null;
-        _thumbFailed = true;
-
-        // Show a friendly informational notice — NOT an error.
-        const thumbErrDetail = thumbErr.code
-          ? `(${thumbErr.code})`
-          : '';
-        showThumbNotice(
-          `Thumbnail couldn't be uploaded ${thumbErrDetail} — your video will publish with the default thumbnail. You can retry after publishing.`
-        );
-      }
     }
-  }
 
-  // ── Mark document ready ───────────────────────────────────────────────────
-  // Force-refresh the Firebase ID token before writing so a long video upload
-  // (which can exceed the 1-hour token window) doesn't cause permission-denied
-  // on the final Firestore update.
-  setProgress(98, 'Saving video…');
-  try {
-    // getIdToken(true) forces a fresh token; errors here are non-fatal for the
-    // Firestore write (the SDK retries automatically, but an explicit refresh
-    // ensures the write goes through without a permission-denied race).
-    if (auth.currentUser) {
-      await auth.currentUser.getIdToken(/* forceRefresh */ true).catch(() => {/* non-critical */});
-    }
-  } catch (_) { /* ignore */ }
+    // 3. Save metadata to Firestore
+    $('progressLabel').textContent = 'Saving video…';
+    $('progressFill').style.width = '95%';
 
-  try {
-    await updateDoc(docRef, {
+    const meta = {
+      title,
+      description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '',
+      tags: _tags,
+      visibility: _visibility,
       videoUrl,
-      thumbnailUrl:  thumbnailUrl ?? null,  // null when no thumbnail — never empty string
-      storagePath:   vidPath,
-      status:        'ready',
-      processingStatus: 'ready',
-      updatedAt:     serverTimestamp(),
-    });
-    log('VIDEO_READY', {
-      docId:        docRef.id,
-      hasThumbnail: !!thumbnailUrl,
-      videoUrl:     videoUrl.substring(0, 80) + '…',
-    });
-  } catch (firestoreErr) {
-    log('UPLOAD_FAILED', {
-      stage:     'firestore_update',
-      errorCode: firestoreErr.code,
-      errorMsg:  firestoreErr.message,
-      docId:     docRef?.id,
-      storagePath: vidPath,
-      videoUrl:  videoUrl ? videoUrl.substring(0, 80) + '…' : null,
-      authCurrentUser: auth.currentUser?.uid ?? null,
-    });
-    // Storage upload succeeded — do NOT delete the file.
-    // Keep storagePath + downloadURL available; the metadata write can be retried.
-    showError(
-      'Video uploaded successfully, but could not save to the feed: '
-      + describeError(firestoreErr)
-      + ' — your video file is safe and will appear once this is resolved.'
-    );
-    setUploading(false);
-    return;
-  }
+      thumbnailUrl,
+      duration: +($('videoPreview').dataset.duration || 0) || null,
+      creatorId: uid,
+      creatorName: _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+      creatorAvatar: _userData?.avatar || _user.photoURL || '',
+      views: 0,
+      likes: 0,
+      comments: 0,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
 
-  // ── Store retry state ─────────────────────────────────────────────────────
-  _publishedDocId = docRef.id;
-  _publishedUid   = uid;
-  _publishedVidId = videoId;
+    const docRef = await addDoc(collection(db,'videos'), meta);
 
-  // ── Success ───────────────────────────────────────────────────────────────
-  setProgress(100, '✅ Published!');
-
-  if (_thumbFailed) {
-    // Don't toast about the thumbnail; the inline notice already explains it.
-    toast('🎉 Video published! Thumbnail skipped — see note below.', 4500);
-    // Show the retry button so the user can re-upload a thumbnail without
-    // re-uploading the entire video.
-    $('retryThumbWrap').classList.remove('sfl-hidden');
-    $('retryThumbLabel').textContent = 'Video is live. Tap to upload a thumbnail separately.';
-    setUploading(false);
-    clearStallTimer();
-    // Redirect after a longer pause so the user sees the notice
-    setTimeout(() => {
-      window.location.href = `sfl-player.html?v=${docRef.id}`;
-    }, 3500);
-  } else {
+    $('progressFill').style.width = '100%';
+    $('progressLabel').textContent = 'Published!';
     toast('🎉 Video published!');
-    setUploading(false);
-    clearStallTimer();
+
     setTimeout(() => {
       window.location.href = `sfl-player.html?v=${docRef.id}`;
     }, 1200);
-  }
-});
 
-// ── Retry thumbnail independently ────────────────────────────────────────────
-// Shown only after a successful video publish where the thumbnail failed.
-// The user can pick a new image and upload it without re-uploading the video.
-$('retryThumbBtn').addEventListener('click', async () => {
-  if (!_publishedDocId || !_publishedUid || !_publishedVidId) return;
-
-  const retryUser = auth.currentUser;
-  if (!retryUser || retryUser.uid !== _publishedUid) {
-    toast('Please sign in again to retry the thumbnail.');
-    return;
-  }
-
-  // Must have a thumb file selected (either original or newly picked)
-  if (!_thumbFile) {
-    toast('Select a thumbnail image first using the Thumbnail picker above.');
-    return;
-  }
-
-  const btn = $('retryThumbBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Uploading thumbnail…';
-  $('retryThumbLabel').textContent = '';
-
-  const tPath = `thumbnails/${_publishedUid}/${_publishedVidId}/thumbnail.jpg`;
-  const tContentType = (_thumbFile.type && _thumbFile.type.startsWith('image/'))
-    ? _thumbFile.type
-    : 'image/jpeg';
-
-  log('THUMB_RETRY_STARTED', { storagePath: tPath, contentType: tContentType, fileSize: _thumbFile.size });
-
-  try {
-    const tRef  = storageRef(storage, tPath);
-    const tTask = uploadBytesResumable(tRef, _thumbFile, { contentType: tContentType });
-
-    const thumbnailUrl = await new Promise((resolve, reject) => {
-      tTask.on('state_changed', null,
-        err => reject(err),
-        async () => {
-          try { resolve(await getDownloadURL(tTask.snapshot.ref)); }
-          catch (e) { reject(e); }
-        }
-      );
-    });
-
-    // Update the Firestore document with the new thumbnail URL
-    await updateDoc(doc(db, 'videos', _publishedDocId), {
-      thumbnailUrl,
-      updatedAt: serverTimestamp(),
-    });
-
-    log('THUMB_RETRY_SUCCESS', { docId: _publishedDocId, url: thumbnailUrl.substring(0,80)+'…' });
-    toast('✅ Thumbnail uploaded!');
-    btn.textContent = '✅ Thumbnail uploaded';
-    $('retryThumbLabel').textContent = 'Thumbnail saved successfully.';
-    hideThumbNotice();
-    _thumbFailed = false;
-
-  } catch (retryErr) {
-    log('THUMB_RETRY_FAILED', { errorCode: retryErr.code, errorMsg: retryErr.message });
-    toast('Thumbnail upload failed: ' + (retryErr.code || retryErr.message));
-    btn.disabled = false;
-    btn.textContent = '🔄 Retry Thumbnail Upload';
-    $('retryThumbLabel').textContent = 'Failed — check your connection and try again.';
+  } catch(e) {
+    console.error('Upload error:', e);
+    toast('Upload failed. Please try again.');
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    $('progressWrap').classList.add('sfl-hidden');
   }
 });
 </script>
