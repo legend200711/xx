@@ -28,8 +28,11 @@ const MAX_SIZE       = MAX_SIZE_VIDEO;            // absolute upper bound
 
 const ALLOWED_ORIGINS = [
   'https://shadownexussocial.online',
+  'https://www.shadownexussocial.online',
   'https://shadowfirelive.com',
   'https://www.shadowfirelive.com',
+  'https://horr-a08f4.web.app',
+  'https://horr-a08f4.firebaseapp.com',
   'http://localhost',
   'http://127.0.0.1'
 ];
