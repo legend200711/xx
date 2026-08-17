@@ -701,7 +701,13 @@ $('failCancelBtn').addEventListener('click', () => {
 /* ── Retry button ── */
 $('retryBtn').addEventListener('click', () => {
   $('failPanel').classList.add('sfl-hidden');
-  _cancelled = false;
+  _cancelled  = false;
+  _uploading  = false;
+  // Reset Stream state so we don't try to resume a failed/expired tus URL
+  _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
+  // Reset R2 fallback flag so it is re-evaluated on this attempt
+  // (keeps _r2UploadId/_r2Key/_uploadedParts intact for true resume)
+  _useR2Fallback = false;
   startUpload();
 });
 
@@ -922,11 +928,27 @@ function r2UploadPartProxy(partSlice, partNumber, key, r2UploadId, onProgress) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   checkWorkerReachable — quick GET / to verify the Worker
+   responds before we attempt a large upload.
+   Returns true if reachable, false otherwise.
+───────────────────────────────────────────────────────── */
+async function checkWorkerReachable() {
+  try {
+    const res = await fetch(WORKER_URL, { method: 'GET', signal: AbortSignal.timeout(8000) });
+    console.log('[SFL Upload] Worker reachability check: HTTP', res.status);
+    return res.ok;
+  } catch(e) {
+    console.error('[SFL Upload] Worker unreachable:', e.message);
+    return false;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
    MAIN UPLOAD FLOW
    ─────────────────────────────────────────────────────────
    Tries Cloudflare Stream first (tus direct upload + HLS playback).
-   If Stream returns 503 (quota exceeded / not subscribed), falls
-   back to R2 multipart upload with presigned URLs.
+   If Stream returns 503/quota error, falls back to R2 multipart
+   upload via the Worker proxy path (/mpu/part).
 
    Stream path:
      1. POST /stream/upload-url → { uploadURL, streamId }
@@ -968,9 +990,27 @@ async function startUpload() {
   console.group('[SFL Upload]');
   console.log('File:', file.name, fmtBytes(file.size), file.type || 'video/mp4');
   console.log('Session:', _sessionId);
+  console.log('Worker:', WORKER_URL);
   console.log('Start:', new Date().toISOString());
 
   setStage('prepare', 'active');
+  $('progressLabel').textContent = 'Checking upload service…';
+
+  // ── Pre-flight: verify the Worker is reachable before uploading ──
+  const workerReachable = await checkWorkerReachable();
+  if (!workerReachable) {
+    _uploading = false;
+    console.error('[SFL Upload] Worker unreachable — aborting before upload attempt.');
+    console.groupEnd();
+    setStage('prepare', 'error');
+    $('failPanel').classList.remove('sfl-hidden');
+    $('failMsg').textContent = 'Shadow Fire Live cannot connect to the video upload service right now. Check your internet connection and tap Retry.';
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    return;
+  }
+  console.log('[SFL Upload] UPLOAD_ENDPOINT_REACHED ✓');
+
   $('progressLabel').textContent = 'Preparing upload…';
   showProgressNumbers(false);
 
@@ -988,26 +1028,40 @@ async function startUpload() {
       // ── A1. Get Cloudflare Stream direct-upload URL ──
       if (!_tusUploadUrl || !_streamId) {
         console.log('[SFL Upload] Trying Cloudflare Stream…');
-        const urlRes = await fetch(`${WORKER_URL}/stream/upload-url`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ uid, title, maxDurationSeconds: 10800 }),
-        });
-        if (urlRes.status === 503 || urlRes.status === 507) {
-          // Stream quota exceeded or not subscribed — switch to R2 path
-          const errData = await urlRes.json().catch(() => ({}));
-          console.warn('[SFL Upload] Cloudflare Stream unavailable:', errData.error || urlRes.status, '— switching to R2 path');
+        let urlRes;
+        try {
+          urlRes = await fetch(`${WORKER_URL}/stream/upload-url`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid, title, maxDurationSeconds: 10800 }),
+          });
+        } catch(fetchErr) {
+          // Network / CORS failure reaching the Worker — skip Stream, go straight to R2
+          console.warn('[SFL Upload] Cannot reach upload Worker for Stream URL:', fetchErr.message, '— switching to R2 path');
           _useR2Fallback = true;
-        } else if (!urlRes.ok) {
-          let msg = `Upload server error ${urlRes.status}`;
-          try { msg = (await urlRes.json()).error || msg; } catch(_) {}
-          throw new Error(msg);
-        } else {
-          const urlData = await urlRes.json();
-          _tusUploadUrl = urlData.uploadURL;
-          _streamId     = urlData.streamId;
-          _tusOffset    = 0;
-          console.log('[SFL Upload] Stream upload URL obtained. streamId:', _streamId);
+        }
+        if (urlRes) {
+          const errData = urlRes.ok ? null : await urlRes.json().catch(() => ({}));
+          const isQuotaOrUnavailable =
+            urlRes.status === 503 || urlRes.status === 507 ||
+            (errData?.fallback === true) ||
+            /quota|capacity|storage|minutes|limit/i.test(errData?.error || '');
+
+          if (isQuotaOrUnavailable) {
+            // Stream quota exceeded / not subscribed — switch to R2 path
+            console.warn('[SFL Upload] Cloudflare Stream unavailable:', errData?.error || urlRes.status, '— switching to R2 path');
+            _useR2Fallback = true;
+          } else if (!urlRes.ok) {
+            let msg = `Upload server error ${urlRes.status}`;
+            if (errData?.error) msg = errData.error;
+            throw new Error(msg);
+          } else {
+            const urlData = await urlRes.json();
+            _tusUploadUrl = urlData.uploadURL;
+            _streamId     = urlData.streamId;
+            _tusOffset    = 0;
+            console.log('[SFL Upload] Stream upload URL obtained. streamId:', _streamId);
+          }
         }
       } else {
         // Resuming — confirm server offset
@@ -1361,13 +1415,18 @@ async function startUpload() {
     setStage(errStage, 'error');
     $('failPanel').classList.remove('sfl-hidden');
 
-    // Show a user-friendly error message
-    let userMsg = err.message || 'Upload failed. Check your connection and try again.';
-    if (userMsg.includes('503') || userMsg.includes('not configured')) {
+    // Show a user-friendly error message with diagnostic detail in the console
+    const rawMsg = err.message || 'Upload failed. Check your connection and try again.';
+    console.error('[SFL Upload] Diagnostic — endpoint:', WORKER_URL);
+    console.error('[SFL Upload] Diagnostic — error raw:', rawMsg);
+    let userMsg = rawMsg;
+    if (/Failed to fetch|NetworkError|network error|Load failed/i.test(rawMsg)) {
+      userMsg = 'Shadow Fire Live cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
+    } else if (rawMsg.includes('503') || rawMsg.includes('not configured')) {
       userMsg = 'Upload service is temporarily unavailable. Please try again later.';
-    } else if (userMsg.includes('401') || userMsg.includes('403')) {
+    } else if (rawMsg.includes('401') || rawMsg.includes('403')) {
       userMsg = 'Authentication error. Please sign out and sign back in, then retry.';
-    } else if (userMsg.includes('Network error')) {
+    } else if (/Network error|connection/i.test(rawMsg)) {
       userMsg = 'Your connection was interrupted. Tap Retry to resume from where you left off.';
     }
     $('failMsg').textContent = userMsg;

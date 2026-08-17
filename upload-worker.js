@@ -840,8 +840,12 @@ async function handleStreamUploadUrl(request, env, cors, sec) {
   if (!cfRes.ok || !cfData.success) {
     const msg = cfData.errors?.[0]?.message || `Cloudflare API error ${cfRes.status}`;
     console.error('[Stream] Cloudflare API error:', msg);
-    return new Response(JSON.stringify({ error: msg }), {
-      status: cfRes.status >= 500 ? 502 : 400,
+    // Quota / capacity errors must return 503 so the client falls back to R2 instead
+    // of surfacing "Failed to fetch" to the user.
+    const isQuota = /quota|capacity|storage|minutes|limit/i.test(msg);
+    const status  = isQuota ? 503 : (cfRes.status >= 500 ? 502 : 400);
+    return new Response(JSON.stringify({ error: msg, fallback: isQuota }), {
+      status,
       headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
   }
