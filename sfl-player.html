@@ -944,11 +944,22 @@ $('deleteConfirmModal').addEventListener('click', e => {
 });
 
 $('btnDeleteConfirm').addEventListener('click', async () => {
-  if (!_user) { toast('Not signed in.'); return; }
+  // Re-read the live auth state — session may have expired since page load
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Not signed in.'); return; }
   if (!_videoData) { toast('Video data not loaded.'); return; }
 
-  // Double-check ownership client-side (Firestore rules enforce this server-side too)
-  if (_videoData.creatorId !== _user.uid) {
+  // ── Ownership check ──────────────────────────────────────────────────────
+  // Compare auth.currentUser.uid against the document's creatorId field.
+  // The Firestore rule `allow delete: if isOwner(resource.data.creatorId)`
+  // performs the same comparison server-side.
+  console.log('[DELETE] AUTH UID:', liveUser.uid);
+  console.log('[DELETE] VIDEO OWNER ID (creatorId):', _videoData.creatorId);
+  console.log('[DELETE] OWNER MATCH:', liveUser.uid === _videoData.creatorId);
+  console.log('[DELETE] FIRESTORE PATH: videos/' + videoId);
+
+  if (_videoData.creatorId !== liveUser.uid) {
+    console.warn('[DELETE] BLOCKED — creatorId mismatch. auth:', liveUser.uid, 'doc:', _videoData.creatorId);
     toast('You can only delete your own videos.');
     $('deleteConfirmModal').classList.add('sfl-hidden');
     return;
@@ -959,47 +970,62 @@ $('btnDeleteConfirm').addEventListener('click', async () => {
   btn.textContent = 'Deleting…';
 
   try {
-    // 1. Get a fresh Firebase ID token for the worker auth calls
-    const idToken = await _user.getIdToken();
+    // 1. Force-refresh the Firebase ID token so it is never stale
+    const idToken = await liveUser.getIdToken(/* forceRefresh */ true);
 
     // 2. Delete Cloudflare Stream video (if this is a Stream-hosted video)
     const streamId = _videoData.streamId || _videoData.cloudflareStreamId || null;
+    let cfStreamStatus = 'skipped';
     if (streamId) {
       try {
         const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken, streamId, ownerId: _user.uid }),
+          body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
         });
-        if (!wRes.ok) {
+        if (wRes.ok) {
+          cfStreamStatus = 'deleted';
+        } else {
           const errData = await wRes.json().catch(() => ({}));
-          // Log but don't block — we still need to delete the Firestore doc
-          console.error('[delete] Stream delete failed:', errData.error);
+          cfStreamStatus = `failed:${wRes.status}:${errData.error || ''}`;
+          // Log but don't block — Firestore delete must still proceed
+          console.error('[DELETE] CLOUDFLARE DELETE STATUS:', cfStreamStatus);
         }
       } catch(e) {
-        console.error('[delete] Stream delete network error:', e.message);
+        cfStreamStatus = `network-error:${e.message}`;
+        console.error('[DELETE] Cloudflare stream delete network error:', e.message);
       }
     }
 
     // 3. Delete R2-hosted video file (if stored in R2)
     const r2Key = _videoData.r2Key || _videoData.storageKey || null;
+    let cfR2Status = 'skipped';
     if (r2Key && !streamId) {
       try {
         const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken, r2Key, ownerId: _user.uid }),
+          body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),
         });
-        if (!wRes.ok) {
+        if (wRes.ok) {
+          cfR2Status = 'deleted';
+        } else {
           const errData = await wRes.json().catch(() => ({}));
-          console.error('[delete] R2 delete failed:', errData.error);
+          cfR2Status = `failed:${wRes.status}:${errData.error || ''}`;
+          console.error('[DELETE] R2 delete failed:', cfR2Status);
         }
       } catch(e) {
-        console.error('[delete] R2 delete network error:', e.message);
+        cfR2Status = `network-error:${e.message}`;
+        console.error('[DELETE] R2 delete network error:', e.message);
       }
     }
 
-    // 4. Delete the Firestore video document (Firestore rules enforce ownership here)
+    console.log('[DELETE] CLOUDFLARE DELETE STATUS:', streamId ? cfStreamStatus : cfR2Status);
+
+    // 4. Delete the Firestore video document
+    // Firestore rule: allow delete: if isOwner(resource.data.creatorId) || isFounder()
+    // isOwner checks: request.auth.uid == resource.data.creatorId
+    console.log('[DELETE] DELETE OPERATION: deleteDoc videos/' + videoId);
     await deleteDoc(doc(db, 'videos', videoId));
 
     // 5. Success — redirect to home feed
@@ -1007,8 +1033,16 @@ $('btnDeleteConfirm').addEventListener('click', async () => {
     toast('Video deleted.');
     setTimeout(() => { window.location.href = 'sfl-home.html'; }, 1200);
   } catch(e) {
-    console.error('[delete] Firestore delete error:', e);
-    toast('Unable to delete this video. Please try again.');
+    // ── Capture the exact Firestore error ────────────────────────────────
+    console.error('DELETE ERROR: Firestore deleteDoc failed');
+    console.error('ERROR CODE:', e.code || '(none)');
+    console.error('ERROR MESSAGE:', e.message || String(e));
+    console.error('FIREBASE USER UID:', liveUser.uid);
+    console.error('VIDEO OWNER ID (creatorId):', _videoData?.creatorId);
+    console.error('VIDEO DOCUMENT PATH: videos/' + videoId);
+    console.error('FIRESTORE COLLECTION: videos');
+    console.error('DELETE OPERATION: deleteDoc(doc(db, "videos", videoId))');
+    toast('Unable to delete. Check console for error details.');
     btn.disabled = false;
     btn.textContent = 'DELETE';
   }

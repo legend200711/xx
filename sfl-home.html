@@ -870,8 +870,17 @@ $('homeDeleteModal').addEventListener('click', e => {
 });
 
 $('homeDeleteConfirm').addEventListener('click', async () => {
-  if (!_user || !_homePendingDeleteId) return;
-  if (!_homePendingDeleteData || _homePendingDeleteData.creatorId !== _user.uid) {
+  const liveUser = auth.currentUser;
+  if (!liveUser || !_homePendingDeleteId) return;
+
+  // ── Ownership check ──────────────────────────────────────────────────────
+  console.log('[DELETE] AUTH UID:', liveUser.uid);
+  console.log('[DELETE] VIDEO OWNER ID (creatorId):', _homePendingDeleteData?.creatorId);
+  console.log('[DELETE] OWNER MATCH:', liveUser.uid === _homePendingDeleteData?.creatorId);
+  console.log('[DELETE] FIRESTORE PATH: videos/' + _homePendingDeleteId);
+
+  if (!_homePendingDeleteData || _homePendingDeleteData.creatorId !== liveUser.uid) {
+    console.warn('[DELETE] BLOCKED — creatorId mismatch. auth:', liveUser.uid, 'doc:', _homePendingDeleteData?.creatorId);
     toast('You can only delete your own videos.');
     $('homeDeleteModal').classList.add('sfl-hidden');
     return;
@@ -885,7 +894,8 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
   const vidData = _homePendingDeleteData;
 
   try {
-    const idToken = await _user.getIdToken();
+    // Force-refresh the token so it is never stale
+    const idToken = await liveUser.getIdToken(/* forceRefresh */ true);
 
     // Delete Cloudflare Stream video if applicable
     const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
@@ -894,13 +904,13 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
         const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken, streamId, ownerId: _user.uid }),
+          body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
         });
         if (!wRes.ok) {
           const e2 = await wRes.json().catch(() => ({}));
-          console.error('[home delete] Stream delete failed:', e2.error);
+          console.error('[DELETE] Stream delete failed:', e2.error);
         }
-      } catch(e) { console.error('[home delete] Stream delete error:', e.message); }
+      } catch(e) { console.error('[DELETE] Stream delete network error:', e.message); }
     }
 
     // Delete R2 video file if applicable
@@ -910,16 +920,18 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
         const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken, r2Key, ownerId: _user.uid }),
+          body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),
         });
         if (!wRes.ok) {
           const e2 = await wRes.json().catch(() => ({}));
-          console.error('[home delete] R2 delete failed:', e2.error);
+          console.error('[DELETE] R2 delete failed:', e2.error);
         }
-      } catch(e) { console.error('[home delete] R2 delete error:', e.message); }
+      } catch(e) { console.error('[DELETE] R2 delete network error:', e.message); }
     }
 
-    // Delete Firestore document (security rules enforce ownership server-side)
+    // Delete Firestore document
+    // Rule: allow delete: if isOwner(resource.data.creatorId) || isFounder()
+    console.log('[DELETE] DELETE OPERATION: deleteDoc videos/' + vidId);
     await deleteDoc(doc(db, 'videos', vidId));
 
     // Remove card from DOM immediately
@@ -930,8 +942,15 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
     _homePendingDeleteId = null; _homePendingDeleteData = null;
     toast('Video deleted.');
   } catch(e) {
-    console.error('[home delete] Firestore delete error:', e);
-    toast('Unable to delete this video. Please try again.');
+    console.error('DELETE ERROR: Firestore deleteDoc failed');
+    console.error('ERROR CODE:', e.code || '(none)');
+    console.error('ERROR MESSAGE:', e.message || String(e));
+    console.error('FIREBASE USER UID:', liveUser.uid);
+    console.error('VIDEO OWNER ID (creatorId):', vidData?.creatorId);
+    console.error('VIDEO DOCUMENT PATH: videos/' + vidId);
+    console.error('FIRESTORE COLLECTION: videos');
+    console.error('DELETE OPERATION: deleteDoc(doc(db, "videos", vidId))');
+    toast('Unable to delete. Check console for error details.');
   } finally {
     btn.disabled = false;
     btn.textContent = 'DELETE';
