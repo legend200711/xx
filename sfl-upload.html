@@ -772,15 +772,23 @@ async function retryPublishOnly() {
     };
 
     let docId;
-    console.log('[SFL Publish Retry] Writing to Firestore. uid:', uid, 'videoUrl:', meta.videoUrl);
+    console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.log('[PUBLISH] UID:', uid);
+    console.log('[PUBLISH] Collection: videos');
+    console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+    console.log('[PUBLISH] Owner ID matches authenticated UID:', (finalMeta.creatorId === uid) ? 'YES' : 'NO');
+    console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+    console.log('[PUBLISH] VIDEO URL:', meta.videoUrl);
     if (_pendingDocId) {
+      console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
       await updateDoc(doc(db,'videos',_pendingDocId), finalMeta);
       docId = _pendingDocId;
-      console.log('[SFL Publish Retry] Updated existing doc:', docId);
+      console.log('[PUBLISH] Firestore result: SUCCESS (update)');
     } else {
+      console.log('[PUBLISH] Calling addDoc on collection videos');
       const nd = await addDoc(collection(db,'videos'), { ...finalMeta, createdAt: serverTimestamp() });
       docId = nd.id;
-      console.log('[SFL Publish Retry] Created new doc:', docId);
+      console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', docId);
     }
 
     setStage('done', 'active');
@@ -793,10 +801,13 @@ async function retryPublishOnly() {
   } catch(err) {
     _uploading = false;
     const errMsg = err?.message || String(err);
-    console.error('[SFL Publish Retry] PUBLISH ERROR:', errMsg);
-    console.error('[SFL Publish Retry] CLOUDFLARE VIDEO ID:', meta.cloudflareVideoId || '(R2 path)');
-    console.error('[SFL Publish Retry] FIREBASE USER UID:', uid);
-    console.error('[SFL Publish Retry] VIDEO URL:', meta.videoUrl);
+    console.error('[PUBLISH] Firestore error code:', err?.code || '(no code)');
+    console.error('[PUBLISH] ERROR MESSAGE:', errMsg);
+    console.error('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.error('[PUBLISH] UID:', uid);
+    console.error('[PUBLISH] Collection: videos');
+    console.error('[PUBLISH] CLOUDFLARE VIDEO ID:', meta.cloudflareVideoId || '(R2 path)');
+    console.error('[PUBLISH] VIDEO URL:', meta.videoUrl);
     setStage('save', 'error');
     $('failTitle').textContent = 'Publishing Failed';
     $('failMsg').innerHTML =
@@ -1330,19 +1341,26 @@ async function startUpload() {
         duration: streamResult.duration || videoDuration,
       };
 
-      console.log('[SFL Upload] PUBLISHING START — cloudflareVideoId:', _streamId, 'uid:', uid);
-      console.log('[SFL Upload] PLAYBACK URL:', streamResult.playbackUrl);
-      console.log('[SFL Upload] PENDING DOC:', _pendingDocId || '(none — will addDoc)');
+      console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+      console.log('[PUBLISH] UID:', uid);
+      console.log('[PUBLISH] Collection: videos');
+      console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+      console.log('[PUBLISH] Owner ID matches authenticated UID:', (streamFinalMeta.creatorId === uid) ? 'YES' : 'NO');
+      console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+      console.log('[PUBLISH] cloudflareVideoId:', _streamId);
+      console.log('[PUBLISH] PLAYBACK URL:', streamResult.playbackUrl);
 
       let docId;
       if (_pendingDocId) {
-        console.log('[SFL Upload] Calling updateDoc on:', _pendingDocId);
+        console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
         await updateDoc(doc(db,'videos',_pendingDocId), streamFinalMeta);
         docId = _pendingDocId;
+        console.log('[PUBLISH] Firestore result: SUCCESS (update)');
       } else {
-        console.log('[SFL Upload] Calling addDoc (no pending doc)');
+        console.log('[PUBLISH] Calling addDoc on collection videos');
         const nd = await addDoc(collection(db,'videos'), { ...streamFinalMeta, createdAt: serverTimestamp() });
         docId = nd.id;
+        console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', docId);
       }
       console.log('[SFL Upload] FIRESTORE WRITE SUCCESS — docId:', docId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
       console.groupEnd();
@@ -1553,19 +1571,26 @@ async function startUpload() {
       duration: videoDuration,
     };
 
-    console.log('[SFL Upload] PUBLISHING START (R2) — r2Key:', _r2Key, 'uid:', uid);
-    console.log('[SFL Upload] VIDEO URL:', r2VideoUrl);
-    console.log('[SFL Upload] PENDING DOC:', _pendingDocId || '(none — will addDoc)');
+    console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.log('[PUBLISH] UID:', uid);
+    console.log('[PUBLISH] Collection: videos');
+    console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+    console.log('[PUBLISH] Owner ID matches authenticated UID:', (r2FinalMeta.creatorId === uid) ? 'YES' : 'NO');
+    console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+    console.log('[PUBLISH] r2Key:', _r2Key);
+    console.log('[PUBLISH] VIDEO URL:', r2VideoUrl);
 
     let r2DocId;
     if (_pendingDocId) {
-      console.log('[SFL Upload] Calling updateDoc on:', _pendingDocId);
+      console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
       await updateDoc(doc(db,'videos',_pendingDocId), r2FinalMeta);
       r2DocId = _pendingDocId;
+      console.log('[PUBLISH] Firestore result: SUCCESS (update)');
     } else {
-      console.log('[SFL Upload] Calling addDoc (no pending doc)');
+      console.log('[PUBLISH] Calling addDoc on collection videos');
       const nd = await addDoc(collection(db,'videos'), { ...r2FinalMeta, createdAt: serverTimestamp() });
       r2DocId = nd.id;
+      console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', r2DocId);
     }
 
     console.log('[SFL Upload] FIRESTORE WRITE SUCCESS (R2) — docId:', r2DocId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
@@ -1582,13 +1607,15 @@ async function startUpload() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     const rawMsg = err?.message || String(err);
 
-    console.error('[SFL Upload] ═══ UPLOAD/PUBLISH ERROR ═══');
-    console.error('[SFL Upload] ERROR MESSAGE:', rawMsg);
-    console.error('[SFL Upload] CLOUDFLARE VIDEO ID:', _streamId || '(R2 path)');
-    console.error('[SFL Upload] FIREBASE USER UID:', uid || _user?.uid || '(unknown)');
-    console.error('[SFL Upload] PENDING FIRESTORE DOC:', _pendingDocId || '(none)');
-    console.error('[SFL Upload] PUBLISH RETRY READY:', _publishRetryReady);
-    console.error('[SFL Upload] WORKER URL:', WORKER_URL);
+    console.error('[PUBLISH] ═══ UPLOAD/PUBLISH ERROR ═══');
+    console.error('[PUBLISH] Firestore error code:', err?.code || '(no code)');
+    console.error('[PUBLISH] ERROR MESSAGE:', rawMsg);
+    console.error('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.error('[PUBLISH] UID:', uid || _user?.uid || '(unknown)');
+    console.error('[PUBLISH] Collection: videos');
+    console.error('[PUBLISH] CLOUDFLARE VIDEO ID:', _streamId || '(R2 path)');
+    console.error('[PUBLISH] PENDING FIRESTORE DOC:', _pendingDocId || '(none)');
+    console.error('[PUBLISH] PUBLISH RETRY READY:', _publishRetryReady);
     console.groupEnd();
 
     if (err.message === 'CANCELLED') return; // cancel handler already reset UI
