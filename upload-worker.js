@@ -943,6 +943,207 @@ async function handleStreamStatus(request, env, cors, sec) {
   });
 }
 
+// ── Cloudflare Stream: delete a video ─────────────────────────────────────────
+//
+// POST /stream/delete
+// Body: { idToken: '<Firebase ID token>', streamId: '<Cloudflare Stream UID>', ownerId: '<uid>' }
+//
+// Security model:
+//   1. Verifies the Firebase ID token with Google's tokeninfo endpoint.
+//   2. Confirms the decoded UID matches the ownerId field supplied by the client.
+//   3. Only then calls the Cloudflare Stream DELETE API (token stays server-side).
+//
+// The Firestore security rule `allow delete: if isOwner(resource.data.creatorId)`
+// provides an independent second layer of protection on the database side.
+// Requires Worker secret: FIREBASE_PROJECT_ID (the Firebase project ID string)
+async function handleStreamDelete(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+    return new Response(JSON.stringify({ error: 'Stream service not configured' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { idToken, streamId, ownerId } = body || {};
+  if (!idToken || !streamId || !ownerId) {
+    return new Response(JSON.stringify({ error: 'idToken, streamId, and ownerId are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Verify Firebase ID token ──────────────────────────────────────────────
+  // Uses Google's tokeninfo endpoint — no Firebase Admin SDK required.
+  const projectId = env.FIREBASE_PROJECT_ID || 'horr-a08f4';
+  let verifiedUid;
+  try {
+    const tokenRes = await fetch(
+      `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${env.FIREBASE_WEB_API_KEY || ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }
+    );
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData.users?.[0]?.localId) {
+      console.error('[stream/delete] Token verification failed:', tokenData?.error?.message);
+      return new Response(JSON.stringify({ error: 'Unauthorized: invalid or expired token' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    verifiedUid = tokenData.users[0].localId;
+  } catch(e) {
+    console.error('[stream/delete] Token verification error:', e.message);
+    return new Response(JSON.stringify({ error: 'Token verification failed' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Confirm caller is the owner ───────────────────────────────────────────
+  if (verifiedUid !== ownerId.replace(/[^a-zA-Z0-9_-]/g, '')) {
+    console.warn(`[stream/delete] UID mismatch: token=${verifiedUid} claimed=${ownerId}`);
+    return new Response(JSON.stringify({ error: 'Forbidden: you do not own this video' }), {
+      status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Delete on Cloudflare Stream ───────────────────────────────────────────
+  const safeStreamId = streamId.replace(/[^a-zA-Z0-9]/g, '');
+  if (!safeStreamId) {
+    return new Response(JSON.stringify({ error: 'Invalid streamId' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  try {
+    const delRes = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream/${safeStreamId}`,
+      {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+      }
+    );
+    // Cloudflare Stream DELETE returns 204 on success; 404 means already gone — treat as success
+    if (delRes.status === 204 || delRes.status === 404) {
+      console.log(`[stream/delete] Deleted streamId=${safeStreamId} by uid=${verifiedUid}`);
+      return new Response(JSON.stringify({ deleted: true, streamId: safeStreamId }), {
+        status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    const errData = await delRes.json().catch(() => ({}));
+    const msg = errData?.errors?.[0]?.message || `Cloudflare API error ${delRes.status}`;
+    console.error('[stream/delete] Cloudflare error:', msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  } catch(e) {
+    console.error('[stream/delete] Fetch error:', e.message);
+    return new Response(JSON.stringify({ error: 'Failed to reach Cloudflare Stream API' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+}
+
+// ── R2: securely delete a video file ─────────────────────────────────────────
+//
+// POST /r2/delete
+// Body: { idToken: '<Firebase ID token>', r2Key: '<R2 object key>', ownerId: '<uid>' }
+//
+// Security: same Firebase token verification + owner check as /stream/delete.
+// The r2Key is validated to ensure it belongs to the owner's storage path.
+async function handleR2Delete(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { idToken, r2Key, ownerId } = body || {};
+  if (!idToken || !r2Key || !ownerId) {
+    return new Response(JSON.stringify({ error: 'idToken, r2Key, and ownerId are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Verify Firebase ID token ──────────────────────────────────────────────
+  let verifiedUid;
+  try {
+    const tokenRes = await fetch(
+      `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${env.FIREBASE_WEB_API_KEY || ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }
+    );
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData.users?.[0]?.localId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: invalid or expired token' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    verifiedUid = tokenData.users[0].localId;
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'Token verification failed' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Confirm caller is the owner ───────────────────────────────────────────
+  const safeOwnerId = ownerId.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (verifiedUid !== safeOwnerId) {
+    return new Response(JSON.stringify({ error: 'Forbidden: you do not own this file' }), {
+      status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Validate key is scoped to this user ───────────────────────────────────
+  // R2 keys are stored as "<uid>/<timestamp>-<random>.<ext>"
+  // or "profiles/<uid>/..." — both start with the uid.
+  const safeKey = r2Key.replace(/\.\./g, '');  // strip path traversal
+  const ownsKey = safeKey.startsWith(`${safeOwnerId}/`)
+               || safeKey.startsWith(`profiles/${safeOwnerId}/`);
+  if (!ownsKey) {
+    console.warn(`[r2/delete] Key ${safeKey} does not belong to uid=${safeOwnerId}`);
+    return new Response(JSON.stringify({ error: 'Forbidden: key does not belong to owner' }), {
+      status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  try {
+    await env.BUCKET.delete(safeKey);
+    console.log(`[r2/delete] Deleted key=${safeKey} by uid=${safeOwnerId}`);
+    return new Response(JSON.stringify({ deleted: true, key: safeKey }), {
+      status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'R2 delete failed: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -984,6 +1185,10 @@ export default {
     // ── Cloudflare Stream endpoints ──
     if (url.pathname === '/stream/upload-url') return handleStreamUploadUrl(request, env, cors, sec);
     if (url.pathname === '/stream/status')     return handleStreamStatus(request, env, cors, sec);
+    if (url.pathname === '/stream/delete')     return handleStreamDelete(request, env, cors, sec);
+
+    // ── Secure R2 video delete ──
+    if (url.pathname === '/r2/delete')         return handleR2Delete(request, env, cors, sec);
 
     // ── R2 Multipart Upload endpoints (video) ──
     // /mpu/create   — creates a new multipart upload, returns { r2UploadId, key }

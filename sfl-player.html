@@ -155,6 +155,28 @@
 .video-action-btn:hover { background: var(--sfl-bg-hover); border-color: var(--sfl-border-hot); color: var(--sfl-text); }
 .video-action-btn.liked { color: #ff4466; border-color: rgba(255,68,102,0.45); background: rgba(255,68,102,0.1); }
 .video-action-btn.following { color: var(--sfl-blue); border-color: var(--sfl-border-hot); }
+.video-action-btn.danger { color: #ff4455; border-color: rgba(255,68,85,0.35); }
+.video-action-btn.danger:hover { background: rgba(255,68,85,0.12); border-color: rgba(255,68,85,0.65); color: #ff4455; }
+/* Delete confirmation modal */
+.sfl-del-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.sfl-del-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+}
+.sfl-del-modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.sfl-del-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; color: var(--sfl-text); }
+.sfl-del-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
+.sfl-del-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 /* Creator card */
 .creator-card {
@@ -346,6 +368,7 @@
               <button class="video-action-btn" id="btnLike" aria-label="Like video">❤️ <span id="likeCount">0</span></button>
               <button class="video-action-btn" id="btnShare" aria-label="Share video">📤 Share</button>
               <a href="#" class="video-action-btn" id="btnWatchCreator">📡 Watch Live</a>
+              <button class="video-action-btn danger sfl-hidden" id="btnDeleteVideo" aria-label="Delete video">🗑 DELETE</button>
             </div>
           </div>
 
@@ -424,7 +447,8 @@ import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs,
-  onSnapshot, updateDoc, increment, serverTimestamp, where, arrayUnion, arrayRemove
+  onSnapshot, updateDoc, increment, serverTimestamp, where, arrayUnion, arrayRemove,
+  deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // Track creator UID for follow operations
@@ -897,8 +921,112 @@ onAuthStateChanged(auth, async user => {
     _liked = true;
     $('btnLike').classList.add('liked');
   }
+  // Show DELETE button only to the video owner (frontend hint; backend enforces)
+  if (user && _videoData?.creatorId === user.uid) {
+    $('btnDeleteVideo').classList.remove('sfl-hidden');
+  }
+});
+
+/* ── Video Delete ── */
+$('btnDeleteVideo').addEventListener('click', () => {
+  if (!_user) { toast('Sign in to delete videos.'); return; }
+  // Show confirmation modal
+  $('deleteConfirmModal').classList.remove('sfl-hidden');
+});
+
+$('btnDeleteCancel').addEventListener('click', () => {
+  $('deleteConfirmModal').classList.add('sfl-hidden');
+});
+
+// Close on overlay click
+$('deleteConfirmModal').addEventListener('click', e => {
+  if (e.target === $('deleteConfirmModal')) $('deleteConfirmModal').classList.add('sfl-hidden');
+});
+
+$('btnDeleteConfirm').addEventListener('click', async () => {
+  if (!_user) { toast('Not signed in.'); return; }
+  if (!_videoData) { toast('Video data not loaded.'); return; }
+
+  // Double-check ownership client-side (Firestore rules enforce this server-side too)
+  if (_videoData.creatorId !== _user.uid) {
+    toast('You can only delete your own videos.');
+    $('deleteConfirmModal').classList.add('sfl-hidden');
+    return;
+  }
+
+  const btn = $('btnDeleteConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  try {
+    // 1. Get a fresh Firebase ID token for the worker auth calls
+    const idToken = await _user.getIdToken();
+
+    // 2. Delete Cloudflare Stream video (if this is a Stream-hosted video)
+    const streamId = _videoData.streamId || _videoData.cloudflareStreamId || null;
+    if (streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, streamId, ownerId: _user.uid }),
+        });
+        if (!wRes.ok) {
+          const errData = await wRes.json().catch(() => ({}));
+          // Log but don't block — we still need to delete the Firestore doc
+          console.error('[delete] Stream delete failed:', errData.error);
+        }
+      } catch(e) {
+        console.error('[delete] Stream delete network error:', e.message);
+      }
+    }
+
+    // 3. Delete R2-hosted video file (if stored in R2)
+    const r2Key = _videoData.r2Key || _videoData.storageKey || null;
+    if (r2Key && !streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, r2Key, ownerId: _user.uid }),
+        });
+        if (!wRes.ok) {
+          const errData = await wRes.json().catch(() => ({}));
+          console.error('[delete] R2 delete failed:', errData.error);
+        }
+      } catch(e) {
+        console.error('[delete] R2 delete network error:', e.message);
+      }
+    }
+
+    // 4. Delete the Firestore video document (Firestore rules enforce ownership here)
+    await deleteDoc(doc(db, 'videos', videoId));
+
+    // 5. Success — redirect to home feed
+    $('deleteConfirmModal').classList.add('sfl-hidden');
+    toast('Video deleted.');
+    setTimeout(() => { window.location.href = 'sfl-home.html'; }, 1200);
+  } catch(e) {
+    console.error('[delete] Firestore delete error:', e);
+    toast('Unable to delete this video. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'DELETE';
+  }
 });
 </script>
+
+<!-- Delete confirmation modal -->
+<div class="sfl-del-overlay sfl-hidden" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+  <div class="sfl-del-modal">
+    <div class="sfl-del-modal-icon">🗑️</div>
+    <div class="sfl-del-modal-title" id="deleteModalTitle">Delete this video?</div>
+    <div class="sfl-del-modal-body">This action cannot be undone.</div>
+    <div class="sfl-del-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="btnDeleteCancel">Cancel</button>
+      <button class="sfl-btn" id="btnDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
+    </div>
+  </div>
+</div>
 
 <script src="pwa-install.js" defer></script>
 </body>

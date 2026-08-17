@@ -208,6 +208,41 @@
   .profile-stats { gap: 14px; }
   .profile-stat-num { font-size: 15px; }
 }
+/* ── Delete button on video cards ── */
+.sfl-card-delete-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+  background: rgba(192,57,43,0.88); color: #fff;
+  border: none; border-radius: var(--sfl-r-sm);
+  font-size: 11px; font-weight: 700; padding: 4px 9px;
+  cursor: pointer; line-height: 1.4;
+  opacity: 0; transition: opacity var(--sfl-t);
+  pointer-events: none;
+}
+.sfl-video-card:hover .sfl-card-delete-btn,
+.sfl-video-card:focus-within .sfl-card-delete-btn {
+  opacity: 1; pointer-events: auto;
+}
+.sfl-video-card { position: relative; }
+/* Delete confirmation modal */
+.sfl-del-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.sfl-del-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+}
+.sfl-del-modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.sfl-del-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; color: var(--sfl-text); }
+.sfl-del-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
+.sfl-del-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 </style>
 </head>
 <body class="sfl-body">
@@ -367,7 +402,7 @@ import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
-  updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp
+  updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -393,6 +428,7 @@ const params = new URLSearchParams(location.search);
 let _targetUid = params.get('uid');
 let _user = null, _userData = null, _targetData = null;
 let _following = false, _activeTab = 'videos';
+let _pendingDeleteId = null, _pendingDeleteData = null;
 
 /* ─────────────────────────────────────────────────────────────
    Utility
@@ -756,7 +792,7 @@ $('statFollowing').addEventListener('keydown', e => { if (e.key === 'Enter') ope
 /* ─────────────────────────────────────────────────────────────
    Build video card
 ───────────────────────────────────────────────────────────── */
-function buildCard(id, data) {
+function buildCard(id, data, showDelete = false) {
   const a = document.createElement('a');
   a.href  = `sfl-player.html?v=${id}`;
   a.className = 'sfl-video-card sfl-fade-up';
@@ -764,7 +800,11 @@ function buildCard(id, data) {
     ? `<img src="${data.thumbnailUrl}" alt="${data.title || 'Video'}" loading="lazy">`
     : `<div class="sfl-video-thumb-placeholder">🎬</div>`;
   const dur = data.duration ? `<div class="sfl-video-duration">${fmtTime(data.duration)}</div>` : '';
+  const delBtn = showDelete
+    ? `<button class="sfl-card-delete-btn" data-vid="${id}" aria-label="Delete video">🗑 DELETE</button>`
+    : '';
   a.innerHTML = `
+    ${delBtn}
     <div class="sfl-video-thumb">
       ${thumb}
       <div class="sfl-video-play-overlay"><div class="sfl-video-play-btn">▶</div></div>
@@ -778,6 +818,16 @@ function buildCard(id, data) {
       </div>
     </div>
   `;
+  if (showDelete) {
+    const btn = a.querySelector('.sfl-card-delete-btn');
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _pendingDeleteId   = id;
+      _pendingDeleteData = data;
+      $('profileDeleteModal').classList.remove('sfl-hidden');
+    });
+  }
   return a;
 }
 
@@ -846,7 +896,8 @@ async function loadVideos(tab) {
       $('profileEmptySub').textContent   = (_user && _user.uid === _targetUid) ? 'Upload your first video!' : '';
       return;
     }
-    docs.forEach(d => grid.appendChild(buildCard(d.id, d.data())));
+    const isOwnVideosTab = tab === 'videos' && _user && _user.uid === _targetUid;
+    docs.forEach(d => grid.appendChild(buildCard(d.id, d.data(), isOwnVideosTab)));
   } catch(e) {
     loader.classList.add('sfl-hidden');
     console.error('loadVideos:', e);
@@ -894,7 +945,106 @@ onAuthStateChanged(auth, async user => {
   }
   loadProfile();
 });
+
+/* ─────────────────────────────────────────────────────────────
+   Video Delete (profile page)
+───────────────────────────────────────────────────────────── */
+$('profileDeleteCancel').addEventListener('click', () => {
+  $('profileDeleteModal').classList.add('sfl-hidden');
+  _pendingDeleteId = null; _pendingDeleteData = null;
+});
+$('profileDeleteModal').addEventListener('click', e => {
+  if (e.target === $('profileDeleteModal')) {
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    _pendingDeleteId = null; _pendingDeleteData = null;
+  }
+});
+
+$('profileDeleteConfirm').addEventListener('click', async () => {
+  if (!_user || !_pendingDeleteId) return;
+  if (!_pendingDeleteData || _pendingDeleteData.creatorId !== _user.uid) {
+    toast('You can only delete your own videos.');
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    return;
+  }
+
+  const btn = $('profileDeleteConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  const vidId   = _pendingDeleteId;
+  const vidData = _pendingDeleteData;
+
+  try {
+    const idToken = await _user.getIdToken();
+
+    // Delete Cloudflare Stream video if applicable
+    const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
+    if (streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, streamId, ownerId: _user.uid }),
+        });
+        if (!wRes.ok) {
+          const e2 = await wRes.json().catch(() => ({}));
+          console.error('[profile delete] Stream delete failed:', e2.error);
+        }
+      } catch(e) { console.error('[profile delete] Stream delete error:', e.message); }
+    }
+
+    // Delete R2 video file if applicable
+    const r2Key = vidData.r2Key || vidData.storageKey || null;
+    if (r2Key && !streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, r2Key, ownerId: _user.uid }),
+        });
+        if (!wRes.ok) {
+          const e2 = await wRes.json().catch(() => ({}));
+          console.error('[profile delete] R2 delete failed:', e2.error);
+        }
+      } catch(e) { console.error('[profile delete] R2 delete error:', e.message); }
+    }
+
+    // Delete Firestore document (security rules enforce ownership)
+    await deleteDoc(doc(db, 'videos', vidId));
+
+    // Remove the card from the DOM immediately
+    const card = document.querySelector(`.sfl-video-card .sfl-card-delete-btn[data-vid="${vidId}"]`)?.closest('.sfl-video-card');
+    card?.remove();
+
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    _pendingDeleteId = null; _pendingDeleteData = null;
+    toast('Video deleted.');
+
+    // Refresh stats
+    loadVideos(_activeTab);
+  } catch(e) {
+    console.error('[profile delete] Firestore delete error:', e);
+    toast('Unable to delete this video. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'DELETE';
+  }
+});
 </script>
+
+<!-- Delete confirmation modal (profile page) -->
+<div class="sfl-del-overlay sfl-hidden" id="profileDeleteModal" role="dialog" aria-modal="true" aria-labelledby="profileDeleteTitle">
+  <div class="sfl-del-modal">
+    <div class="sfl-del-modal-icon">🗑️</div>
+    <div class="sfl-del-modal-title" id="profileDeleteTitle">Delete this video?</div>
+    <div class="sfl-del-modal-body">This action cannot be undone.</div>
+    <div class="sfl-del-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="profileDeleteCancel">Cancel</button>
+      <button class="sfl-btn" id="profileDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
+    </div>
+  </div>
+</div>
 
 <script src="pwa-install.js" defer></script>
 </body>
