@@ -290,7 +290,7 @@
 
       <!-- Fail / retry panel -->
       <div class="upload-fail-panel sfl-hidden" id="failPanel">
-        <h3>Upload Failed</h3>
+        <h3 id="failTitle">Upload Failed</h3>
         <p id="failMsg">Network error. Check your connection and try again.</p>
         <div style="display:flex;gap:10px;justify-content:center;">
           <button class="sfl-btn sfl-btn-primary" id="retryBtn" type="button">↺ Retry</button>
@@ -456,6 +456,9 @@ let _r2Key        = null;
 let _uploadedParts = [];     // [{ partNumber, etag }]
 let _useR2Fallback = false;  // true once we've confirmed Stream is unavailable
 const PART_SIZE = 10 * 1024 * 1024; // 10 MB parts (R2 minimum is 5 MB)
+// Publishing retry state — set when upload+processing succeeded but Firestore failed
+let _publishRetryReady = false;   // true: upload done, only need to retry Firestore write
+let _publishRetryMeta  = null;    // cached metadata for retry { playbackUrl, thumbnailUrl, duration, r2VideoUrl }
 
 /* ── Auth gate ── */
 onAuthStateChanged(auth, async u => {
@@ -628,6 +631,7 @@ function resetUI() {
   _sessionId = null; _uploading = false; _cancelled = false; _pendingDocId = null;
   _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
   _r2UploadId = null; _r2Key = null; _uploadedParts = []; _useR2Fallback = false;
+  _publishRetryReady = false; _publishRetryMeta = null;
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   $('videoPreview').src = '';
   $('videoTitle').value = '';
@@ -643,6 +647,8 @@ function resetUI() {
   $('progressBytes').textContent = '';
   $('progressSpeed').textContent = '';
   $('progressLabel').textContent = 'Preparing upload…';
+  if ($('failTitle')) $('failTitle').textContent = 'Upload Failed';
+  if ($('retryBtn')) $('retryBtn').textContent = '↺ Retry';
   STAGES.forEach(s => {
     const e = $(`stage-${s}`);
     if (e) e.classList.remove('active','done','error');
@@ -701,15 +707,108 @@ $('failCancelBtn').addEventListener('click', () => {
 /* ── Retry button ── */
 $('retryBtn').addEventListener('click', () => {
   $('failPanel').classList.add('sfl-hidden');
-  _cancelled  = false;
-  _uploading  = false;
-  // Reset Stream state so we don't try to resume a failed/expired tus URL
-  _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
-  // Reset R2 fallback flag so it is re-evaluated on this attempt
-  // (keeps _r2UploadId/_r2Key/_uploadedParts intact for true resume)
-  _useR2Fallback = false;
-  startUpload();
+  _cancelled = false;
+  _uploading = false;
+
+  if (_publishRetryReady && _publishRetryMeta) {
+    // Upload + Cloudflare processing already succeeded.
+    // Only retry the Firestore publishing step.
+    retryPublishOnly();
+  } else {
+    // Reset Stream state so we don't try to resume a failed/expired tus URL
+    _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
+    // Reset R2 fallback flag so it is re-evaluated on this attempt
+    // (keeps _r2UploadId/_r2Key/_uploadedParts intact for true resume)
+    _useR2Fallback = false;
+    startUpload();
+  }
 });
+
+/* ─────────────────────────────────────────────────────────
+   retryPublishOnly — called when Cloudflare succeeded but
+   the Firestore write failed.  Skips the entire upload and
+   processing steps; writes directly to Firestore.
+───────────────────────────────────────────────────────── */
+async function retryPublishOnly() {
+  if (!_publishRetryMeta || !_user) return;
+  if (_uploading) return;
+  _uploading = true;
+
+  const uid   = _user.uid;
+  const title = $('videoTitle').value.trim() || _publishRetryMeta.title || 'Untitled';
+
+  $('publishBtn').disabled = true;
+  $('publishBtn').textContent = '⏳ Publishing…';
+  $('progressWrap').classList.remove('sfl-hidden');
+  $('failPanel').classList.add('sfl-hidden');
+
+  // Mark every step up to 'save' as done, then activate 'save'
+  STAGES.slice(0, STAGES.indexOf('save')).forEach(s => {
+    const e = $(`stage-${s}`); if (e) { e.classList.remove('active','error'); e.classList.add('done'); }
+  });
+  setStage('save', 'active');
+  $('progressLabel').textContent = 'Retrying publish…';
+
+  const meta = _publishRetryMeta;
+
+  try {
+    const finalMeta = {
+      title,
+      description: $('videoDesc').value.trim() || meta.description || '',
+      category:    $('videoCategory').value || meta.category || '',
+      tags:        _tags.length ? _tags : (meta.tags || []),
+      visibility:  _visibility || meta.visibility || 'public',
+      cloudflareVideoId: meta.cloudflareVideoId || null,
+      r2Key:       meta.r2Key || null,
+      videoUrl:    meta.videoUrl,
+      thumbnailUrl: meta.thumbnailUrl || '',
+      duration:    meta.duration || null,
+      creatorId:   uid,
+      creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+      creatorAvatar: _userData?.avatar || _user.photoURL || '',
+      views: 0, likes: 0, comments: 0,
+      status: 'published',
+      updatedAt: serverTimestamp(),
+    };
+
+    let docId;
+    console.log('[SFL Publish Retry] Writing to Firestore. uid:', uid, 'videoUrl:', meta.videoUrl);
+    if (_pendingDocId) {
+      await updateDoc(doc(db,'videos',_pendingDocId), finalMeta);
+      docId = _pendingDocId;
+      console.log('[SFL Publish Retry] Updated existing doc:', docId);
+    } else {
+      const nd = await addDoc(collection(db,'videos'), { ...finalMeta, createdAt: serverTimestamp() });
+      docId = nd.id;
+      console.log('[SFL Publish Retry] Created new doc:', docId);
+    }
+
+    setStage('done', 'active');
+    $('progressLabel').textContent = 'Published! 🎉';
+    toast('🎉 Video published!');
+    _uploading = false; _pendingDocId = null;
+    _publishRetryReady = false; _publishRetryMeta = null;
+    setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
+
+  } catch(err) {
+    _uploading = false;
+    const errMsg = err?.message || String(err);
+    console.error('[SFL Publish Retry] PUBLISH ERROR:', errMsg);
+    console.error('[SFL Publish Retry] CLOUDFLARE VIDEO ID:', meta.cloudflareVideoId || '(R2 path)');
+    console.error('[SFL Publish Retry] FIREBASE USER UID:', uid);
+    console.error('[SFL Publish Retry] VIDEO URL:', meta.videoUrl);
+    setStage('save', 'error');
+    $('failTitle').textContent = 'Publishing Failed';
+    $('failMsg').innerHTML =
+      'Video uploaded successfully. We couldn\'t finish publishing it.<br>' +
+      '<small style="opacity:0.75;">Error: ' + errMsg.replace(/</g,'&lt;') + '</small>';
+    $('retryBtn').textContent = '↺ Retry Publishing';
+    $('failPanel').classList.remove('sfl-hidden');
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    // _publishRetryReady stays true so next Retry also skips upload
+  }
+}
 
 /* ─────────────────────────────────────────────────────────
    uploadThumbnail — R2 (best-effort, non-blocking)
@@ -1215,20 +1314,43 @@ async function startUpload() {
         views: 0, likes: 0, comments: 0, status: 'published',
         updatedAt: serverTimestamp(),
       };
+
+      // Store retry metadata BEFORE writing — if write fails, user can retry without re-uploading
+      _publishRetryReady = true;
+      _publishRetryMeta = {
+        title,
+        description: $('videoDesc').value.trim(),
+        category: $('videoCategory').value || '',
+        tags: [..._tags],
+        visibility: _visibility,
+        cloudflareVideoId: _streamId,
+        r2Key: null,
+        videoUrl: streamResult.playbackUrl,
+        thumbnailUrl,
+        duration: streamResult.duration || videoDuration,
+      };
+
+      console.log('[SFL Upload] PUBLISHING START — cloudflareVideoId:', _streamId, 'uid:', uid);
+      console.log('[SFL Upload] PLAYBACK URL:', streamResult.playbackUrl);
+      console.log('[SFL Upload] PENDING DOC:', _pendingDocId || '(none — will addDoc)');
+
       let docId;
       if (_pendingDocId) {
+        console.log('[SFL Upload] Calling updateDoc on:', _pendingDocId);
         await updateDoc(doc(db,'videos',_pendingDocId), streamFinalMeta);
         docId = _pendingDocId;
       } else {
+        console.log('[SFL Upload] Calling addDoc (no pending doc)');
         const nd = await addDoc(collection(db,'videos'), { ...streamFinalMeta, createdAt: serverTimestamp() });
         docId = nd.id;
       }
-      console.log('[SFL Upload] Published via Stream. docId:', docId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+      console.log('[SFL Upload] FIRESTORE WRITE SUCCESS — docId:', docId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
       console.groupEnd();
       setStage('done', 'active');
       $('progressLabel').textContent = 'Published! 🎉';
       toast('🎉 Video published!');
       _uploading = false; _pendingDocId = null;
+      _publishRetryReady = false; _publishRetryMeta = null;
       setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
       return; // PATH A complete
     }
@@ -1416,62 +1538,117 @@ async function startUpload() {
       updatedAt: serverTimestamp(),
     };
 
+    // Store retry metadata BEFORE writing — if write fails, user can retry without re-uploading
+    _publishRetryReady = true;
+    _publishRetryMeta = {
+      title,
+      description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '',
+      tags: [..._tags],
+      visibility: _visibility,
+      cloudflareVideoId: null,
+      r2Key: _r2Key,
+      videoUrl: r2VideoUrl,
+      thumbnailUrl: r2ThumbnailUrl,
+      duration: videoDuration,
+    };
+
+    console.log('[SFL Upload] PUBLISHING START (R2) — r2Key:', _r2Key, 'uid:', uid);
+    console.log('[SFL Upload] VIDEO URL:', r2VideoUrl);
+    console.log('[SFL Upload] PENDING DOC:', _pendingDocId || '(none — will addDoc)');
+
     let r2DocId;
     if (_pendingDocId) {
+      console.log('[SFL Upload] Calling updateDoc on:', _pendingDocId);
       await updateDoc(doc(db,'videos',_pendingDocId), r2FinalMeta);
       r2DocId = _pendingDocId;
     } else {
+      console.log('[SFL Upload] Calling addDoc (no pending doc)');
       const nd = await addDoc(collection(db,'videos'), { ...r2FinalMeta, createdAt: serverTimestamp() });
       r2DocId = nd.id;
     }
 
-    console.log('[SFL Upload] Published via R2. docId:', r2DocId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+    console.log('[SFL Upload] FIRESTORE WRITE SUCCESS (R2) — docId:', r2DocId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
     console.groupEnd();
     setStage('done', 'active');
     $('progressLabel').textContent = 'Published! 🎉';
     toast('🎉 Video published!');
     _uploading = false; _pendingDocId = null;
+    _publishRetryReady = false; _publishRetryMeta = null;
     setTimeout(() => { window.location.href = `sfl-player.html?v=${r2DocId}`; }, 1400);
 
   } catch(err) {
     _uploading = false;
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-    console.error('[SFL Upload] Error:', err.message);
+    const rawMsg = err?.message || String(err);
+
+    console.error('[SFL Upload] ═══ UPLOAD/PUBLISH ERROR ═══');
+    console.error('[SFL Upload] ERROR MESSAGE:', rawMsg);
+    console.error('[SFL Upload] CLOUDFLARE VIDEO ID:', _streamId || '(R2 path)');
+    console.error('[SFL Upload] FIREBASE USER UID:', uid || _user?.uid || '(unknown)');
+    console.error('[SFL Upload] PENDING FIRESTORE DOC:', _pendingDocId || '(none)');
+    console.error('[SFL Upload] PUBLISH RETRY READY:', _publishRetryReady);
+    console.error('[SFL Upload] WORKER URL:', WORKER_URL);
     console.groupEnd();
 
     if (err.message === 'CANCELLED') return; // cancel handler already reset UI
 
-    // Determine which stage to mark as errored
-    const errStage = _streamId && _tusOffset >= _videoFile?.size ? 'process' : 'upload';
+    // Determine which stage to mark as errored:
+    // If _publishRetryReady is true, the error happened at the Firestore write (stage-save).
+    // If the video was fully uploaded + processed but Firestore failed, mark 'save'.
+    // Otherwise mark 'upload' (upload or processing stage failed).
+    let errStage;
+    if (_publishRetryReady) {
+      errStage = 'save';
+    } else if (_streamId && _tusOffset >= (_videoFile?.size || 0)) {
+      // Upload finished, error was in processing or Firestore
+      errStage = 'process';
+    } else {
+      errStage = 'upload';
+    }
     setStage(errStage, 'error');
     $('failPanel').classList.remove('sfl-hidden');
 
-    // Show a user-friendly error message with diagnostic detail in the console
-    const rawMsg = err.message || 'Upload failed. Check your connection and try again.';
-    console.error('[SFL Upload] Diagnostic — endpoint:', WORKER_URL);
-    console.error('[SFL Upload] Diagnostic — error raw:', rawMsg);
-    let userMsg = rawMsg;
-    if (/Failed to fetch|NetworkError|network error|Load failed/i.test(rawMsg)) {
-      userMsg = 'Shadow Fire Live cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
-    } else if (rawMsg.includes('503') || rawMsg.includes('not configured')) {
-      userMsg = 'Upload service is temporarily unavailable. Please try again later.';
-    } else if (rawMsg.includes('401') || rawMsg.includes('403')) {
-      userMsg = 'Authentication error. Please sign out and sign back in, then retry.';
-    } else if (/Network error|connection/i.test(rawMsg)) {
-      userMsg = 'Your connection was interrupted. Tap Retry to resume from where you left off.';
+    const rawMsgStr = rawMsg;
+    console.error('[SFL Upload] DIAGNOSTIC — stage:', errStage, '/ raw error:', rawMsgStr);
+
+    if (_publishRetryReady) {
+      // Cloudflare upload succeeded — only the Firestore write failed
+      if ($('failTitle')) $('failTitle').textContent = 'Publishing Failed';
+      $('failMsg').innerHTML =
+        'Video uploaded successfully. We couldn\'t finish publishing it.<br>' +
+        '<small style="opacity:0.75;">Error: ' + rawMsgStr.replace(/</g,'&lt;') + '</small>';
+      $('retryBtn').textContent = '↺ Retry Publishing';
+      toast('Publishing failed — tap Retry Publishing.');
+    } else {
+      if ($('failTitle')) $('failTitle').textContent = 'Upload Failed';
+      $('retryBtn').textContent = '↺ Retry';
+      let userMsg = rawMsgStr;
+      if (/Failed to fetch|NetworkError|network error|Load failed/i.test(rawMsgStr)) {
+        userMsg = 'Shadow Fire Live cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
+      } else if (rawMsgStr.includes('503') || rawMsgStr.includes('not configured')) {
+        userMsg = 'Upload service is temporarily unavailable. Please try again later.';
+      } else if (rawMsgStr.includes('401') || rawMsgStr.includes('403')) {
+        userMsg = 'Authentication error. Please sign out and sign back in, then retry.';
+      } else if (/Network error|connection/i.test(rawMsgStr)) {
+        userMsg = 'Your connection was interrupted. Tap Retry to resume from where you left off.';
+      }
+      $('failMsg').textContent = userMsg;
+      toast('Upload failed — tap Retry to try again.');
     }
-    $('failMsg').textContent = userMsg;
+
     $('publishBtn').disabled = false;
     $('publishBtn').textContent = '🚀 Publish Video';
     showProgressNumbers(false);
-    toast('Upload failed — tap Retry to try again.');
 
-    if (_pendingDocId) {
+    // Only attempt to mark doc as failed if the error was NOT a Firestore permission error
+    // (otherwise the mark-failed write will also fail and obscure the original error)
+    if (_pendingDocId && !_publishRetryReady) {
       updateDoc(doc(db,'videos',_pendingDocId), {
         status: 'failed',
-        failReason: err.message,
+        failReason: rawMsgStr,
         updatedAt: serverTimestamp()
-      }).catch(()=>{});
+      }).catch(fsErr => console.warn('[SFL Upload] Could not mark doc as failed:', fsErr.message));
     }
   }
 }
