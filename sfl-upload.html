@@ -30,24 +30,6 @@
 .upload-drop-title { font-size: 17px; font-weight: 700; color: var(--sfl-text); margin-bottom: 6px; }
 .upload-drop-sub { font-size: 13px; color: var(--sfl-text-muted); }
 
-/* File info card shown after pick */
-.upload-file-info {
-  background: var(--sfl-bg-card);
-  border: 1px solid var(--sfl-border);
-  border-radius: var(--sfl-r-md);
-  padding: 14px 16px;
-  margin-bottom: 18px;
-  display: flex; gap: 12px; align-items: flex-start;
-}
-.upload-file-info-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
-.upload-file-info-details { flex: 1; min-width: 0; }
-.upload-file-info-name {
-  font-size: 13px; font-weight: 700; color: var(--sfl-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 4px;
-}
-.upload-file-info-meta { font-size: 12px; color: var(--sfl-text-muted); }
-
 .upload-preview-wrap {
   background: #000;
   border-radius: var(--sfl-r-md);
@@ -59,79 +41,21 @@
 }
 .upload-preview-wrap video { width: 100%; height: 100%; object-fit: contain; }
 
-/* ── Upload status panel (shown during upload) ── */
-.upload-status-panel {
-  background: var(--sfl-bg-card);
-  border: 1px solid var(--sfl-border);
-  border-radius: var(--sfl-r-md);
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.upload-stage-list {
-  display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;
-}
-.upload-stage {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; color: var(--sfl-text-muted);
-  transition: color 0.2s;
-}
-.upload-stage.active { color: var(--sfl-text); font-weight: 600; }
-.upload-stage.done   { color: var(--sfl-blue); }
-.upload-stage.error  { color: #ff4455; }
-.upload-stage-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--sfl-border); flex-shrink: 0;
-  transition: background 0.2s;
-}
-.upload-stage.active .upload-stage-dot { background: var(--sfl-blue-bright); animation: pulse-dot 1.2s infinite; }
-.upload-stage.done   .upload-stage-dot { background: var(--sfl-blue); }
-.upload-stage.error  .upload-stage-dot { background: #ff4455; }
-@keyframes pulse-dot {
-  0%,100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.4); opacity: 0.7; }
-}
-
 .upload-progress-bar {
-  height: 6px;
+  height: 4px;
   background: var(--sfl-border);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .upload-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--sfl-blue) 0%, var(--sfl-flame-hot) 100%);
-  border-radius: 3px;
-  transition: width 0.25s ease;
+  border-radius: 2px;
+  transition: width 0.3s ease;
   width: 0%;
 }
-
-.upload-pct {
-  font-size: 28px; font-weight: 800; color: var(--sfl-text);
-  line-height: 1; margin-bottom: 6px;
-}
-.upload-bytes {
-  font-size: 13px; color: var(--sfl-text-muted); margin-bottom: 4px;
-}
-.upload-speed {
-  font-size: 12px; color: var(--sfl-text-faint);
-}
-
-.upload-status-label {
-  font-size: 12px; color: var(--sfl-text-muted); margin-top: 10px;
-}
-
-/* ── Retry/fail state ── */
-.upload-fail-panel {
-  background: rgba(255,68,85,0.06);
-  border: 1px solid rgba(255,68,85,0.3);
-  border-radius: var(--sfl-r-md);
-  padding: 18px 20px;
-  margin-bottom: 20px;
-  text-align: center;
-}
-.upload-fail-panel h3 { font-size: 15px; color: #ff6678; margin: 0 0 8px; }
-.upload-fail-panel p  { font-size: 12px; color: var(--sfl-text-muted); margin: 0 0 14px; }
+.upload-status { font-size: 12px; color: var(--sfl-text-muted); margin-bottom: 16px; }
 
 .upload-thumb-row {
   display: flex; gap: 10px; align-items: flex-start;
@@ -239,64 +163,15 @@
   <!-- Step 2: Metadata form (hidden until file chosen) -->
   <div id="stepMeta" class="sfl-hidden">
 
-    <!-- File info card -->
-    <div class="upload-file-info" id="fileInfoCard">
-      <div class="upload-file-info-icon">🎬</div>
-      <div class="upload-file-info-details">
-        <div class="upload-file-info-name" id="fileInfoName">—</div>
-        <div class="upload-file-info-meta" id="fileInfoMeta">—</div>
-      </div>
-    </div>
-
     <!-- Video preview -->
     <div class="upload-preview-wrap" id="videoPreviewWrap">
       <video id="videoPreview" controls preload="metadata" playsinline></video>
     </div>
 
-    <!-- Upload progress (shown during active upload) -->
+    <!-- Upload progress -->
     <div id="progressWrap" class="sfl-hidden">
-      <div class="upload-status-panel">
-        <!-- Stage list -->
-        <div class="upload-stage-list" id="stageList">
-          <div class="upload-stage" id="stage-prepare">
-            <div class="upload-stage-dot"></div>Preparing video
-          </div>
-          <div class="upload-stage" id="stage-upload">
-            <div class="upload-stage-dot"></div>Uploading to Cloudflare
-          </div>
-          <div class="upload-stage" id="stage-complete">
-            <div class="upload-stage-dot"></div>Upload complete
-          </div>
-          <div class="upload-stage" id="stage-save">
-            <div class="upload-stage-dot"></div>Publishing to Shadow Fire Live
-          </div>
-          <div class="upload-stage" id="stage-done">
-            <div class="upload-stage-dot"></div>Published
-          </div>
-        </div>
-
-        <!-- Real progress numbers (visible during upload stage) -->
-        <div id="progressNumbers" class="sfl-hidden">
-          <div class="upload-progress-bar">
-            <div class="upload-progress-fill" id="progressFill"></div>
-          </div>
-          <div class="upload-pct" id="progressPct">0%</div>
-          <div class="upload-bytes" id="progressBytes"> </div>
-          <div class="upload-speed" id="progressSpeed"> </div>
-        </div>
-
-        <div class="upload-status-label" id="progressLabel">Preparing upload…</div>
-      </div>
-
-      <!-- Fail / retry panel -->
-      <div class="upload-fail-panel sfl-hidden" id="failPanel">
-        <h3>Upload Failed</h3>
-        <p id="failMsg">Network error. Check your connection and try again.</p>
-        <div style="display:flex;gap:10px;justify-content:center;">
-          <button class="sfl-btn sfl-btn-primary" id="retryBtn" type="button">↺ Retry</button>
-          <button class="sfl-btn sfl-btn-ghost" id="failCancelBtn" type="button">Cancel</button>
-        </div>
-      </div>
+      <div class="upload-progress-bar"><div class="upload-progress-fill" id="progressFill"></div></div>
+      <div class="upload-status" id="progressLabel">Preparing upload…</div>
     </div>
 
     <!-- Thumbnail -->
@@ -395,10 +270,11 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, collection, addDoc, doc, updateDoc, serverTimestamp }
+import { getFirestore, collection, addDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
-// ── Firebase config (auth + Firestore only — no Firebase Storage for video) ──
 const FIREBASE_CONFIG = {
   apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
   authDomain:'horr-a08f4.firebaseapp.com',
@@ -408,15 +284,10 @@ const FIREBASE_CONFIG = {
   messagingSenderId:'933810617818',
   appId:'1:933810617818:web:efb24f123337dd987c14e3'
 };
-const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const auth = getAuth(app);
-const db   = getFirestore(app);
-
-// ── Cloudflare R2 Worker endpoint ──
-const WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
-
-// ── Chunked upload config ──
-const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
+const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
 
 const $ = id => document.getElementById(id);
 const toast = (msg, dur=3500) => {
@@ -425,30 +296,8 @@ const toast = (msg, dur=3500) => {
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
 };
 
-// ── Format helpers ──
-function fmtBytes(b) {
-  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-  return (b / (1024 * 1024)).toFixed(1) + ' MB';
-}
-function fmtSpeed(bps) {
-  if (bps < 1024 * 1024) return (bps / 1024).toFixed(0) + ' KB/s';
-  return (bps / (1024 * 1024)).toFixed(1) + ' MB/s';
-}
-function fmtEta(secs) {
-  if (secs < 5) return null;
-  if (secs < 60) return `About ${Math.round(secs)} seconds remaining`;
-  return `About ${Math.round(secs / 60)} minutes remaining`;
-}
-
-// ── State ──
 let _user = null, _userData = null;
 let _videoFile = null, _thumbFile = null, _tags = [], _visibility = 'public';
-let _activeXhr = null;       // current chunk XHR — abortable
-let _uploading = false;      // lock to prevent double-submit
-let _uploadId  = null;       // reused for retry
-let _totalChunks = 0;
-let _uploadKey = null;
-let _pendingDocId = null;    // Firestore doc created early with status="uploading"
 
 /* ── Auth gate ── */
 onAuthStateChanged(auth, async u => {
@@ -456,49 +305,11 @@ onAuthStateChanged(auth, async u => {
   if (!u) { $('authGate').classList.remove('sfl-hidden'); return; }
   $('authGate').classList.add('sfl-hidden');
   try {
-    const { getDoc, doc: firestoreDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const snap = await getDoc(firestoreDoc(db,'users',u.uid));
+    const { getDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(db,'users',u.uid));
     if (snap.exists()) _userData = snap.data();
   } catch(e) {}
 });
-
-/* ── Stage UI helpers ── */
-const STAGES = ['prepare','upload','complete','save','done'];
-function setStage(name, status) {
-  // status: 'active' | 'done' | 'error' | '' (pending)
-  const el = $(`stage-${name}`);
-  if (!el) return;
-  STAGES.forEach(s => {
-    const e = $(`stage-${s}`);
-    if (e) { e.classList.remove('active','done','error'); }
-  });
-  // mark all before this one as done
-  const idx = STAGES.indexOf(name);
-  STAGES.slice(0, idx).forEach(s => {
-    const e = $(`stage-${s}`);
-    if (e) e.classList.add('done');
-  });
-  el.classList.add(status);
-}
-
-function showProgressNumbers(show) {
-  $('progressNumbers').classList.toggle('sfl-hidden', !show);
-}
-
-function updateProgress(pct, uploadedBytes, totalBytes, speedBps, startTime) {
-  $('progressFill').style.width = `${pct}%`;
-  $('progressPct').textContent = `${pct}%`;
-  $('progressBytes').textContent = `${fmtBytes(uploadedBytes)} / ${fmtBytes(totalBytes)}`;
-
-  if (speedBps > 0 && uploadedBytes > 0) {
-    const remaining = totalBytes - uploadedBytes;
-    const etaSecs = remaining / speedBps;
-    const etaStr = fmtEta(etaSecs);
-    $('progressSpeed').textContent = fmtSpeed(speedBps) + (etaStr ? `  ·  ${etaStr}` : '');
-  } else {
-    $('progressSpeed').textContent = '';
-  }
-}
 
 /* ── Drag & drop / file pick ── */
 const dropZone = $('dropZone');
@@ -512,50 +323,15 @@ dropZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
 
-// Supported video MIME types
-const SUPPORTED_VIDEO_TYPES = [
-  'video/mp4','video/quicktime','video/webm','video/x-matroska',
-  'video/x-msvideo','video/mpeg','video/ogg','video/3gpp','video/3gpp2',
-  'video/x-m4v','application/octet-stream'
-];
-function isVideoSupported(file) {
-  const mime = file.type.toLowerCase();
-  const ext = file.name.split('.').pop().toLowerCase();
-  const supportedExts = ['mp4','mov','webm','mkv','avi','mpeg','mpg','m4v','ogv','3gp','3g2'];
-  return SUPPORTED_VIDEO_TYPES.some(t => mime === t || mime.startsWith('video/')) ||
-         supportedExts.includes(ext);
-}
-
 function handleFile(file) {
-  // Validate MIME / extension
-  if (!isVideoSupported(file)) {
-    toast('Unsupported file type. Please choose MP4, MOV, WebM or MKV.');
-    return;
-  }
-  // Validate size
-  if (file.size > 2 * 1024 * 1024 * 1024) {
-    toast('File too large. Maximum size is 2 GB.');
-    return;
-  }
-  if (file.size < 1024) {
-    toast('File appears to be empty.');
-    return;
-  }
-
+  if (!file.type.startsWith('video/')) { toast('Please select a video file.'); return; }
+  if (file.size > 2*1024*1024*1024) { toast('File too large. Max 2 GB.'); return; }
   _videoFile = file;
-  _uploadId  = null; // reset so a new upload ID is generated
-
-  // Show file info card
-  $('fileInfoName').textContent = file.name;
-  $('fileInfoMeta').textContent =
-    `${fmtBytes(file.size)} · ${file.type || 'video'} · Max 2 GB`;
-
-  // Show preview
   const url = URL.createObjectURL(file);
   $('videoPreview').src = url;
   $('stepPick').classList.add('sfl-hidden');
   $('stepMeta').classList.remove('sfl-hidden');
-
+  // Try to get duration
   $('videoPreview').onloadedmetadata = () => {
     const dur = Math.round($('videoPreview').duration);
     if (!isNaN(dur)) $('videoPreview').dataset.duration = dur;
@@ -567,16 +343,17 @@ $('thumbInput').addEventListener('change', () => {
   const f = $('thumbInput').files[0];
   if (!f) return;
   _thumbFile = f;
-  $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
+  const preview = $('thumbPreview');
+  preview.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
 });
 
 $('autoThumbBtn').addEventListener('click', () => {
   const video = $('videoPreview');
   if (!video.src) { toast('Load a video first.'); return; }
-  video.currentTime = Math.min((video.duration || 0) * 0.25, 5);
+  video.currentTime = Math.min(video.duration * 0.25, 5);
   video.onseeked = () => {
     const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth  || 1280;
+    canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     canvas.getContext('2d').drawImage(video, 0, 0);
     canvas.toBlob(blob => {
@@ -598,7 +375,8 @@ $('tagInput').addEventListener('keydown', e => {
     e.preventDefault();
     const val = $('tagInput').value.trim().replace(/,/g,'').toLowerCase();
     if (val && !_tags.includes(val) && _tags.length < 10) {
-      _tags.push(val); renderTags();
+      _tags.push(val);
+      renderTags();
     }
     $('tagInput').value = '';
   }
@@ -621,11 +399,9 @@ document.querySelectorAll('.vis-opt').forEach(opt => {
   });
 });
 
-/* ── Reset UI fully ── */
-function resetUI() {
+/* ── Cancel ── */
+$('cancelUploadBtn').addEventListener('click', () => {
   _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
-  _uploadId  = null; _activeXhr = null; _uploading = false;
-  _totalChunks = 0; _uploadKey = null; _pendingDocId = null;
   $('videoPreview').src = '';
   $('videoTitle').value = '';
   $('videoDesc').value = '';
@@ -633,254 +409,60 @@ function resetUI() {
   $('thumbPreview').innerHTML = '🖼';
   $('titleCount').textContent = '0';
   $('descCount').textContent = '0';
-  $('fileInfoName').textContent = '—';
-  $('fileInfoMeta').textContent = '—';
-  $('progressFill').style.width = '0%';
-  $('progressPct').textContent = '0%';
-  $('progressBytes').textContent = '';
-  $('progressSpeed').textContent = '';
-  $('progressLabel').textContent = 'Preparing upload…';
-  STAGES.forEach(s => {
-    const e = $(`stage-${s}`);
-    if (e) e.classList.remove('active','done','error');
-  });
-  $('progressWrap').classList.add('sfl-hidden');
-  $('failPanel').classList.add('sfl-hidden');
-  showProgressNumbers(false);
   $('stepMeta').classList.add('sfl-hidden');
   $('stepPick').classList.remove('sfl-hidden');
-  $('publishBtn').disabled = false;
-  $('publishBtn').textContent = '🚀 Publish Video';
-}
-
-/* ── Cancel button ── */
-$('cancelUploadBtn').addEventListener('click', () => {
-  if (_uploading) {
-    if (_activeXhr) { _activeXhr.abort(); _activeXhr = null; }
-    _uploading = false;
-    // If we already created the Firestore doc, mark it failed
-    if (_pendingDocId) {
-      updateDoc(doc(db,'videos',_pendingDocId), { status: 'failed', updatedAt: serverTimestamp() }).catch(()=>{});
-      _pendingDocId = null;
-    }
-  }
-  resetUI();
+  $('progressWrap').classList.add('sfl-hidden');
 });
 
-$('failCancelBtn').addEventListener('click', () => {
-  if (_pendingDocId) {
-    updateDoc(doc(db,'videos',_pendingDocId), { status: 'failed', updatedAt: serverTimestamp() }).catch(()=>{});
-    _pendingDocId = null;
-  }
-  resetUI();
-});
-
-/* ── Retry button ── */
-$('retryBtn').addEventListener('click', () => {
-  $('failPanel').classList.add('sfl-hidden');
-  startUpload();
-});
-
-/* ── Upload a single chunk via XHR (returns Promise with bytes for this chunk) ── */
-function uploadChunk({ chunk, chunkIndex, totalChunks, uploadId, uid, onProgress }) {
-  return new Promise((resolve, reject) => {
-    const fd = new FormData();
-    fd.append('uploadId',    uploadId);
-    fd.append('chunkIndex',  String(chunkIndex));
-    fd.append('totalChunks', String(totalChunks));
-    fd.append('uid',         uid);
-    fd.append('chunk',       chunk, `chunk_${chunkIndex}`);
-
-    const xhr = new XMLHttpRequest();
-    _activeXhr = xhr;
-
-    xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) onProgress(e.loaded, e.total);
-    });
-    xhr.addEventListener('load', () => {
-      _activeXhr = null;
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try { resolve(JSON.parse(xhr.responseText)); }
-        catch(e) { reject(new Error('Bad response from worker')); }
-      } else {
-        let msg = `Worker error ${xhr.status}`;
-        try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e2){}
-        reject(new Error(msg));
-      }
-    });
-    xhr.addEventListener('error',  () => { _activeXhr = null; reject(new Error('Network error — check your connection')); });
-    xhr.addEventListener('abort',  () => { _activeXhr = null; reject(new Error('CANCELLED')); });
-    xhr.addEventListener('timeout',() => { _activeXhr = null; reject(new Error('Upload timed out')); });
-    xhr.timeout = 5 * 60 * 1000; // 5 min per chunk
-    xhr.open('POST', `${WORKER_URL}/upload-chunk`);
-    xhr.send(fd);
-  });
-}
-
-/* ── Upload thumbnail to R2 (best-effort, non-blocking) ── */
-async function uploadThumbnail(uid, thumbFile) {
-  try {
-    const fd = new FormData();
-    fd.append('file', thumbFile, thumbFile.name || 'thumb.jpg');
-    fd.append('uid', uid);
-    const res = await fetch(WORKER_URL, { method: 'POST', body: fd });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.url || null;
-  } catch(e) {
-    console.warn('Thumbnail upload failed (non-critical):', e);
-    return null;
-  }
-}
-
-/* ── Main upload flow ── */
-async function startUpload() {
-  if (!_user)      { toast('Sign in to upload.'); return; }
+/* ── Publish ── */
+$('publishBtn').addEventListener('click', async () => {
+  if (!_user) { toast('Sign in to upload.'); return; }
   if (!_videoFile) { toast('Please select a video.'); return; }
-
   const title = $('videoTitle').value.trim();
   if (!title) { toast('Please enter a title.'); $('videoTitle').focus(); return; }
 
-  if (_uploading) return;
-  _uploading = true;
-
-  // Show progress panel
   $('publishBtn').disabled = true;
   $('publishBtn').textContent = '⏳ Uploading…';
   $('progressWrap').classList.remove('sfl-hidden');
-  $('failPanel').classList.add('sfl-hidden');
-
-  const uid  = _user.uid;
-  const file = _videoFile;
-  const ext  = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
-
-  // ── Stage: Prepare ──
-  setStage('prepare', 'active');
-  $('progressLabel').textContent = 'Preparing upload…';
-  showProgressNumbers(false);
-
-  // Generate upload ID once (preserved for retry)
-  if (!_uploadId) {
-    _uploadId = `${uid.slice(0,8)}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-  }
-  if (!_uploadKey) {
-    _uploadKey = `videos/${uid}/${_uploadId}.${ext}`;
-  }
-
-  const uploadId   = _uploadId;
-  const finalKey   = _uploadKey;
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-  _totalChunks     = totalChunks;
-
-  // Diagnostic log
-  console.group('[SFL Upload] Diagnostics');
-  console.log('File:', file.name, fmtBytes(file.size), file.type);
-  console.log('Chunks:', totalChunks, `× ${fmtBytes(CHUNK_SIZE)}`);
-  console.log('Upload ID:', uploadId);
-  console.log('Worker:', WORKER_URL);
-  console.log('Start:', new Date().toISOString());
-
-  // ── Stage: Upload ──
-  setStage('upload', 'active');
-  showProgressNumbers(true);
-  $('progressLabel').textContent = 'Uploading to Cloudflare R2…';
-
-  const uploadStart = Date.now();
-  let totalUploadedBytes = 0;
-  // For speed calculation: track recent progress with a sliding window
-  const speedSamples = []; // [{ time, bytes }]
-
-  function recordProgress(bytesThisChunk) {
-    totalUploadedBytes += bytesThisChunk;
-    const now = Date.now();
-    speedSamples.push({ time: now, bytes: totalUploadedBytes });
-    // Keep only last 5 seconds of samples for speed calc
-    const cutoff = now - 5000;
-    while (speedSamples.length > 1 && speedSamples[0].time < cutoff) speedSamples.shift();
-
-    let speedBps = 0;
-    if (speedSamples.length >= 2) {
-      const dt = (speedSamples[speedSamples.length-1].time - speedSamples[0].time) / 1000;
-      const db = speedSamples[speedSamples.length-1].bytes - speedSamples[0].bytes;
-      if (dt > 0.2) speedBps = db / dt;
-    }
-
-    const pct = Math.round(Math.min(totalUploadedBytes / file.size * 100, 99));
-    updateProgress(pct, totalUploadedBytes, file.size, speedBps, uploadStart);
-  }
 
   try {
-    // Upload each chunk sequentially
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end   = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
+    // 1. Upload video
+    const uid = _user.uid;
+    const ext = _videoFile.name.split('.').pop() || 'mp4';
+    const vidPath = `videos/${uid}/${Date.now()}.${ext}`;
+    const vidRef = storageRef(storage, vidPath);
+    const vidTask = uploadBytesResumable(vidRef, _videoFile);
 
-      let chunkUploadedPrev = 0;
-      await uploadChunk({
-        chunk,
-        chunkIndex: i,
-        totalChunks,
-        uploadId,
-        uid,
-        onProgress: (loaded, total) => {
-          const delta = loaded - chunkUploadedPrev;
-          if (delta > 0) {
-            chunkUploadedPrev = loaded;
-            recordProgress(delta);
-          }
-        }
-      });
-
-      console.log(`[SFL Upload] Chunk ${i+1}/${totalChunks} done`);
-      // Account for any un-reported bytes (chunk complete)
-      const chunkSize = end - start;
-      const diff = chunkSize - chunkUploadedPrev;
-      if (diff > 0) recordProgress(diff);
-    }
-
-    // ── Stage: Complete ──
-    setStage('complete', 'active');
-    updateProgress(100, file.size, file.size, 0, uploadStart);
-    showProgressNumbers(true);
-    $('progressLabel').textContent = 'Upload complete ✓  —  Finalizing…';
-
-    // Tell worker to assemble chunks
-    const compFd = new FormData();
-    compFd.append('uploadId',    uploadId);
-    compFd.append('totalChunks', String(totalChunks));
-    compFd.append('key',         finalKey);
-    compFd.append('uid',         uid);
-    compFd.append('fileName',    file.name);
-    compFd.append('fileType',    file.type || 'video/mp4');
-    compFd.append('fileSize',    String(file.size));
-
-    const compRes = await fetch(`${WORKER_URL}/upload-complete`, {
-      method: 'POST', body: compFd
+    const videoUrl = await new Promise((resolve, reject) => {
+      vidTask.on('state_changed',
+        snap => {
+          const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
+          $('progressFill').style.width = `${Math.min(pct, 85)}%`;
+          $('progressLabel').textContent = `Uploading video… ${pct}%`;
+        },
+        reject,
+        async () => { resolve(await getDownloadURL(vidTask.snapshot.ref)); }
+      );
     });
-    if (!compRes.ok) {
-      let msg = `Worker error ${compRes.status}`;
-      try { msg = (await compRes.json()).error || msg; } catch(e2){}
-      throw new Error(msg);
-    }
-    const compData = await compRes.json();
-    const videoUrl = compData.url;
 
-    console.log('[SFL Upload] Video URL:', videoUrl);
-
-    // ── Stage: Save / Publish ──
-    setStage('save', 'active');
-    $('progressLabel').textContent = 'Publishing to Shadow Fire Live…';
-    showProgressNumbers(false);
-
-    // Upload thumbnail independently (non-blocking, failure does not stop publish)
+    // 2. Upload thumbnail
     let thumbnailUrl = '';
     if (_thumbFile) {
-      thumbnailUrl = (await uploadThumbnail(uid, _thumbFile)) || '';
-      if (!thumbnailUrl) console.warn('[SFL Upload] Thumbnail failed — publishing without thumbnail');
+      $('progressLabel').textContent = 'Uploading thumbnail…';
+      $('progressFill').style.width = '88%';
+      const tPath = `thumbnails/${uid}/${Date.now()}.jpg`;
+      const tRef = storageRef(storage, tPath);
+      const tTask = uploadBytesResumable(tRef, _thumbFile);
+      thumbnailUrl = await new Promise((resolve, reject) => {
+        tTask.on('state_changed', null, reject, async () => {
+          resolve(await getDownloadURL(tTask.snapshot.ref));
+        });
+      });
     }
 
-    const duration = +($('videoPreview').dataset.duration || 0) || null;
+    // 3. Save metadata to Firestore
+    $('progressLabel').textContent = 'Saving video…';
+    $('progressFill').style.width = '95%';
 
     const meta = {
       title,
@@ -889,67 +471,36 @@ async function startUpload() {
       tags: _tags,
       visibility: _visibility,
       videoUrl,
-      cloudflareKey: finalKey,
       thumbnailUrl,
-      duration,
+      duration: +($('videoPreview').dataset.duration || 0) || null,
       creatorId: uid,
       creatorName: _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
       creatorAvatar: _userData?.avatar || _user.photoURL || '',
       views: 0,
       likes: 0,
       comments: 0,
-      status: 'ready',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
-    let docRef;
-    if (_pendingDocId) {
-      // Update the pre-created doc
-      await updateDoc(doc(db,'videos',_pendingDocId), meta);
-      docRef = { id: _pendingDocId };
-    } else {
-      docRef = await addDoc(collection(db,'videos'), meta);
-    }
+    const docRef = await addDoc(collection(db,'videos'), meta);
 
-    console.log('[SFL Upload] Firestore doc:', docRef.id);
-    console.log('[SFL Upload] Total time:', ((Date.now() - uploadStart)/1000).toFixed(1) + 's');
-    console.groupEnd();
-
-    // ── Stage: Done ──
-    setStage('done', 'active');
-    $('progressLabel').textContent = 'Published! 🎉';
+    $('progressFill').style.width = '100%';
+    $('progressLabel').textContent = 'Published!';
     toast('🎉 Video published!');
-    _uploading = false;
 
     setTimeout(() => {
       window.location.href = `sfl-player.html?v=${docRef.id}`;
     }, 1200);
 
-  } catch(err) {
-    _uploading = false;
-    _activeXhr = null;
-    console.error('[SFL Upload] Error:', err);
-    console.groupEnd();
-
-    if (err.message === 'CANCELLED') {
-      // User-initiated cancel — UI already reset by cancelUploadBtn handler
-      return;
-    }
-
-    // Show retry panel
-    setStage('upload', 'error');
-    $('failPanel').classList.remove('sfl-hidden');
-    $('failMsg').textContent = err.message || 'Upload failed. Check your connection.';
+  } catch(e) {
+    console.error('Upload error:', e);
+    toast('Upload failed. Please try again.');
     $('publishBtn').disabled = false;
     $('publishBtn').textContent = '🚀 Publish Video';
-    showProgressNumbers(false);
-    toast('Upload failed — tap Retry to try again.');
+    $('progressWrap').classList.add('sfl-hidden');
   }
-}
-
-/* ── Publish button ── */
-$('publishBtn').addEventListener('click', () => startUpload());
+});
 </script>
 
 <script src="pwa-install.js" defer></script>
