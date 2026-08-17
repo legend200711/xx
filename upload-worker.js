@@ -33,6 +33,7 @@ const ALLOWED_ORIGINS = [
   'https://www.shadowfirelive.com',
   'https://horr-a08f4.web.app',
   'https://horr-a08f4.firebaseapp.com',
+  'https://legend200711.github.io',  // GitHub Pages hosting (SFL pages live here)
   'http://localhost',
   'http://127.0.0.1'
 ];
@@ -55,8 +56,8 @@ function corsHeaders(origin) {
     ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin':  allowed,
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-User-UID',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, X-User-UID, Upload-Offset, Upload-Length, Tus-Resumable',
     'Access-Control-Max-Age':       '86400',
   };
 }
