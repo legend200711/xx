@@ -21,13 +21,15 @@
  *   - Rate-limit hint headers (enforce limits in Cloudflare dashboard)
  */
 
-const MAX_SIZE_IMAGE = 10  * 1024 * 1024;  // 10 MB  — images
-const MAX_SIZE_VIDEO = 100 * 1024 * 1024;  // 100 MB — video
-const MAX_SIZE_AUDIO = 200 * 1024 * 1024;  // 200 MB — audio / music
-const MAX_SIZE       = MAX_SIZE_AUDIO;     // absolute upper bound (used by music endpoint)
+const MAX_SIZE_IMAGE = 10   * 1024 * 1024;        // 10 MB  — images
+const MAX_SIZE_VIDEO = 2048 * 1024 * 1024;        // 2 GB   — video (matches UI limit)
+const MAX_SIZE_AUDIO = 200  * 1024 * 1024;        // 200 MB — audio / music
+const MAX_SIZE       = MAX_SIZE_VIDEO;            // absolute upper bound
 
 const ALLOWED_ORIGINS = [
   'https://shadownexussocial.online',
+  'https://shadowfirelive.com',
+  'https://www.shadowfirelive.com',
   'http://localhost',
   'http://127.0.0.1'
 ];
