@@ -556,8 +556,6 @@ async function handleMpuComplete(request, env, cors, sec) {
   }
 
   // Serve via the Worker so CORS, caching and range-request headers are applied.
-  // Once the R2 bucket has "Public Access" enabled in the Cloudflare dashboard,
-  // swap this to: https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${key}
   const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${key}`;
   console.log(`[MPU] Complete. key=${key} parts=${parts.length} url=${publicUrl}`);
   return new Response(JSON.stringify({ url: publicUrl, key }), {
@@ -746,7 +744,7 @@ async function handleUploadComplete(request, env, cors, sec) {
     env.BUCKET.delete(tmpKey).catch(() => {});
   }
 
-  const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${finalKey}`;
+  const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${finalKey}`;
   return new Response(JSON.stringify({ url: publicUrl, key: finalKey }), {
     status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
   });
@@ -1069,7 +1067,7 @@ export default {
         });
       }
 
-      const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${reqPath}`;
+      const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${reqPath}`;
       return new Response(JSON.stringify({ url: publicUrl, key: reqPath }), {
         status: 200,
         headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
@@ -1211,7 +1209,7 @@ export default {
     }
 
     // ── Return public CDN URL (stored in Firebase, served via Cloudflare CDN) ──
-    const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${key}`;
+    const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${key}`;
     return new Response(JSON.stringify({ url: publicUrl, key }), {
       status: 200,
       headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
