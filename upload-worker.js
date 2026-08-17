@@ -956,6 +956,25 @@ export default {
       });
     }
 
+    // ── Upload service health check ──────────────────────────────────────────
+    // GET /upload-health
+    // Returns: { ok, r2: true/false, stream: 'configured'|'not_configured', worker: 'ok' }
+    // Does NOT reveal secrets. Used by the frontend to distinguish between
+    // internet problems, CORS failures, and server-side configuration errors.
+    if (request.method === 'GET' && url.pathname === '/upload-health') {
+      const hasStreamCreds = !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN);
+      const hasR2 = !!env.BUCKET;
+      return new Response(JSON.stringify({
+        ok:     true,
+        worker: 'ok',
+        r2:     hasR2,
+        stream: hasStreamCreds ? 'configured' : 'not_configured',
+      }), {
+        status: 200,
+        headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+
     // ── LiveKit endpoints ──
     if (url.pathname === '/livekit-room')  return handleLiveKitRoom(request, env, cors, sec);
     if (url.pathname === '/livekit-token') return handleLiveKitToken(request, env, cors, sec);

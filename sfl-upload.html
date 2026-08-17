@@ -933,13 +933,34 @@ function r2UploadPartProxy(partSlice, partNumber, key, r2UploadId, onProgress) {
    Returns true if reachable, false otherwise.
 ───────────────────────────────────────────────────────── */
 async function checkWorkerReachable() {
+  // AbortSignal.timeout is Chrome 103+/FF 100+/Safari 16+ — manual fallback
+  // for older Android WebViews so the signal option never throws a TypeError.
+  let signal;
   try {
-    const res = await fetch(WORKER_URL, { method: 'GET', signal: AbortSignal.timeout(8000) });
-    console.log('[SFL Upload] Worker reachability check: HTTP', res.status);
-    return res.ok;
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      signal = AbortSignal.timeout(8000);
+    } else {
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), 8000);
+      signal = ac.signal;
+    }
+  } catch(_) {
+    // AbortController also unavailable — proceed without a timeout signal
+    signal = undefined;
+  }
+  try {
+    const fetchOpts = signal ? { method: 'GET', signal } : { method: 'GET' };
+    const res = await fetch(`${WORKER_URL}/upload-health`, fetchOpts);
+    if (!res.ok) {
+      console.error('[SFL Upload] Health check HTTP', res.status, '— endpoint:', WORKER_URL);
+      return { reachable: false, status: res.status, detail: `HTTP ${res.status}` };
+    }
+    const data = await res.json().catch(() => ({ ok: true }));
+    console.log('[SFL Upload] Health:', JSON.stringify(data));
+    return { reachable: true, r2: data.r2, stream: data.stream };
   } catch(e) {
-    console.error('[SFL Upload] Worker unreachable:', e.message);
-    return false;
+    console.error('[SFL Upload] Worker unreachable:', e.message, '— endpoint:', WORKER_URL);
+    return { reachable: false, status: 0, detail: e.message };
   }
 }
 
@@ -997,19 +1018,29 @@ async function startUpload() {
   $('progressLabel').textContent = 'Checking upload service…';
 
   // ── Pre-flight: verify the Worker is reachable before uploading ──
-  const workerReachable = await checkWorkerReachable();
-  if (!workerReachable) {
+  const health = await checkWorkerReachable();
+  if (!health.reachable) {
     _uploading = false;
-    console.error('[SFL Upload] Worker unreachable — aborting before upload attempt.');
+    console.error('[SFL Upload] Worker unreachable — aborting. detail:', health.detail, 'status:', health.status);
     console.groupEnd();
     setStage('prepare', 'error');
     $('failPanel').classList.remove('sfl-hidden');
-    $('failMsg').textContent = 'Shadow Fire Live cannot connect to the video upload service right now. Check your internet connection and tap Retry.';
+    let healthMsg = 'Shadow Fire Live cannot connect to the video upload service.';
+    if (health.status === 0) {
+      healthMsg = 'Cannot reach the upload service. Check your internet connection and tap Retry.';
+    } else if (health.status === 401 || health.status === 403) {
+      healthMsg = 'Authentication error contacting the upload service. Please sign out and sign back in.';
+    } else if (health.status >= 500) {
+      healthMsg = `Upload service error (HTTP ${health.status}). Please tap Retry in a moment.`;
+    } else if (health.status === 404) {
+      healthMsg = `Upload service endpoint not found (HTTP 404). Please contact support.`;
+    }
+    $('failMsg').textContent = healthMsg;
     $('publishBtn').disabled = false;
     $('publishBtn').textContent = '🚀 Publish Video';
     return;
   }
-  console.log('[SFL Upload] UPLOAD_ENDPOINT_REACHED ✓');
+  console.log('[SFL Upload] UPLOAD_ENDPOINT_REACHED ✓ r2:', health.r2, 'stream:', health.stream);
 
   $('progressLabel').textContent = 'Preparing upload…';
   showProgressNumbers(false);
