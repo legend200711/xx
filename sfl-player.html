@@ -463,6 +463,40 @@ function fmtTime(s) {
 function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(n>=1e3)return(n/1e3).toFixed(1).replace(/\.0$/,'')+'K';return String(n);}
 function timeAgo(ts){if(!ts)return'';const d=ts.toDate?ts.toDate():new Date(ts);const s=(Date.now()-d.getTime())/1000;if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`;}
 
+/* ── HLS.js loader — only loaded on browsers without native HLS support ──
+   Cloudflare Stream delivers HLS (m3u8). Safari handles this natively.
+   Chrome / Firefox / Android need hls.js. We load it once on demand.
+───────────────────────────────────────────────────────────────────────── */
+let _hlsInstance = null;
+async function loadHls(videoEl, src) {
+  try {
+    // Dynamic import: only fetches hls.js if we actually need it
+    const { default: Hls } = await import('https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs');
+    if (!Hls.isSupported()) {
+      // Fallback: assign directly and let the browser try
+      videoEl.src = src;
+      videoEl.load();
+      return;
+    }
+    if (_hlsInstance) { _hlsInstance.destroy(); _hlsInstance = null; }
+    const hls = new Hls({ enableWorker: false, lowLatencyMode: false });
+    _hlsInstance = hls;
+    hls.loadSource(src);
+    hls.attachMedia(videoEl);
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      if (data.fatal) {
+        console.error('[SFL Player] HLS fatal error:', data.type, data.details);
+        $('playerLoading').style.display = 'none';
+        $('playerError').style.display = 'flex';
+      }
+    });
+  } catch(e) {
+    console.warn('[SFL Player] hls.js load failed — falling back to direct src:', e.message);
+    videoEl.src = src;
+    videoEl.load();
+  }
+}
+
 /* ── Video player ── */
 const video = $('mainVideo');
 const wrap  = $('playerWrap');
@@ -571,11 +605,25 @@ function renderVideo(data) {
   // Like count
   $('likeCount').textContent = fmtNum(data.likes||0);
 
-  // Video source
-  if(data.videoUrl) {
-    video.src = data.videoUrl;
-    video.load();
-    // Don't autoplay to respect user preference / autoplay policies
+  // ── Video source ──
+  // Cloudflare Stream serves HLS (.m3u8). Native HLS works on Safari/iOS.
+  // For Chrome/Firefox/Android we use hls.js (loaded dynamically only when needed).
+  // Legacy R2 direct URLs (mp4, webm) are assigned directly and work everywhere.
+  if (data.status === 'processing' || data.status === 'uploading') {
+    $('playerLoading').style.display = 'flex';
+    $('playerLoading').querySelector('.sfl-spinner')?.remove();
+    $('playerLoading').innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:32px;margin-bottom:12px;">⚙️</div><div style="font-size:15px;font-weight:600;color:#fff;">Processing video…</div><div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px;">This video is being processed by Cloudflare.<br>Please check back in a few minutes.</div></div>';
+  } else if (data.videoUrl) {
+    const src = data.videoUrl;
+    const isHls = src.includes('.m3u8') || src.includes('cloudflarestream.com');
+    if (isHls && !video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Non-Safari: load hls.js dynamically
+      loadHls(video, src);
+    } else {
+      // Safari/iOS: native HLS support, or plain MP4/WebM
+      video.src = src;
+      video.load();
+    }
   } else {
     $('playerError').style.display = 'flex';
     $('playerLoading').style.display = 'none';

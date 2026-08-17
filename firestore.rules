@@ -715,21 +715,35 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════
 
     // /videos/{videoId}  — uploaded video metadata
+    //
+    // status values: uploading | processing | published | failed | cancelled
+    //
+    // Only published videos are publicly visible.
+    // In-progress (uploading/processing) and failed videos are only visible to
+    // the creator and moderators, preventing half-baked content appearing in feeds.
     match /videos/{videoId} {
-      // Public videos: anyone can read; private/followers: only creator
-      allow read: if resource.data.visibility == 'public'
-        || isOwner(resource.data.creatorId)
-        || (resource.data.visibility == 'followers'
-            && isSignedIn()
-            && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.creatorId)).data.followers);
-      // Only signed-in non-anonymous users can create
+      // Creator always can read their own videos (all statuses).
+      // Moderators/founders can read all.
+      // Public: only published videos with public visibility.
+      // Followers: only published videos with followers visibility.
+      allow read: if isOwner(resource.data.creatorId)
+        || isModerator()
+        || (resource.data.status == 'published'
+            && (resource.data.visibility == 'public'
+                || (resource.data.visibility == 'followers'
+                    && isSignedIn()
+                    && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.creatorId)).data.followers)));
+      // Only signed-in non-anonymous users can create their own video docs
       allow create: if isSignedIn()
         && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
         && request.resource.data.creatorId == request.auth.uid;
-      // Creator can update their own video; allow view/like/comment counter increments
+      // Creator can update their own video (status transitions, metadata edits, finalisation).
+      // Moderators can update for moderation purposes.
+      // Any signed-in user may increment view/like counters on published videos.
       allow update: if isOwner(resource.data.creatorId)
         || isModerator()
         || (isSignedIn()
+            && resource.data.status == 'published'
             && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['views', 'likes', 'likedBy', 'comments']));
       allow delete: if isOwner(resource.data.creatorId) || isFounder();

@@ -262,10 +262,10 @@
             <div class="upload-stage-dot"></div>Preparing upload
           </div>
           <div class="upload-stage" id="stage-upload">
-            <div class="upload-stage-dot"></div>Uploading to Cloudflare R2
+            <div class="upload-stage-dot"></div>Uploading to Cloudflare
           </div>
-          <div class="upload-stage" id="stage-complete">
-            <div class="upload-stage-dot"></div>Upload complete
+          <div class="upload-stage" id="stage-process">
+            <div class="upload-stage-dot"></div>Processing video…
           </div>
           <div class="upload-stage" id="stage-save">
             <div class="upload-stage-dot"></div>Publishing
@@ -412,11 +412,8 @@ const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// ── Worker endpoint ──
+// ── Worker endpoint (keeps Cloudflare API token server-side only) ──
 const WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
-
-// ── R2 Multipart upload config ──
-const PART_SIZE = 10 * 1024 * 1024;  // 10 MB per part (R2 minimum is 5 MB)
 
 const $ = id => document.getElementById(id);
 const toast = (msg, dur=3500) => {
@@ -440,17 +437,25 @@ function fmtEta(secs) {
   return `About ${Math.round(secs / 60)} minutes remaining`;
 }
 
-// ── State ──
+// ── Upload state ──
 let _user = null, _userData = null;
 let _videoFile = null, _thumbFile = null, _tags = [], _visibility = 'public';
-let _activeXhr    = null;   // current part XHR — abortable
-let _uploading    = false;  // lock to prevent double-submit
-let _sessionId    = null;   // unique ID per upload session (retry-safe)
-let _pendingDocId = null;   // Firestore doc created early with status='uploading'
-// R2 multipart session (preserved across retries so we resume rather than restart)
+let _uploading    = false;   // lock to prevent double-submit
+let _cancelled    = false;   // set on cancel to break async loops
+let _sessionId    = null;    // unique ID per upload attempt (prevents duplicates)
+let _pendingDocId = null;    // Firestore doc created early with status='uploading'
+// Cloudflare Stream state (preferred path — requires Stream subscription)
+let _streamId     = null;    // Cloudflare Stream video UID
+let _tusUploadUrl  = null;   // Cloudflare tus endpoint (from /stream/upload-url)
+let _tusOffset     = 0;      // bytes confirmed by Stream server
+let _TUS_CHUNK     = 50 * 1024 * 1024; // 50 MB tus chunk size
+let _pollTimer     = null;   // processing-poll interval id
+// R2 multipart state (fallback path — no Stream subscription required)
 let _r2UploadId   = null;
 let _r2Key        = null;
-let _uploadedParts = [];    // [{ partNumber, etag }] — parts successfully written to R2
+let _uploadedParts = [];     // [{ partNumber, etag }]
+let _useR2Fallback = false;  // true once we've confirmed Stream is unavailable
+const PART_SIZE = 10 * 1024 * 1024; // 10 MB parts (R2 minimum is 5 MB)
 
 /* ── Auth gate ── */
 onAuthStateChanged(auth, async u => {
@@ -465,7 +470,7 @@ onAuthStateChanged(auth, async u => {
 });
 
 /* ── Stage UI helpers ── */
-const STAGES = ['prepare','upload','complete','save','done'];
+const STAGES = ['prepare','upload','process','save','done'];
 function setStage(name, status) {
   const el = $(`stage-${name}`);
   if (!el) return;
@@ -543,6 +548,8 @@ function handleFile(file) {
 
   _videoFile  = file;
   _sessionId  = null; // reset so a fresh session is generated on publish
+  _tusUploadUrl = null; _tusOffset = 0;
+  _r2UploadId = null; _r2Key = null; _uploadedParts = []; _useR2Fallback = false;
 
   $('fileInfoName').textContent = file.name;
   $('fileInfoMeta').textContent = `${fmtBytes(file.size)} · ${file.type || 'video'} · Max 2 GB`;
@@ -618,8 +625,10 @@ document.querySelectorAll('.vis-opt').forEach(opt => {
 /* ── Reset UI fully ── */
 function resetUI() {
   _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
-  _sessionId = null; _activeXhr = null; _uploading = false; _pendingDocId = null;
-  _r2UploadId = null; _r2Key = null; _uploadedParts = [];
+  _sessionId = null; _uploading = false; _cancelled = false; _pendingDocId = null;
+  _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
+  _r2UploadId = null; _r2Key = null; _uploadedParts = []; _useR2Fallback = false;
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   $('videoPreview').src = '';
   $('videoTitle').value = '';
   $('videoDesc').value  = '';
@@ -647,20 +656,25 @@ function resetUI() {
   $('publishBtn').textContent = '🚀 Publish Video';
 }
 
-/* ── Mark upload doc failed on cancel ── */
-function markDocFailed() {
+/* ── Mark upload doc failed ── */
+function markDocFailed(reason) {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   if (_pendingDocId) {
-    updateDoc(doc(db,'videos',_pendingDocId), { status: 'failed', updatedAt: serverTimestamp() }).catch(()=>{});
+    updateDoc(doc(db,'videos',_pendingDocId), {
+      status: 'failed',
+      failReason: reason || 'Upload cancelled',
+      updatedAt: serverTimestamp()
+    }).catch(()=>{});
     _pendingDocId = null;
   }
 }
 
 /* ── Cancel button ── */
 $('cancelUploadBtn').addEventListener('click', () => {
-  if (_activeXhr) { _activeXhr.abort(); _activeXhr = null; }
+  _cancelled = true;
   _uploading = false;
-  markDocFailed();
-  // Abort the R2 multipart upload so incomplete parts are cleaned up
+  markDocFailed('Cancelled by user');
+  // If an R2 multipart upload was in progress, clean it up
   if (_r2UploadId && _r2Key) {
     fetch(`${WORKER_URL}/mpu/abort`, {
       method: 'POST',
@@ -672,7 +686,8 @@ $('cancelUploadBtn').addEventListener('click', () => {
 });
 
 $('failCancelBtn').addEventListener('click', () => {
-  markDocFailed();
+  _cancelled = true;
+  markDocFailed('Cancelled by user');
   if (_r2UploadId && _r2Key) {
     fetch(`${WORKER_URL}/mpu/abort`, {
       method: 'POST',
@@ -686,11 +701,13 @@ $('failCancelBtn').addEventListener('click', () => {
 /* ── Retry button ── */
 $('retryBtn').addEventListener('click', () => {
   $('failPanel').classList.add('sfl-hidden');
+  _cancelled = false;
   startUpload();
 });
 
 /* ─────────────────────────────────────────────────────────
    uploadThumbnail — R2 (best-effort, non-blocking)
+   Thumbnail failure never blocks video publishing.
 ───────────────────────────────────────────────────────── */
 async function uploadThumbnail(uid, thumbFile) {
   try {
@@ -708,41 +725,195 @@ async function uploadThumbnail(uid, thumbFile) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   uploadPartXhr — sends one raw part to /mpu/part via XHR.
-   Returns { partNumber, etag } on success.
-   Reports real byte progress via onProgress(loaded, total).
-   Rejects with Error('CANCELLED') on abort.
+   tusUploadChunk — sends one tus chunk directly to
+   Cloudflare Stream's tus endpoint.
+   Uses XMLHttpRequest for real upload progress events.
+   Returns the new confirmed offset on success.
+   Throws Error('CANCELLED') if cancelled.
+   Throws Error with message on network/server failure.
 ───────────────────────────────────────────────────────── */
-function uploadPartXhr(partSlice, partNumber, key, r2UploadId, onProgress) {
+function tusUploadChunk(uploadUrl, fileSlice, offset, totalSize, onProgress) {
   return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+
     const xhr = new XMLHttpRequest();
-    _activeXhr = xhr;
 
     xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) onProgress(e.loaded, e.total);
+      if (e.lengthComputable) onProgress(offset + e.loaded, totalSize);
     });
 
     xhr.addEventListener('load', () => {
-      _activeXhr = null;
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const d = JSON.parse(xhr.responseText);
-          resolve({ partNumber: d.partNumber, etag: d.etag });
-        } catch(e) {
-          reject(new Error('Bad response from worker on part upload'));
-        }
+      // tus: 204 No Content on success; Location header not used for resumable patch
+      if (xhr.status === 204) {
+        // tus Upload-Offset header tells us how many bytes the server confirmed
+        const newOffset = parseInt(xhr.getResponseHeader('Upload-Offset') || String(offset + fileSlice.size), 10);
+        resolve(newOffset);
       } else {
-        let msg = `Part upload failed (HTTP ${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e2) {}
+        let msg = `Upload chunk failed (HTTP ${xhr.status})`;
+        try { const d = JSON.parse(xhr.responseText); msg = d.errors?.[0]?.message || d.error || msg; } catch(_) {}
         reject(new Error(msg));
       }
     });
 
-    xhr.addEventListener('error',   () => { _activeXhr = null; reject(new Error('Network error — check your connection and retry')); });
-    xhr.addEventListener('abort',   () => { _activeXhr = null; reject(new Error('CANCELLED')); });
-    xhr.addEventListener('timeout', () => { _activeXhr = null; reject(new Error('Part upload timed out — retrying…')); });
-    xhr.timeout = 0; // no timeout — large parts on slow mobile connections can take minutes
+    xhr.addEventListener('error',   () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',   () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout', () => reject(new Error('Chunk upload timed out — retrying…')));
+    xhr.timeout = 0; // no timeout — large files on slow mobile connections can take many minutes
 
+    xhr.open('PATCH', uploadUrl);
+    xhr.setRequestHeader('Content-Type', 'application/offset+octet-stream');
+    xhr.setRequestHeader('Upload-Offset', String(offset));
+    xhr.setRequestHeader('Tus-Resumable', '1.0.0');
+    xhr.send(fileSlice);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   getRemoteOffset — HEAD request to find how many bytes
+   Cloudflare Stream has already received.
+   Used on retry to resume without re-sending data.
+───────────────────────────────────────────────────────── */
+async function getRemoteOffset(uploadUrl) {
+  try {
+    const res = await fetch(uploadUrl, {
+      method: 'HEAD',
+      headers: { 'Tus-Resumable': '1.0.0' },
+    });
+    if (!res.ok) return 0;
+    const offset = parseInt(res.headers.get('Upload-Offset') || '0', 10);
+    return isNaN(offset) ? 0 : offset;
+  } catch(e) {
+    console.warn('[SFL Upload] HEAD offset check failed:', e.message);
+    return 0;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   pollStreamStatus — polls GET /stream/status?id=<streamId>
+   Resolves with { playbackUrl, thumbnailUrl, duration } when
+   Cloudflare reports the video as ready.
+   Rejects after MAX_POLL_ATTEMPTS or an error state.
+   Cancellation is checked each iteration.
+───────────────────────────────────────────────────────── */
+async function pollStreamStatus(streamId) {
+  const POLL_INTERVAL_MS = 5000;
+  const MAX_POLL_ATTEMPTS = 120; // 10 minutes maximum wait
+  let attempts = 0;
+
+  return new Promise((resolve, reject) => {
+    _pollTimer = setInterval(async () => {
+      if (_cancelled) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        reject(new Error('CANCELLED'));
+        return;
+      }
+
+      attempts++;
+      if (attempts > MAX_POLL_ATTEMPTS) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        reject(new Error('Cloudflare video processing timed out after 10 minutes. The video may still be processing — check back later.'));
+        return;
+      }
+
+      try {
+        const res = await fetch(`${WORKER_URL}/stream/status?id=${encodeURIComponent(streamId)}`);
+        if (!res.ok) {
+          // Transient server error — keep polling
+          console.warn(`[SFL Upload] Status poll HTTP ${res.status} — retrying`);
+          return;
+        }
+        const data = await res.json();
+        console.log(`[SFL Upload] Stream status (attempt ${attempts}):`, data.status, data.pctComplete);
+
+        if (data.errorReasonCode) {
+          clearInterval(_pollTimer); _pollTimer = null;
+          reject(new Error(`Cloudflare processing error: ${data.errorReasonText || data.errorReasonCode}`));
+          return;
+        }
+
+        // Update processing progress label
+        if (data.pctComplete != null) {
+          $('progressLabel').textContent = `Processing video… ${data.pctComplete}%`;
+        }
+
+        if (data.readyToStream) {
+          clearInterval(_pollTimer); _pollTimer = null;
+          resolve({
+            playbackUrl:  data.playbackUrl,
+            thumbnailUrl: data.thumbnailUrl,
+            duration:     data.duration,
+          });
+        }
+        // else: still processing — wait for next interval
+      } catch(e) {
+        console.warn('[SFL Upload] Status poll error (retrying):', e.message);
+        // keep polling on transient network errors
+      }
+    }, POLL_INTERVAL_MS);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   R2 fallback: upload one part directly to R2 via a
+   presigned URL.  The Worker generates the URL (signing with
+   the R2 API token server-side) so no credentials reach the
+   browser.  The browser PUTs the part directly to R2 —
+   no Worker CPU time is consumed.
+   Returns { partNumber, etag } on success.
+───────────────────────────────────────────────────────── */
+function r2UploadPartPresigned(presignedUrl, partSlice, partNumber, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // R2 returns ETag in the response header
+        const etag = xhr.getResponseHeader('ETag') || xhr.getResponseHeader('etag') || '';
+        resolve({ partNumber, etag: etag.replace(/"/g, '') });
+      } else {
+        reject(new Error(`Part upload failed (HTTP ${xhr.status})`));
+      }
+    });
+    xhr.addEventListener('error',  () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',  () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout',() => reject(new Error('Part upload timed out — retrying…')));
+    xhr.timeout = 0;
+    xhr.open('PUT', presignedUrl);
+    xhr.send(partSlice);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   R2 fallback: upload one part via the Worker proxy
+   (used when R2 presigned URL credentials are not set).
+   Slower because data transits the Worker, but always works.
+───────────────────────────────────────────────────────── */
+function r2UploadPartProxy(partSlice, partNumber, key, r2UploadId, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const d = JSON.parse(xhr.responseText);
+          resolve({ partNumber: d.partNumber, etag: d.etag });
+        } catch(_) { reject(new Error('Bad response from worker on part upload')); }
+      } else {
+        let msg = `Part upload failed (HTTP ${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch(_) {}
+        reject(new Error(msg));
+      }
+    });
+    xhr.addEventListener('error',  () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',  () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout',() => reject(new Error('Part upload timed out — retrying…')));
+    xhr.timeout = 0;
     const params = new URLSearchParams({ key, r2UploadId, partNumber: String(partNumber) });
     xhr.open('POST', `${WORKER_URL}/mpu/part?${params}`);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
@@ -751,18 +922,25 @@ function uploadPartXhr(partSlice, partNumber, key, r2UploadId, onProgress) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   MAIN UPLOAD FLOW  (R2 Multipart Upload)
+   MAIN UPLOAD FLOW
    ─────────────────────────────────────────────────────────
-   1.  Validate file + auth
-   2.  POST /mpu/create   → get { r2UploadId, key }
-   3.  Create Firestore doc with status='uploading'
-   4.  Upload each part via XHR (raw stream → Worker → R2)
-       - real progress events per part
-       - retry failed parts up to 3 times before failing
-       - resume skips already-uploaded parts (_uploadedParts)
-   5.  POST /mpu/complete → R2 assembles, returns public URL
-   6.  Upload thumbnail (non-blocking)
-   7.  Finalise Firestore doc with status='published'
+   Tries Cloudflare Stream first (tus direct upload + HLS playback).
+   If Stream returns 503 (quota exceeded / not subscribed), falls
+   back to R2 multipart upload with presigned URLs.
+
+   Stream path:
+     1. POST /stream/upload-url → { uploadURL, streamId }
+     2. tus PATCH directly to Cloudflare (no Worker hop)
+     3. Poll /stream/status until readyToStream
+     4. Firestore: { videoUrl: HLS url, cloudflareVideoId }
+
+   R2 fallback path:
+     1. POST /mpu/create → { r2UploadId, key }
+     2. For each part: POST /mpu/presign → presignedUrl
+        Then PUT directly to R2 (no Worker hop)
+        If presign not configured, fall back to /mpu/part proxy
+     3. POST /mpu/complete → { url }
+     4. Firestore: { videoUrl: R2 CDN url, r2Key }
 ───────────────────────────────────────────────────────── */
 async function startUpload() {
   if (!_user)      { toast('Sign in to upload.'); return; }
@@ -773,6 +951,7 @@ async function startUpload() {
 
   if (_uploading) return; // prevent double-submit
   _uploading = true;
+  _cancelled = false;
 
   if (!_sessionId) {
     _sessionId = `${_user.uid.slice(0,8)}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
@@ -785,11 +964,9 @@ async function startUpload() {
 
   const uid  = _user.uid;
   const file = _videoFile;
-  const totalParts = Math.ceil(file.size / PART_SIZE);
 
   console.group('[SFL Upload]');
-  console.log('File:', file.name, fmtBytes(file.size), file.type);
-  console.log('Parts:', totalParts, `× ${fmtBytes(PART_SIZE)}`);
+  console.log('File:', file.name, fmtBytes(file.size), file.type || 'video/mp4');
   console.log('Session:', _sessionId);
   console.log('Start:', new Date().toISOString());
 
@@ -800,235 +977,411 @@ async function startUpload() {
   const uploadStart = Date.now();
 
   try {
-    // ── 1. Create R2 multipart upload session (once per file, reused on retry) ──
+    const videoDuration = +($('videoPreview').dataset.duration || 0) || null;
+
+    // ═══════════════════════════════════════════════════════════
+    // PATH A — Cloudflare Stream (tus direct upload + HLS)
+    //   Used when Stream quota is available.
+    //   Falls through to PATH B if Stream returns 503.
+    // ═══════════════════════════════════════════════════════════
+    if (!_useR2Fallback) {
+      // ── A1. Get Cloudflare Stream direct-upload URL ──
+      if (!_tusUploadUrl || !_streamId) {
+        console.log('[SFL Upload] Trying Cloudflare Stream…');
+        const urlRes = await fetch(`${WORKER_URL}/stream/upload-url`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid, title, maxDurationSeconds: 10800 }),
+        });
+        if (urlRes.status === 503 || urlRes.status === 507) {
+          // Stream quota exceeded or not subscribed — switch to R2 path
+          const errData = await urlRes.json().catch(() => ({}));
+          console.warn('[SFL Upload] Cloudflare Stream unavailable:', errData.error || urlRes.status, '— switching to R2 path');
+          _useR2Fallback = true;
+        } else if (!urlRes.ok) {
+          let msg = `Upload server error ${urlRes.status}`;
+          try { msg = (await urlRes.json()).error || msg; } catch(_) {}
+          throw new Error(msg);
+        } else {
+          const urlData = await urlRes.json();
+          _tusUploadUrl = urlData.uploadURL;
+          _streamId     = urlData.streamId;
+          _tusOffset    = 0;
+          console.log('[SFL Upload] Stream upload URL obtained. streamId:', _streamId);
+        }
+      } else {
+        // Resuming — confirm server offset
+        _tusOffset = await getRemoteOffset(_tusUploadUrl);
+        console.log('[SFL Upload] Resuming Stream upload. Server offset:', fmtBytes(_tusOffset));
+      }
+    }
+
+    if (!_useR2Fallback && _tusUploadUrl) {
+      // ── A2. Create Firestore doc (once per upload attempt) ──
+      if (!_pendingDocId) {
+        try {
+          const earlyDoc = await addDoc(collection(db,'videos'), {
+            title, description: $('videoDesc').value.trim(),
+            category: $('videoCategory').value || '', tags: _tags,
+            visibility: _visibility, cloudflareVideoId: _streamId,
+            videoUrl: '', thumbnailUrl: '', duration: videoDuration,
+            creatorId: uid,
+            creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+            creatorAvatar: _userData?.avatar || _user.photoURL || '',
+            views: 0, likes: 0, comments: 0, status: 'uploading',
+            createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+          });
+          _pendingDocId = earlyDoc.id;
+          console.log('[SFL Upload] Firestore doc created (status=uploading):', _pendingDocId);
+        } catch(e) {
+          console.warn('[SFL Upload] Early Firestore doc failed (non-fatal):', e.message);
+        }
+      }
+
+      // ── A3. Upload directly to Cloudflare Stream via tus PATCH ──
+      setStage('upload', 'active');
+      showProgressNumbers(true);
+      $('progressLabel').textContent = 'Uploading… 0%';
+
+      const speedSamples = [];
+      let currentOffset = _tusOffset;
+
+      while (currentOffset < file.size) {
+        if (_cancelled) throw new Error('CANCELLED');
+        const chunkEnd  = Math.min(currentOffset + _TUS_CHUNK, file.size);
+        const fileSlice = file.slice(currentOffset, chunkEnd);
+        let newOffset   = currentOffset;
+
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          if (_cancelled) throw new Error('CANCELLED');
+          try {
+            newOffset = await tusUploadChunk(_tusUploadUrl, fileSlice, currentOffset, file.size, (loaded, total) => {
+              const now = Date.now();
+              speedSamples.push({ time: now, bytes: loaded });
+              const cutoff = now - 5000;
+              while (speedSamples.length > 1 && speedSamples[0].time < cutoff) speedSamples.shift();
+              let speedBps = 0;
+              if (speedSamples.length >= 2) {
+                const dt = (speedSamples.at(-1).time - speedSamples[0].time) / 1000;
+                const db = speedSamples.at(-1).bytes - speedSamples[0].bytes;
+                if (dt > 0.2) speedBps = db / dt;
+              }
+              const pct = Math.min(Math.round(loaded / total * 100), 99);
+              updateProgress(pct, loaded, total, speedBps);
+              $('progressLabel').textContent = `Uploading… ${pct}%`;
+            });
+            break;
+          } catch(chunkErr) {
+            if (chunkErr.message === 'CANCELLED') throw chunkErr;
+            if (attempt === 5) throw chunkErr;
+            const waitMs = Math.min(attempt * 3000, 15000);
+            console.warn(`[SFL Upload] tus chunk attempt ${attempt} failed: ${chunkErr.message} — retry in ${waitMs}ms`);
+            $('progressLabel').textContent = 'Connection interrupted — retrying…';
+            await new Promise(r => setTimeout(r, waitMs));
+            const remoteOffset = await getRemoteOffset(_tusUploadUrl);
+            if (remoteOffset > currentOffset) { newOffset = remoteOffset; break; }
+          }
+        }
+        currentOffset = newOffset;
+        _tusOffset    = currentOffset;
+      }
+
+      updateProgress(100, file.size, file.size, 0);
+      showProgressNumbers(false);
+      console.log('[SFL Upload] Stream upload 100%. Elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+
+      // ── A4. Wait for Cloudflare Stream processing ──
+      setStage('process', 'active');
+      $('progressLabel').textContent = 'Processing video…';
+
+      let streamResult;
+      try {
+        streamResult = await pollStreamStatus(_streamId);
+      } catch(pollErr) {
+        if (pollErr.message === 'CANCELLED') throw pollErr;
+        console.warn('[SFL Upload] Processing poll failed:', pollErr.message, '— using fallback URLs');
+        streamResult = {
+          playbackUrl:  `https://videodelivery.net/${_streamId}/manifest/video.m3u8`,
+          thumbnailUrl: `https://videodelivery.net/${_streamId}/thumbnails/thumbnail.jpg`,
+          duration:     videoDuration,
+        };
+      }
+
+      // ── A5. Thumbnail ──
+      let thumbnailUrl = streamResult.thumbnailUrl || '';
+      if (_thumbFile) {
+        const t = await uploadThumbnail(uid, _thumbFile);
+        if (t) thumbnailUrl = t;
+      }
+
+      // ── A6. Publish to Firestore ──
+      setStage('save', 'active');
+      $('progressLabel').textContent = 'Publishing to Shadow Fire Live…';
+
+      const streamFinalMeta = {
+        title, description: $('videoDesc').value.trim(),
+        category: $('videoCategory').value || '', tags: _tags,
+        visibility: _visibility, cloudflareVideoId: _streamId,
+        videoUrl: streamResult.playbackUrl, thumbnailUrl,
+        duration: streamResult.duration || videoDuration,
+        creatorId: uid,
+        creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+        creatorAvatar: _userData?.avatar || _user.photoURL || '',
+        views: 0, likes: 0, comments: 0, status: 'published',
+        updatedAt: serverTimestamp(),
+      };
+      let docId;
+      if (_pendingDocId) {
+        await updateDoc(doc(db,'videos',_pendingDocId), streamFinalMeta);
+        docId = _pendingDocId;
+      } else {
+        const nd = await addDoc(collection(db,'videos'), { ...streamFinalMeta, createdAt: serverTimestamp() });
+        docId = nd.id;
+      }
+      console.log('[SFL Upload] Published via Stream. docId:', docId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+      console.groupEnd();
+      setStage('done', 'active');
+      $('progressLabel').textContent = 'Published! 🎉';
+      toast('🎉 Video published!');
+      _uploading = false; _pendingDocId = null;
+      setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
+      return; // PATH A complete
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PATH B — R2 Multipart Upload (presigned URLs, direct to R2)
+    //   Used when Cloudflare Stream is not available.
+    //   Browser uploads parts directly to R2 via presigned PUT URLs.
+    //   Falls back to Worker-proxied /mpu/part if presign not configured.
+    // ═══════════════════════════════════════════════════════════
+    console.log('[SFL Upload] Using R2 multipart upload path.');
+
+    // ── B1. Create R2 MPU session (once, reused on retry) ──
     if (!_r2UploadId || !_r2Key) {
-      console.log('[SFL Upload] Creating R2 multipart upload…');
       const createRes = await fetch(`${WORKER_URL}/mpu/create`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid,
-          fileName: file.name,
-          fileType: file.type || 'video/mp4',
-          fileSize: file.size,
-        }),
+        body: JSON.stringify({ uid, fileName: file.name, fileType: file.type || 'video/mp4', fileSize: file.size }),
       });
       if (!createRes.ok) {
         let msg = `Upload server error ${createRes.status}`;
-        try { msg = (await createRes.json()).error || msg; } catch(e2) {}
+        try { msg = (await createRes.json()).error || msg; } catch(_) {}
         throw new Error(msg);
       }
       const createData = await createRes.json();
-      _r2UploadId    = createData.r2UploadId;
-      _r2Key         = createData.key;
-      _uploadedParts = []; // fresh session
-      console.log('[SFL Upload] MPU created. key:', _r2Key, 'r2UploadId:', _r2UploadId);
+      _r2UploadId = createData.r2UploadId;
+      _r2Key      = createData.key;
+      _uploadedParts = [];
+      console.log('[SFL Upload] R2 MPU created. key:', _r2Key);
     } else {
-      console.log('[SFL Upload] Resuming MPU. key:', _r2Key, 'already uploaded parts:', _uploadedParts.length);
+      console.log('[SFL Upload] Resuming R2 MPU. parts done:', _uploadedParts.length);
     }
 
-    // ── 2. Create Firestore doc (once — on retry the doc already exists) ──
-    const videoDuration = +($('videoPreview').dataset.duration || 0) || null;
+    // ── B2. Create Firestore doc ──
     if (!_pendingDocId) {
       try {
         const earlyDoc = await addDoc(collection(db,'videos'), {
-          title,
-          description:   $('videoDesc').value.trim(),
-          category:      $('videoCategory').value || '',
-          tags:          _tags,
-          visibility:    _visibility,
-          r2Key:         _r2Key,
-          videoUrl:      '',
-          thumbnailUrl:  '',
-          duration:      videoDuration,
-          creatorId:     uid,
+          title, description: $('videoDesc').value.trim(),
+          category: $('videoCategory').value || '', tags: _tags,
+          visibility: _visibility, r2Key: _r2Key,
+          videoUrl: '', thumbnailUrl: '', duration: videoDuration,
+          creatorId: uid,
           creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
           creatorAvatar: _userData?.avatar || _user.photoURL || '',
-          views:         0,
-          likes:         0,
-          comments:      0,
-          status:        'uploading',
-          createdAt:     serverTimestamp(),
-          updatedAt:     serverTimestamp(),
+          views: 0, likes: 0, comments: 0, status: 'uploading',
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
         });
         _pendingDocId = earlyDoc.id;
-        console.log('[SFL Upload] Firestore doc created (status=uploading):', _pendingDocId);
+        console.log('[SFL Upload] Firestore doc created (R2 path):', _pendingDocId);
       } catch(e) {
-        console.warn('[SFL Upload] Early Firestore doc creation failed (non-fatal):', e.message);
+        console.warn('[SFL Upload] Firestore doc creation failed (non-fatal):', e.message);
       }
     }
 
-    // ── 3. Upload parts ──
+    // ── B3. Upload parts ──
     setStage('upload', 'active');
     showProgressNumbers(true);
-    $('progressLabel').textContent = 'Uploading to Cloudflare R2…';
+    $('progressLabel').textContent = 'Uploading… 0%';
 
-    // Build set of already-uploaded part numbers for resume
-    const doneParts = new Set(_uploadedParts.map(p => p.partNumber));
+    const totalParts = Math.ceil(file.size / PART_SIZE);
+    const doneParts  = new Set(_uploadedParts.map(p => p.partNumber));
+    const r2SpeedSamples = [];
+    let r2UploadedBytes = _uploadedParts.length * PART_SIZE;
+    r2UploadedBytes = Math.min(r2UploadedBytes, file.size);
 
-    // Track total bytes including already-done parts
-    let totalUploadedBytes = _uploadedParts.reduce((sum, p) => {
-      // Each completed part was PART_SIZE bytes (last part may differ — conservative estimate)
-      return sum + PART_SIZE;
-    }, 0);
-    totalUploadedBytes = Math.min(totalUploadedBytes, file.size);
-
-    const speedSamples = [];
+    // Check once whether presigned URLs are available
+    let r2PresignAvailable = true;
 
     for (let i = 0; i < totalParts; i++) {
-      const partNumber = i + 1; // R2 parts are 1-indexed
-      if (doneParts.has(partNumber)) {
-        console.log(`[SFL Upload] Part ${partNumber}/${totalParts} already uploaded — skipping`);
-        continue;
-      }
+      const partNumber = i + 1;
+      if (doneParts.has(partNumber)) continue;
+      if (_cancelled) throw new Error('CANCELLED');
 
       const start = i * PART_SIZE;
       const end   = Math.min(start + PART_SIZE, file.size);
       const slice = file.slice(start, end);
-
-      let partUploadedPrev = 0;
       let partResult;
+      let partPrev = 0;
 
-      // Retry failed parts up to 3 times
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      const onPartProgress = (loaded, total_) => {
+        const delta = loaded - partPrev;
+        if (delta <= 0) return;
+        partPrev = loaded;
+        r2UploadedBytes += delta;
+        const now = Date.now();
+        r2SpeedSamples.push({ time: now, bytes: r2UploadedBytes });
+        const cutoff = now - 5000;
+        while (r2SpeedSamples.length > 1 && r2SpeedSamples[0].time < cutoff) r2SpeedSamples.shift();
+        let speedBps = 0;
+        if (r2SpeedSamples.length >= 2) {
+          const dt = (r2SpeedSamples.at(-1).time - r2SpeedSamples[0].time) / 1000;
+          const db = r2SpeedSamples.at(-1).bytes - r2SpeedSamples[0].bytes;
+          if (dt > 0.2) speedBps = db / dt;
+        }
+        const pct = Math.min(Math.round(r2UploadedBytes / file.size * 100), 99);
+        updateProgress(pct, r2UploadedBytes, file.size, speedBps);
+        $('progressLabel').textContent = `Uploading… ${pct}%`;
+      };
+
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        if (_cancelled) throw new Error('CANCELLED');
         try {
-          partResult = await uploadPartXhr(slice, partNumber, _r2Key, _r2UploadId, (loaded, total) => {
-            const delta = loaded - partUploadedPrev;
-            if (delta <= 0) return;
-            partUploadedPrev = loaded;
-            totalUploadedBytes += delta;
-
-            const now = Date.now();
-            speedSamples.push({ time: now, bytes: totalUploadedBytes });
-            const cutoff = now - 5000;
-            while (speedSamples.length > 1 && speedSamples[0].time < cutoff) speedSamples.shift();
-
-            let speedBps = 0;
-            if (speedSamples.length >= 2) {
-              const dt = (speedSamples[speedSamples.length-1].time - speedSamples[0].time) / 1000;
-              const db = speedSamples[speedSamples.length-1].bytes - speedSamples[0].bytes;
-              if (dt > 0.2) speedBps = db / dt;
+          if (r2PresignAvailable) {
+            // Try presigned URL path first
+            const presignRes = await fetch(`${WORKER_URL}/mpu/presign`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId, partNumber }),
+            });
+            if (presignRes.status === 503) {
+              const pd = await presignRes.json().catch(() => ({}));
+              if (pd.fallback) {
+                console.log('[SFL Upload] Presign not configured — switching to proxy path');
+                r2PresignAvailable = false;
+              }
             }
-
-            const pct = Math.min(Math.round(totalUploadedBytes / file.size * 100), 99);
-            updateProgress(pct, totalUploadedBytes, file.size, speedBps);
-          });
-          break; // success — exit retry loop
+            if (r2PresignAvailable && presignRes.ok) {
+              const { presignedUrl } = await presignRes.json();
+              partResult = await r2UploadPartPresigned(presignedUrl, slice, partNumber, onPartProgress);
+            } else if (!r2PresignAvailable || !presignRes.ok) {
+              // Fall through to proxy
+              partResult = await r2UploadPartProxy(slice, partNumber, _r2Key, _r2UploadId, onPartProgress);
+            }
+          } else {
+            partResult = await r2UploadPartProxy(slice, partNumber, _r2Key, _r2UploadId, onPartProgress);
+          }
+          break;
         } catch(partErr) {
-          if (partErr.message === 'CANCELLED') throw partErr; // propagate cancel immediately
-          if (attempt === 3) throw partErr; // out of retries
-          const waitMs = attempt * 2000;
-          console.warn(`[SFL Upload] Part ${partNumber} attempt ${attempt} failed: ${partErr.message} — retrying in ${waitMs}ms`);
-          $('progressLabel').textContent = `Connection interrupted — retrying part ${partNumber}…`;
+          if (partErr.message === 'CANCELLED') throw partErr;
+          if (attempt === 5) throw partErr;
+          const waitMs = Math.min(attempt * 3000, 15000);
+          console.warn(`[SFL Upload] Part ${partNumber} attempt ${attempt} failed: ${partErr.message} — retry in ${waitMs}ms`);
+          $('progressLabel').textContent = 'Connection interrupted — retrying…';
           await new Promise(r => setTimeout(r, waitMs));
-          partUploadedPrev = 0; // reset for next attempt
+          partPrev = 0;
         }
       }
 
-      // Part committed to R2 — record it
       _uploadedParts.push(partResult);
       doneParts.add(partNumber);
-
-      // Ensure progress accounts for full part bytes
-      const partBytes = end - start;
-      const diff = partBytes - partUploadedPrev;
-      if (diff > 0) totalUploadedBytes += diff;
-
-      console.log(`[SFL Upload] Part ${partNumber}/${totalParts} done (etag: ${partResult.etag})`);
+      r2UploadedBytes = Math.min(r2UploadedBytes, file.size);
+      console.log(`[SFL Upload] Part ${partNumber}/${totalParts} committed (etag: ${partResult.etag})`);
     }
 
-    // ── 4. Complete the multipart upload ──
-    setStage('complete', 'active');
+    // ── B4. Complete the R2 MPU ──
+    setStage('process', 'active');
     updateProgress(100, file.size, file.size, 0);
     showProgressNumbers(false);
     $('progressLabel').textContent = 'Finalising upload…';
-    console.log('[SFL Upload] All parts uploaded. Completing MPU…');
 
     const completeRes = await fetch(`${WORKER_URL}/mpu/complete`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId, parts: _uploadedParts }),
     });
     if (!completeRes.ok) {
-      let msg = `Complete failed (${completeRes.status})`;
-      try { msg = (await completeRes.json()).error || msg; } catch(e2) {}
+      let msg = `Finalize failed (${completeRes.status})`;
+      try { msg = (await completeRes.json()).error || msg; } catch(_) {}
       throw new Error(msg);
     }
-    const { url: videoUrl } = await completeRes.json();
-    console.log('[SFL Upload] MPU complete. Video URL:', videoUrl);
-    console.log('[SFL Upload] Upload elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+    const { url: r2VideoUrl } = await completeRes.json();
+    console.log('[SFL Upload] R2 MPU complete. URL:', r2VideoUrl);
+    console.log('[SFL Upload] Elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
 
-    // ── 5. Upload thumbnail (non-blocking) ──
-    let thumbnailUrl = '';
+    // ── B5. Thumbnail ──
+    let r2ThumbnailUrl = '';
     if (_thumbFile) {
-      thumbnailUrl = (await uploadThumbnail(uid, _thumbFile)) || '';
-      if (!thumbnailUrl) console.warn('[SFL Upload] Thumbnail failed — publishing without thumbnail');
+      r2ThumbnailUrl = (await uploadThumbnail(uid, _thumbFile)) || '';
     }
 
-    // ── 6. Write final Firestore metadata ──
+    // ── B6. Publish to Firestore ──
     setStage('save', 'active');
     $('progressLabel').textContent = 'Publishing to Shadow Fire Live…';
 
-    const finalMeta = {
-      title,
-      description:   $('videoDesc').value.trim(),
-      category:      $('videoCategory').value || '',
-      tags:          _tags,
-      visibility:    _visibility,
-      r2Key:         _r2Key,
-      videoUrl,
-      thumbnailUrl,
-      duration:      videoDuration,
-      creatorId:     uid,
+    const r2FinalMeta = {
+      title, description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '', tags: _tags,
+      visibility: _visibility, r2Key: _r2Key,
+      videoUrl: r2VideoUrl, thumbnailUrl: r2ThumbnailUrl,
+      duration: videoDuration,
+      creatorId: uid,
       creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
       creatorAvatar: _userData?.avatar || _user.photoURL || '',
-      views:         0,
-      likes:         0,
-      comments:      0,
-      status:        'published',
-      updatedAt:     serverTimestamp(),
+      views: 0, likes: 0, comments: 0, status: 'published',
+      updatedAt: serverTimestamp(),
     };
 
-    let docId;
+    let r2DocId;
     if (_pendingDocId) {
-      await updateDoc(doc(db,'videos',_pendingDocId), finalMeta);
-      docId = _pendingDocId;
+      await updateDoc(doc(db,'videos',_pendingDocId), r2FinalMeta);
+      r2DocId = _pendingDocId;
     } else {
-      const newDoc = await addDoc(collection(db,'videos'), { ...finalMeta, createdAt: serverTimestamp() });
-      docId = newDoc.id;
+      const nd = await addDoc(collection(db,'videos'), { ...r2FinalMeta, createdAt: serverTimestamp() });
+      r2DocId = nd.id;
     }
 
-    console.log('[SFL Upload] Firestore doc published:', docId);
-    console.log('[SFL Upload] Total elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+    console.log('[SFL Upload] Published via R2. docId:', r2DocId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
     console.groupEnd();
-
-    // ── 7. Done ──
     setStage('done', 'active');
     $('progressLabel').textContent = 'Published! 🎉';
     toast('🎉 Video published!');
-    _uploading    = false;
-    _pendingDocId = null;
-
-    setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
+    _uploading = false; _pendingDocId = null;
+    setTimeout(() => { window.location.href = `sfl-player.html?v=${r2DocId}`; }, 1400);
 
   } catch(err) {
     _uploading = false;
-    _activeXhr = null;
-    console.error('[SFL Upload] Error:', err);
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    console.error('[SFL Upload] Error:', err.message);
     console.groupEnd();
 
     if (err.message === 'CANCELLED') return; // cancel handler already reset UI
 
-    setStage('upload', 'error');
+    // Determine which stage to mark as errored
+    const errStage = _streamId && _tusOffset >= _videoFile?.size ? 'process' : 'upload';
+    setStage(errStage, 'error');
     $('failPanel').classList.remove('sfl-hidden');
-    $('failMsg').textContent = err.message || 'Upload failed. Check your connection and try again.';
+
+    // Show a user-friendly error message
+    let userMsg = err.message || 'Upload failed. Check your connection and try again.';
+    if (userMsg.includes('503') || userMsg.includes('not configured')) {
+      userMsg = 'Upload service is temporarily unavailable. Please try again later.';
+    } else if (userMsg.includes('401') || userMsg.includes('403')) {
+      userMsg = 'Authentication error. Please sign out and sign back in, then retry.';
+    } else if (userMsg.includes('Network error')) {
+      userMsg = 'Your connection was interrupted. Tap Retry to resume from where you left off.';
+    }
+    $('failMsg').textContent = userMsg;
     $('publishBtn').disabled = false;
     $('publishBtn').textContent = '🚀 Publish Video';
     showProgressNumbers(false);
     toast('Upload failed — tap Retry to try again.');
 
     if (_pendingDocId) {
-      updateDoc(doc(db,'videos',_pendingDocId), { status: 'failed', updatedAt: serverTimestamp() }).catch(()=>{});
+      updateDoc(doc(db,'videos',_pendingDocId), {
+        status: 'failed',
+        failReason: err.message,
+        updatedAt: serverTimestamp()
+      }).catch(()=>{});
     }
   }
 }

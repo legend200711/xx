@@ -350,6 +350,135 @@ async function handleMpuCreate(request, env, cors, sec) {
   });
 }
 
+// ── R2 Multipart Upload: generate a presigned URL for one part ────────────────
+//
+// POST /mpu/presign
+// Body: JSON { key, r2UploadId, partNumber }
+// Returns: { presignedUrl }
+//
+// The browser receives the presigned URL and PUTs the part bytes directly to R2
+// without passing through this Worker.  This avoids Worker CPU/wall-clock limits
+// for large video parts on slow connections.
+//
+// Requires Worker secrets: R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+// These are R2 API token credentials (not the main Cloudflare API token).
+// Create them at: Cloudflare Dashboard → R2 → Manage R2 API tokens
+//
+async function handleMpuPresign(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
+    // Fall back gracefully: tell the browser to use the proxy path instead
+    return new Response(JSON.stringify({ error: 'R2 presign not configured — use /mpu/part instead', fallback: true }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const key        = (body.key        || '').replace(/\.\./g, '');
+  const r2UploadId =  body.r2UploadId || '';
+  const partNumber = parseInt(body.partNumber || '0', 10);
+
+  if (!key || !r2UploadId || partNumber < 1 || partNumber > 10000) {
+    return new Response(JSON.stringify({ error: 'key, r2UploadId, and partNumber (1–10000) are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Build the S3-compatible presigned URL for this multipart part.
+  // R2's S3 endpoint: https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key>
+  const bucketName = env.BUCKET_NAME || 'legend';
+  const accountId  = env.CLOUDFLARE_ACCOUNT_ID;
+  if (!accountId) {
+    return new Response(JSON.stringify({ error: 'CLOUDFLARE_ACCOUNT_ID not set' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const s3Endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  const partUrl    = `${s3Endpoint}/${bucketName}/${encodeURIComponent(key)}?partNumber=${partNumber}&uploadId=${encodeURIComponent(r2UploadId)}`;
+
+  // Sign using AWS Signature Version 4 (R2 is S3-compatible).
+  // We use the Web Crypto API directly — no external dependencies needed.
+  const expires   = 3600; // 1 hour — plenty of time even on slow connections
+  const now       = new Date();
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const amzDate   = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 16) + 'Z'; // yyyyMMddTHHmmssZ
+
+  const method    = 'PUT';
+  const service   = 's3';
+  const region    = 'auto';
+  const credScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const signedHeaders = 'host';
+  const host      = `${accountId}.r2.cloudflarestorage.com`;
+
+  const urlObj    = new URL(partUrl);
+  // Add query params required for pre-signed URL
+  urlObj.searchParams.set('X-Amz-Algorithm',  'AWS4-HMAC-SHA256');
+  urlObj.searchParams.set('X-Amz-Credential', `${env.R2_ACCESS_KEY_ID}/${credScope}`);
+  urlObj.searchParams.set('X-Amz-Date',       amzDate);
+  urlObj.searchParams.set('X-Amz-Expires',    String(expires));
+  urlObj.searchParams.set('X-Amz-SignedHeaders', signedHeaders);
+
+  // Sort query parameters alphabetically for canonical request
+  urlObj.searchParams.sort();
+  const canonicalQueryString = urlObj.searchParams.toString();
+
+  const canonicalRequest = [
+    method,
+    `/${bucketName}/${key}`,
+    canonicalQueryString,
+    `host:${host}\n`,
+    signedHeaders,
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+
+  const enc    = s => new TextEncoder().encode(s);
+  const hashHex = async (data) => {
+    const buf = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? enc(data) : data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+  const hmacKey = async (key, data) => {
+    const k = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', k, enc(data)));
+  };
+
+  const hashedCanonical = await hashHex(canonicalRequest);
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credScope,
+    hashedCanonical,
+  ].join('\n');
+
+  // Derive the signing key
+  const kDate    = await hmacKey(enc('AWS4' + env.R2_SECRET_ACCESS_KEY), dateStamp);
+  const kRegion  = await hmacKey(kDate,    region);
+  const kService = await hmacKey(kRegion,  service);
+  const kSigning = await hmacKey(kService, 'aws4_request');
+
+  const sigBuffer = await crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', kSigning, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), enc(stringToSign));
+  const signature = Array.from(new Uint8Array(sigBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  urlObj.searchParams.set('X-Amz-Signature', signature);
+
+  console.log(`[MPU Presign] Presigned URL for part ${partNumber} of key=${key}`);
+  return new Response(JSON.stringify({ presignedUrl: urlObj.toString() }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
 async function handleMpuPart(request, env, cors, sec) {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
@@ -667,8 +796,16 @@ async function handleStreamUploadUrl(request, env, cors, sec) {
     expiry,
     creator: uid,
     meta: title ? { name: title } : {},
-    // Allow the SFL domains to play the video
-    allowedOrigins: ['shadowfirelive.com', '*.shadowfirelive.com', 'shadownexussocial.online', 'localhost'],
+    // allowedOrigins controls which origins can PLAY the video (not where the upload comes from).
+    // The tus upload itself goes directly to Cloudflare Stream from the browser — no origin restriction.
+    allowedOrigins: [
+      'shadowfirelive.com',
+      '*.shadowfirelive.com',
+      'shadownexussocial.online',
+      '*.shadownexussocial.online',
+      'localhost',
+      '127.0.0.1',
+    ],
     requireSignedURLs: false,
   };
 
@@ -777,17 +914,22 @@ async function handleStreamStatus(request, env, cors, sec) {
   }
 
   const r = cfData.result;
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  // Prefer the playback URLs that Cloudflare returns directly in the API response.
+  // These are always correct. The fallback uses the videodelivery.net CDN domain which
+  // works for all accounts without needing the customer subdomain.
+  const hlsUrl  = r.playback?.hls  || `https://videodelivery.net/${r.uid}/manifest/video.m3u8`;
+  const thumbUrl = r.thumbnail     || `https://videodelivery.net/${r.uid}/thumbnails/thumbnail.jpg`;
 
   return new Response(JSON.stringify({
-    streamId:     r.uid,
-    status:       r.status?.state  || 'unknown',
-    readyToStream: r.readyToStream  || false,
-    playbackUrl:  r.playback?.hls   || `https://customer-${accountId}.cloudflarestream.com/${r.uid}/manifest/video.m3u8`,
-    dashUrl:      r.playback?.dash  || null,
-    thumbnailUrl: r.thumbnail       || `https://customer-${accountId}.cloudflarestream.com/${r.uid}/thumbnails/thumbnail.jpg`,
-    duration:     r.duration        || null,
-    pctComplete:  r.status?.pctComplete || null,
+    streamId:        r.uid,
+    status:          r.status?.state    || 'unknown',
+    readyToStream:   r.readyToStream    || false,
+    playbackUrl:     hlsUrl,
+    dashUrl:         r.playback?.dash   || null,
+    thumbnailUrl:    thumbUrl,
+    duration:        r.duration         || null,
+    pctComplete:     r.status?.pctComplete    || null,
     errorReasonCode: r.status?.errorReasonCode || null,
     errorReasonText: r.status?.errorReasonText || null,
   }), {
@@ -819,7 +961,12 @@ export default {
     if (url.pathname === '/stream/status')     return handleStreamStatus(request, env, cors, sec);
 
     // ── R2 Multipart Upload endpoints (video) ──
+    // /mpu/create   — creates a new multipart upload, returns { r2UploadId, key }
+    // /mpu/presign  — generates a presigned URL for one part (browser uploads directly to R2)
+    // /mpu/complete — finalises the upload by listing all committed parts
+    // /mpu/abort    — cleans up an incomplete upload
     if (url.pathname === '/mpu/create')   return handleMpuCreate(request, env, cors, sec);
+    if (url.pathname === '/mpu/presign')  return handleMpuPresign(request, env, cors, sec);
     if (url.pathname === '/mpu/part')     return handleMpuPart(request, env, cors, sec);
     if (url.pathname === '/mpu/complete') return handleMpuComplete(request, env, cors, sec);
     if (url.pathname === '/mpu/abort')    return handleMpuAbort(request, env, cors, sec);
