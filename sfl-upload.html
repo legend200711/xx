@@ -68,6 +68,21 @@
 }
 .upload-error-msg.visible { display: block; }
 
+/* Thumbnail notice — informational, not an error */
+.upload-thumb-notice {
+  font-size: 12px;
+  color: var(--sfl-blue);
+  background: rgba(0,174,239,0.07);
+  border: 1px solid rgba(0,174,239,0.22);
+  border-radius: var(--sfl-r-sm);
+  padding: 8px 12px;
+  margin-top: 10px;
+  display: none;
+  line-height: 1.5;
+}
+.upload-thumb-notice.visible { display: flex; align-items: flex-start; gap: 8px; }
+.upload-thumb-notice-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
 .upload-thumb-row {
   display: flex; gap: 10px; align-items: flex-start;
 }
@@ -184,6 +199,11 @@
       <div class="upload-progress-bar"><div class="upload-progress-fill" id="progressFill"></div></div>
       <div class="upload-status" id="progressLabel">Preparing upload…</div>
       <div class="upload-error-msg" id="errorMsg"></div>
+      <!-- Thumbnail notice (informational only — never blocks publish) -->
+      <div class="upload-thumb-notice" id="thumbNotice">
+        <span class="upload-thumb-notice-icon">🖼</span>
+        <span id="thumbNoticeText"></span>
+      </div>
     </div>
 
     <!-- Thumbnail -->
@@ -273,6 +293,14 @@
       <button class="sfl-btn sfl-btn-ghost" id="cancelUploadBtn" type="button">Cancel</button>
     </div>
 
+    <!-- Retry thumbnail (shown after publish when thumbnail failed) -->
+    <div id="retryThumbWrap" class="sfl-hidden" style="margin-top:12px;">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="retryThumbBtn" type="button">
+        🔄 Retry Thumbnail Upload
+      </button>
+      <span style="font-size:11px;color:var(--sfl-text-muted);margin-left:10px;" id="retryThumbLabel"></span>
+    </div>
+
   </div><!-- /stepMeta -->
 
 </div><!-- /uploadPage -->
@@ -333,6 +361,20 @@ function hideError() {
   el.classList.remove('visible');
 }
 
+// Show an informational notice (blue) — never blocks progress, never says "failed"
+function showThumbNotice(msg) {
+  const el   = $('thumbNotice');
+  const text = $('thumbNoticeText');
+  if (!el || !text) return;
+  text.textContent = msg;
+  el.classList.add('visible');
+}
+
+function hideThumbNotice() {
+  const el = $('thumbNotice');
+  if (el) el.classList.remove('visible');
+}
+
 // ── Categorise Firebase Storage / Firestore errors ───────────────────────────
 // Differentiate between auth problems, rules rejections, and network issues
 // so the user sees a meaningful message and doesn't loop endlessly through login.
@@ -378,10 +420,16 @@ function describeError(err) {
 let _user        = null;
 let _userData    = null;
 let _authLoading = true;   // true until onAuthStateChanged fires for the first time
-let _videoFile = null;
-let _thumbFile = null;
-let _tags      = [];
+let _videoFile  = null;
+let _thumbFile  = null;
+let _tags       = [];
 let _visibility = 'public';
+
+// After publish: track thumbnail state for optional retry
+let _publishedDocId  = null;  // Firestore doc ID once video is ready
+let _publishedUid    = null;  // UID used for the storage path
+let _publishedVidId  = null;  // videoId segment used in storage path
+let _thumbFailed     = false; // true when thumbnail was skipped due to error
 
 // Active upload task — kept for potential cancellation / stall detection
 let _activeTask       = null;
@@ -459,19 +507,38 @@ $('thumbInput').addEventListener('change', () => {
 
 $('autoThumbBtn').addEventListener('click', () => {
   const video = $('videoPreview');
-  if (!video.src) { toast('Load a video first.'); return; }
-  video.currentTime = Math.min(video.duration * 0.25, 5);
+  if (!video.src || !video.duration) { toast('Load a video first.'); return; }
+
+  // Seek to 25% or 5 s, whichever is earlier
+  const target = Math.min(video.duration * 0.25, 5);
+  video.currentTime = isFinite(target) ? target : 0;
+
   video.onseeked = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth  || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      _thumbFile = new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
-      $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
-      toast('Thumbnail captured!');
-    }, 'image/jpeg', 0.88);
+    video.onseeked = null; // clear so it only fires once
+    try {
+      const w = video.videoWidth  || 1280;
+      const h = video.videoHeight || 720;
+      if (!w || !h) { toast('Could not read video dimensions. Try again.'); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { toast('Canvas unavailable. Cannot capture thumbnail.'); return; }
+      ctx.drawImage(video, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        if (!blob || blob.size < 100) {
+          toast('Thumbnail capture produced an empty image — try seeking to a different point.');
+          return;
+        }
+        _thumbFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
+        $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
+        toast('Thumbnail captured!');
+        log('THUMB_CAPTURED', { width: w, height: h, size: blob.size });
+      }, 'image/jpeg', 0.88);
+    } catch (captureErr) {
+      log('THUMB_CAPTURE_ERROR', { error: captureErr.message });
+      toast('Could not capture thumbnail. Try using "Choose Photo" instead.');
+    }
   };
 });
 
@@ -513,6 +580,7 @@ document.querySelectorAll('.vis-opt').forEach(opt => {
 function resetForm() {
   _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
   _activeTask = null; _isUploading = false;
+  _publishedDocId = null; _publishedUid = null; _publishedVidId = null; _thumbFailed = false;
   clearStallTimer();
   $('videoPreview').src = '';
   $('videoTitle').value = '';
@@ -523,7 +591,9 @@ function resetForm() {
   $('descCount').textContent  = '0';
   $('progressFill').style.width = '0%';
   hideError();
+  hideThumbNotice();
   $('progressWrap').classList.add('sfl-hidden');
+  $('retryThumbWrap').classList.add('sfl-hidden');
   $('stepMeta').classList.add('sfl-hidden');
   $('stepPick').classList.remove('sfl-hidden');
   // Reset file input so the same file can be re-selected
@@ -736,41 +806,123 @@ $('publishBtn').addEventListener('click', async () => {
     return;
   }
 
-  // ── Upload thumbnail (optional) ───────────────────────────────────────────
-  let thumbnailUrl = '';
+  // ── Upload thumbnail (optional — NEVER blocks video publish) ─────────────
+  // Thumbnail failures are logged and shown as an informational notice.
+  // The video is always published regardless of thumbnail outcome.
+  let thumbnailUrl = null;
+  let thumbSkipped = false;
+
   if (_thumbFile) {
-    setProgress(96, 'Uploading thumbnail…');
-    try {
-      const tPath = `thumbnails/${uid}/${videoId}.jpg`;
-      const tRef  = storageRef(storage, tPath);
-      const tTask = uploadBytesResumable(tRef, _thumbFile, { contentType: 'image/jpeg' });
-      thumbnailUrl = await new Promise((resolve, reject) => {
-        tTask.on('state_changed', null,
-          err => reject(err),
-          async () => {
-            try { resolve(await getDownloadURL(tTask.snapshot.ref)); }
-            catch (e) { resolve(''); } // thumbnail is optional; don't fail the whole upload
-          }
-        );
+    // Re-verify auth immediately before the thumbnail upload.
+    // A long video upload can exhaust the 1-hour token window.
+    const thumbUser = auth.currentUser;
+    if (!thumbUser || thumbUser.uid !== uid) {
+      log('THUMB_SKIPPED', { reason: 'auth_lost_during_video_upload', thumbUser: thumbUser?.uid ?? null, expectedUid: uid });
+      thumbSkipped = true;
+      showThumbNotice('Thumbnail skipped — your session changed during upload. The video will publish normally.');
+    }
+
+    if (!thumbSkipped) {
+      setProgress(96, 'Uploading thumbnail…');
+
+      // Use the same videoId in the path so thumbnail and video are co-located.
+      // Path: thumbnails/{uid}/{videoId}/thumbnail.jpg
+      // Storage rule: match /thumbnails/{uid}/{allPaths=**} — this matches.
+      const tPath = `thumbnails/${uid}/${videoId}/thumbnail.jpg`;
+
+      // Determine the real content-type from the file; fall back to image/jpeg.
+      // Passing the correct MIME type avoids the Storage isValidImageType() rule
+      // rejecting the upload if the browser provides a different type.
+      const tContentType = (_thumbFile.type && _thumbFile.type.startsWith('image/'))
+        ? _thumbFile.type
+        : 'image/jpeg';
+
+      log('THUMB_UPLOAD_STARTED', {
+        storagePath: tPath,
+        contentType: tContentType,
+        fileSize:    _thumbFile.size,
+        uid,
+        authUid:     thumbUser.uid,
       });
-    } catch (_) {
-      // Thumbnail upload failure is non-fatal; proceed without it
-      thumbnailUrl = '';
+
+      try {
+        const tRef  = storageRef(storage, tPath);
+        const tTask = uploadBytesResumable(tRef, _thumbFile, { contentType: tContentType });
+
+        thumbnailUrl = await new Promise((resolve, reject) => {
+          tTask.on('state_changed',
+            null,   // no progress needed for a small image
+            err => {
+              // Reject so the outer catch can log and show the informational notice
+              reject(err);
+            },
+            async () => {
+              try {
+                const url = await getDownloadURL(tTask.snapshot.ref);
+                resolve(url || null);
+              } catch (urlErr) {
+                reject(urlErr);
+              }
+            }
+          );
+        });
+
+        log('THUMB_UPLOAD_SUCCESS', { url: thumbnailUrl ? thumbnailUrl.substring(0,80)+'…' : null });
+      } catch (thumbErr) {
+        // ── Thumbnail failure is NON-FATAL ──────────────────────────────────
+        // Log the full error so it's visible in DevTools, but do NOT show the
+        // generic server-rejection message to the user.  The video will still
+        // be published with thumbnailUrl: null.
+        log('THUMB_UPLOAD_FAILED', {
+          errorCode:   thumbErr.code,
+          errorMsg:    thumbErr.message,
+          storagePath: tPath,
+          contentType: tContentType,
+          fileSize:    _thumbFile.size,
+          authUid:     auth.currentUser?.uid ?? null,
+        });
+        thumbnailUrl = null;
+        _thumbFailed = true;
+
+        // Show a friendly informational notice — NOT an error.
+        const thumbErrDetail = thumbErr.code
+          ? `(${thumbErr.code})`
+          : '';
+        showThumbNotice(
+          `Thumbnail couldn't be uploaded ${thumbErrDetail} — your video will publish with the default thumbnail. You can retry after publishing.`
+        );
+      }
     }
   }
 
-  // ── Mark document "processing" then "ready" after writing the URL ─────────
+  // ── Mark document ready ───────────────────────────────────────────────────
+  // Force-refresh the Firebase ID token before writing so a long video upload
+  // (which can exceed the 1-hour token window) doesn't cause permission-denied
+  // on the final Firestore update.
   setProgress(98, 'Saving video…');
+  try {
+    // getIdToken(true) forces a fresh token; errors here are non-fatal for the
+    // Firestore write (the SDK retries automatically, but an explicit refresh
+    // ensures the write goes through without a permission-denied race).
+    if (auth.currentUser) {
+      await auth.currentUser.getIdToken(/* forceRefresh */ true).catch(() => {/* non-critical */});
+    }
+  } catch (_) { /* ignore */ }
+
   try {
     await updateDoc(docRef, {
       videoUrl,
-      thumbnailUrl,
-      storagePath:  vidPath,
-      status:       'ready',
+      thumbnailUrl:  thumbnailUrl ?? null,  // null when no thumbnail — never empty string
+      storagePath:   vidPath,
+      status:        'ready',
       processingStatus: 'ready',
-      updatedAt:    serverTimestamp(),
+      updatedAt:     serverTimestamp(),
     });
-    log('VIDEO_READY', { docId: docRef.id, videoUrl: videoUrl.substring(0, 80) + '…' });
+    log('VIDEO_READY', {
+      docId:        docRef.id,
+      hasThumbnail: !!thumbnailUrl,
+      videoUrl:     videoUrl.substring(0, 80) + '…',
+    });
   } catch (firestoreErr) {
     log('UPLOAD_FAILED', {
       stage:     'firestore_update',
@@ -792,15 +944,101 @@ $('publishBtn').addEventListener('click', async () => {
     return;
   }
 
+  // ── Store retry state ─────────────────────────────────────────────────────
+  _publishedDocId = docRef.id;
+  _publishedUid   = uid;
+  _publishedVidId = videoId;
+
   // ── Success ───────────────────────────────────────────────────────────────
   setProgress(100, '✅ Published!');
-  toast('🎉 Video published!');
-  setUploading(false);
-  clearStallTimer();
 
-  setTimeout(() => {
-    window.location.href = `sfl-player.html?v=${docRef.id}`;
-  }, 1200);
+  if (_thumbFailed) {
+    // Don't toast about the thumbnail; the inline notice already explains it.
+    toast('🎉 Video published! Thumbnail skipped — see note below.', 4500);
+    // Show the retry button so the user can re-upload a thumbnail without
+    // re-uploading the entire video.
+    $('retryThumbWrap').classList.remove('sfl-hidden');
+    $('retryThumbLabel').textContent = 'Video is live. Tap to upload a thumbnail separately.';
+    setUploading(false);
+    clearStallTimer();
+    // Redirect after a longer pause so the user sees the notice
+    setTimeout(() => {
+      window.location.href = `sfl-player.html?v=${docRef.id}`;
+    }, 3500);
+  } else {
+    toast('🎉 Video published!');
+    setUploading(false);
+    clearStallTimer();
+    setTimeout(() => {
+      window.location.href = `sfl-player.html?v=${docRef.id}`;
+    }, 1200);
+  }
+});
+
+// ── Retry thumbnail independently ────────────────────────────────────────────
+// Shown only after a successful video publish where the thumbnail failed.
+// The user can pick a new image and upload it without re-uploading the video.
+$('retryThumbBtn').addEventListener('click', async () => {
+  if (!_publishedDocId || !_publishedUid || !_publishedVidId) return;
+
+  const retryUser = auth.currentUser;
+  if (!retryUser || retryUser.uid !== _publishedUid) {
+    toast('Please sign in again to retry the thumbnail.');
+    return;
+  }
+
+  // Must have a thumb file selected (either original or newly picked)
+  if (!_thumbFile) {
+    toast('Select a thumbnail image first using the Thumbnail picker above.');
+    return;
+  }
+
+  const btn = $('retryThumbBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Uploading thumbnail…';
+  $('retryThumbLabel').textContent = '';
+
+  const tPath = `thumbnails/${_publishedUid}/${_publishedVidId}/thumbnail.jpg`;
+  const tContentType = (_thumbFile.type && _thumbFile.type.startsWith('image/'))
+    ? _thumbFile.type
+    : 'image/jpeg';
+
+  log('THUMB_RETRY_STARTED', { storagePath: tPath, contentType: tContentType, fileSize: _thumbFile.size });
+
+  try {
+    const tRef  = storageRef(storage, tPath);
+    const tTask = uploadBytesResumable(tRef, _thumbFile, { contentType: tContentType });
+
+    const thumbnailUrl = await new Promise((resolve, reject) => {
+      tTask.on('state_changed', null,
+        err => reject(err),
+        async () => {
+          try { resolve(await getDownloadURL(tTask.snapshot.ref)); }
+          catch (e) { reject(e); }
+        }
+      );
+    });
+
+    // Update the Firestore document with the new thumbnail URL
+    await updateDoc(doc(db, 'videos', _publishedDocId), {
+      thumbnailUrl,
+      updatedAt: serverTimestamp(),
+    });
+
+    log('THUMB_RETRY_SUCCESS', { docId: _publishedDocId, url: thumbnailUrl.substring(0,80)+'…' });
+    toast('✅ Thumbnail uploaded!');
+    btn.textContent = '✅ Thumbnail uploaded';
+    $('retryThumbLabel').textContent = 'Thumbnail saved successfully.';
+    hideThumbNotice();
+    _thumbFailed = false;
+
+  } catch (retryErr) {
+    log('THUMB_RETRY_FAILED', { errorCode: retryErr.code, errorMsg: retryErr.message });
+    toast('Thumbnail upload failed: ' + (retryErr.code || retryErr.message));
+    btn.disabled = false;
+    btn.textContent = '🔄 Retry Thumbnail Upload';
+    $('retryThumbLabel').textContent = 'Failed — check your connection and try again.';
+  }
 });
 </script>
 
