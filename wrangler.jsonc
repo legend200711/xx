@@ -16,4 +16,17 @@
     "LIVEKIT_URL": "wss://chris-oxi8fwap.livekit.cloud"
   }
 
+  // ── Cloudflare Stream secrets (set via wrangler secret put, never in this file) ──
+  //
+  //   wrangler secret put CLOUDFLARE_ACCOUNT_ID   --name yellow-term-11e6
+  //   wrangler secret put CLOUDFLARE_API_TOKEN     --name yellow-term-11e6
+  //
+  // The API token needs the following permissions:
+  //   Cloudflare Stream: Edit
+  //
+  // These secrets are read by:
+  //   POST /stream/upload-url  — creates a Cloudflare Stream direct-upload URL
+  //   GET  /stream/status      — checks Cloudflare Stream processing status
+  //
+  // The token is NEVER returned to the browser.
 }

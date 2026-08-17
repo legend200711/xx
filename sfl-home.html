@@ -610,6 +610,14 @@ async function loadVideos(tab, category) {
     let snap = await getDocs(q);
     let docs = snap.docs;
 
+    // Only show videos that are ready to play (published or legacy 'ready' status)
+    // Filter out uploading / processing / failed docs so the feed stays clean
+    const READY_STATUSES = new Set(['published', 'ready', undefined, null, '']);
+    docs = docs.filter(d => {
+      const s = d.data().status;
+      return READY_STATUSES.has(s);
+    });
+
     // Filter by category if not 'all'
     if (category !== 'all') {
       docs = docs.filter(d => d.data().category === category);

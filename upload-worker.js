@@ -21,13 +21,15 @@
  *   - Rate-limit hint headers (enforce limits in Cloudflare dashboard)
  */
 
-const MAX_SIZE_IMAGE = 10  * 1024 * 1024;  // 10 MB  — images
-const MAX_SIZE_VIDEO = 100 * 1024 * 1024;  // 100 MB — video
-const MAX_SIZE_AUDIO = 200 * 1024 * 1024;  // 200 MB — audio / music
-const MAX_SIZE       = MAX_SIZE_AUDIO;     // absolute upper bound (used by music endpoint)
+const MAX_SIZE_IMAGE = 10   * 1024 * 1024;        // 10 MB  — images
+const MAX_SIZE_VIDEO = 2048 * 1024 * 1024;        // 2 GB   — video (matches UI limit)
+const MAX_SIZE_AUDIO = 200  * 1024 * 1024;        // 200 MB — audio / music
+const MAX_SIZE       = MAX_SIZE_VIDEO;            // absolute upper bound
 
 const ALLOWED_ORIGINS = [
   'https://shadownexussocial.online',
+  'https://shadowfirelive.com',
+  'https://www.shadowfirelive.com',
   'http://localhost',
   'http://127.0.0.1'
 ];
@@ -267,6 +269,202 @@ async function handleLiveKitToken(request, env, cors, sec) {
 //
 // This lets the client implement retry-per-chunk for mobile/slow connections.
 
+// ── R2 Multipart Upload — video upload without loading file into Worker memory ─
+//
+// Flow:
+//   1. POST /mpu/create    → BUCKET.createMultipartUpload()  → { r2UploadId, key }
+//   2. POST /mpu/part      → BUCKET.resumeMultipartUpload().uploadPart(stream)
+//                         → { partNumber, etag }   (NO arrayBuffer — streamed directly)
+//   3. POST /mpu/complete  → BUCKET.resumeMultipartUpload().complete(parts)
+//                         → { url, key }
+//   4. POST /mpu/abort     → BUCKET.resumeMultipartUpload().abort()  (on cancel/error)
+//
+// Each part body is raw application/octet-stream — metadata comes from query params.
+// Minimum part size enforced by R2: 5 MiB (except final part).
+
+async function handleMpuCreate(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const uid      = (body.uid      || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const fileName = (body.fileName || 'upload').slice(0, 200);
+  let   fileType =  body.fileType || 'application/octet-stream';
+  const fileSize = parseInt(body.fileSize || '0', 10);
+
+  if (!uid) {
+    return new Response(JSON.stringify({ error: 'uid is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Validate MIME
+  const extMime = mimeFromExt(fileName);
+  if (!fileType || fileType === 'application/octet-stream') fileType = extMime || fileType;
+  else if (extMime && fileType.startsWith('video/') && extMime.startsWith('audio/')) fileType = extMime;
+  if (!isAllowedType(fileType)) {
+    return new Response(JSON.stringify({ error: `File type not supported: ${fileType}` }), {
+      status: 415, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Validate size
+  const sizeLimit = fileType.startsWith('image/') ? MAX_SIZE_IMAGE
+                  : fileType.startsWith('video/') ? MAX_SIZE_VIDEO
+                  : MAX_SIZE_AUDIO;
+  if (fileSize > sizeLimit) {
+    const limitMB = Math.round(sizeLimit / 1024 / 1024);
+    return new Response(JSON.stringify({ error: `File too large (max ${limitMB} MB)` }), {
+      status: 413, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const ext = (fileName.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const key = `videos/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const cleanMime = fileType.split(';')[0].trim();
+
+  let mpu;
+  try {
+    mpu = await env.BUCKET.createMultipartUpload(key, {
+      httpMetadata:   { contentType: cleanMime },
+      customMetadata: { uploaderUid: uid, originalName: fileName },
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'Failed to create multipart upload: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  console.log(`[MPU] Created. key=${key} r2UploadId=${mpu.uploadId} uid=${uid}`);
+  return new Response(JSON.stringify({ r2UploadId: mpu.uploadId, key }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+async function handleMpuPart(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const url        = new URL(request.url);
+  const key        = decodeURIComponent(url.searchParams.get('key')        || '').replace(/\.\./g, '');
+  const r2UploadId = url.searchParams.get('r2UploadId') || '';
+  const partNumber = parseInt(url.searchParams.get('partNumber') || '0', 10);
+
+  if (!key || !r2UploadId || partNumber < 1 || partNumber > 10000) {
+    return new Response(JSON.stringify({ error: 'key, r2UploadId, and partNumber (1-10000) are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!request.body) {
+    return new Response(JSON.stringify({ error: 'Request body (part bytes) is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const upload = env.BUCKET.resumeMultipartUpload(key, r2UploadId);
+  let uploadedPart;
+  try {
+    // Stream the request body directly into R2 — no arrayBuffer(), no memory spike
+    uploadedPart = await upload.uploadPart(partNumber, request.body);
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'Part upload failed: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  return new Response(JSON.stringify({ partNumber: uploadedPart.partNumber, etag: uploadedPart.etag }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+async function handleMpuComplete(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const key        = (body.key        || '').replace(/\.\./g, '');
+  const r2UploadId =  body.r2UploadId || '';
+  const parts      =  body.parts;     // [{ partNumber, etag }, ...]
+
+  if (!key || !r2UploadId || !Array.isArray(parts) || parts.length === 0) {
+    return new Response(JSON.stringify({ error: 'key, r2UploadId, and parts[] are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const upload = env.BUCKET.resumeMultipartUpload(key, r2UploadId);
+  try {
+    await upload.complete(parts);
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'Multipart complete failed: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Serve via the Worker so CORS, caching and range-request headers are applied.
+  // Once the R2 bucket has "Public Access" enabled in the Cloudflare dashboard,
+  // swap this to: https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${key}
+  const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${key}`;
+  console.log(`[MPU] Complete. key=${key} parts=${parts.length} url=${publicUrl}`);
+  return new Response(JSON.stringify({ url: publicUrl, key }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+async function handleMpuAbort(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const key        = (body.key        || '').replace(/\.\./g, '');
+  const r2UploadId =  body.r2UploadId || '';
+  if (!key || !r2UploadId) {
+    return new Response(JSON.stringify({ error: 'key and r2UploadId are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const upload = env.BUCKET.resumeMultipartUpload(key, r2UploadId);
+  try { await upload.abort(); } catch(e) { /* best-effort */ }
+
+  return new Response(JSON.stringify({ aborted: true }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ── Legacy chunk endpoints — kept for backward compat (non-video small files) ─
+
 async function handleUploadChunk(request, env, cors, sec) {
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: mergeHeaders(cors, sec) });
@@ -297,7 +495,7 @@ async function handleUploadChunk(request, env, cors, sec) {
   }
 
   const buffer = await chunk.arrayBuffer();
-  if (buffer.byteLength > 50 * 1024 * 1024) { // 50 MB max per chunk
+  if (buffer.byteLength > 50 * 1024 * 1024) {
     return new Response(JSON.stringify({ error: 'Chunk too large (max 50 MB)' }), {
       status: 413, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
@@ -320,6 +518,8 @@ async function handleUploadChunk(request, env, cors, sec) {
 }
 
 async function handleUploadComplete(request, env, cors, sec) {
+  // Legacy: only used for non-video files (images, audio) that fit in memory.
+  // Videos use /mpu/* endpoints instead.
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: mergeHeaders(cors, sec) });
   }
@@ -345,10 +545,16 @@ async function handleUploadComplete(request, env, cors, sec) {
     });
   }
 
-  // Validate total assembled size
-  const sizeLimit = fileType.startsWith('image/') ? MAX_SIZE_IMAGE
-                  : fileType.startsWith('video/') ? MAX_SIZE_VIDEO
-                  : MAX_SIZE_AUDIO;
+  // Block videos from using the legacy path — they must use /mpu/*
+  const extMime2 = mimeFromExt(fileName);
+  if (!fileType || fileType === 'application/octet-stream') fileType = extMime2 || fileType;
+  if (fileType.startsWith('video/')) {
+    return new Response(JSON.stringify({ error: 'Videos must use the /mpu/* upload endpoints' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const sizeLimit = fileType.startsWith('image/') ? MAX_SIZE_IMAGE : MAX_SIZE_AUDIO;
   if (fileSize > sizeLimit) {
     const limitMB = Math.round(sizeLimit / 1024 / 1024);
     return new Response(JSON.stringify({ error: `File too large (max ${limitMB} MB for this type)` }), {
@@ -356,7 +562,6 @@ async function handleUploadComplete(request, env, cors, sec) {
     });
   }
 
-  // Validate MIME
   const extMime = mimeFromExt(fileName);
   if (!fileType || fileType === 'application/octet-stream') fileType = extMime || fileType;
   else if (extMime && fileType.startsWith('video/') && extMime.startsWith('audio/')) fileType = extMime;
@@ -366,7 +571,6 @@ async function handleUploadComplete(request, env, cors, sec) {
     });
   }
 
-  // Assemble all chunks in order
   const parts = [];
   for (let i = 0; i < totalChunks; i++) {
     const tmpKey = `_tmp/${uploadId}/chunk_${String(i).padStart(6, '0')}`;
@@ -385,7 +589,6 @@ async function handleUploadComplete(request, env, cors, sec) {
     parts.push(await obj.arrayBuffer());
   }
 
-  // Concatenate
   const totalBytes = parts.reduce((s, b) => s + b.byteLength, 0);
   const assembled  = new Uint8Array(totalBytes);
   let offset = 0;
@@ -406,14 +609,188 @@ async function handleUploadComplete(request, env, cors, sec) {
     });
   }
 
-  // Clean up temp chunks (best-effort — do not fail the response if this fails)
   for (let i = 0; i < totalChunks; i++) {
     const tmpKey = `_tmp/${uploadId}/chunk_${String(i).padStart(6, '0')}`;
     env.BUCKET.delete(tmpKey).catch(() => {});
   }
 
-  const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${finalKey}`;
+  const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${finalKey}`;
   return new Response(JSON.stringify({ url: publicUrl, key: finalKey }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ── Cloudflare Stream: create a direct-upload URL ────────────────────────────
+//
+// POST /stream/upload-url
+// Body: JSON { uid, maxDurationSeconds?, title? }
+// Returns: { uploadURL, streamId }
+//
+// Requires Worker secrets: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
+async function handleStreamUploadUrl(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+    console.error('[Stream] Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN secrets');
+    return new Response(JSON.stringify({ error: 'Stream service not configured' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const uid    = (body.uid || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  const title  = (body.title  || '').slice(0, 255);
+  const maxSec = Math.min(Math.max(parseInt(body.maxDurationSeconds || '10800', 10), 1), 36000);
+
+  if (!uid) {
+    return new Response(JSON.stringify({ error: 'uid is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Expiry: 4 hours from now — plenty of time even for large files on slow connections
+  const expiry = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+
+  const payload = {
+    maxDurationSeconds: maxSec,
+    expiry,
+    creator: uid,
+    meta: title ? { name: title } : {},
+    // Allow the SFL domains to play the video
+    allowedOrigins: ['shadowfirelive.com', '*.shadowfirelive.com', 'shadownexussocial.online', 'localhost'],
+    requireSignedURLs: false,
+  };
+
+  let cfRes;
+  try {
+    cfRes = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream/direct_upload`,
+      {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+  } catch(e) {
+    console.error('[Stream] Cloudflare API fetch error:', e.message);
+    return new Response(JSON.stringify({ error: 'Failed to reach Cloudflare Stream API' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let cfData;
+  try { cfData = await cfRes.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid response from Cloudflare Stream API' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!cfRes.ok || !cfData.success) {
+    const msg = cfData.errors?.[0]?.message || `Cloudflare API error ${cfRes.status}`;
+    console.error('[Stream] Cloudflare API error:', msg);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: cfRes.status >= 500 ? 502 : 400,
+      headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const streamId  = cfData.result.uid;
+  const uploadURL = cfData.result.uploadURL;
+
+  console.log(`[Stream] Direct upload URL created. streamId=${streamId} uid=${uid}`);
+
+  // Return only the info the browser needs — never the API token
+  return new Response(JSON.stringify({ uploadURL, streamId }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ── Cloudflare Stream: check processing status ────────────────────────────────
+//
+// GET /stream/status?id=<streamId>
+// Returns: { status, readyToStream, playbackUrl, thumbnailUrl, duration }
+//
+// Requires Worker secrets: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
+async function handleStreamStatus(request, env, cors, sec) {
+  if (request.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.CLOUDFLARE_API_TOKEN) {
+    return new Response(JSON.stringify({ error: 'Stream service not configured' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const streamId = (new URL(request.url).searchParams.get('id') || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (!streamId) {
+    return new Response(JSON.stringify({ error: 'id is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let cfRes;
+  try {
+    cfRes = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream/${streamId}`,
+      {
+        method:  'GET',
+        headers: { 'Authorization': `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+      }
+    );
+  } catch(e) {
+    return new Response(JSON.stringify({ error: 'Failed to reach Cloudflare Stream API' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let cfData;
+  try { cfData = await cfRes.json(); }
+  catch(e) {
+    return new Response(JSON.stringify({ error: 'Invalid response from Cloudflare Stream API' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!cfRes.ok || !cfData.success) {
+    const msg = cfData.errors?.[0]?.message || `Cloudflare API error ${cfRes.status}`;
+    return new Response(JSON.stringify({ error: msg }), {
+      status: cfRes.ok ? 200 : 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const r = cfData.result;
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+
+  return new Response(JSON.stringify({
+    streamId:     r.uid,
+    status:       r.status?.state  || 'unknown',
+    readyToStream: r.readyToStream  || false,
+    playbackUrl:  r.playback?.hls   || `https://customer-${accountId}.cloudflarestream.com/${r.uid}/manifest/video.m3u8`,
+    dashUrl:      r.playback?.dash  || null,
+    thumbnailUrl: r.thumbnail       || `https://customer-${accountId}.cloudflarestream.com/${r.uid}/thumbnails/thumbnail.jpg`,
+    duration:     r.duration        || null,
+    pctComplete:  r.status?.pctComplete || null,
+    errorReasonCode: r.status?.errorReasonCode || null,
+    errorReasonText: r.status?.errorReasonText || null,
+  }), {
     status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
   });
 }
@@ -437,7 +814,17 @@ export default {
     if (url.pathname === '/livekit-room')  return handleLiveKitRoom(request, env, cors, sec);
     if (url.pathname === '/livekit-token') return handleLiveKitToken(request, env, cors, sec);
 
-    // ── Chunked / resumable upload endpoints ──
+    // ── Cloudflare Stream endpoints ──
+    if (url.pathname === '/stream/upload-url') return handleStreamUploadUrl(request, env, cors, sec);
+    if (url.pathname === '/stream/status')     return handleStreamStatus(request, env, cors, sec);
+
+    // ── R2 Multipart Upload endpoints (video) ──
+    if (url.pathname === '/mpu/create')   return handleMpuCreate(request, env, cors, sec);
+    if (url.pathname === '/mpu/part')     return handleMpuPart(request, env, cors, sec);
+    if (url.pathname === '/mpu/complete') return handleMpuComplete(request, env, cors, sec);
+    if (url.pathname === '/mpu/abort')    return handleMpuAbort(request, env, cors, sec);
+
+    // ── Legacy chunked upload endpoints (non-video: images, audio) ──
     if (url.pathname === '/upload-chunk')    return handleUploadChunk(request, env, cors, sec);
     if (url.pathname === '/upload-complete') return handleUploadComplete(request, env, cors, sec);
 
@@ -509,7 +896,7 @@ export default {
         });
       }
 
-      const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${reqPath}`;
+      const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${reqPath}`;
       return new Response(JSON.stringify({ url: publicUrl, key: reqPath }), {
         status: 200,
         headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
@@ -651,7 +1038,7 @@ export default {
     }
 
     // ── Return public CDN URL (stored in Firebase, served via Cloudflare CDN) ──
-    const publicUrl = `https://yellow-term-11e6.nthntjrn.workers.dev/${key}`;
+    const publicUrl = `https://pub-e5efe8c515324a8ab89ca15c5fa731dd.r2.dev/${key}`;
     return new Response(JSON.stringify({ url: publicUrl, key }), {
       status: 200,
       headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
