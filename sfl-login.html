@@ -222,7 +222,8 @@ import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12
 import {
   getAuth, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile,
+  browserLocalPersistence, setPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -242,6 +243,10 @@ const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG)
 const auth    = getAuth(app);
 const db      = getFirestore(app);
 const storage = getStorage(app);
+
+// Persist the login session in localStorage so it survives page navigation,
+// PWA restarts, and mobile browser backgrounding.
+setPersistence(auth, browserLocalPersistence).catch(() => {/* already set */});
 
 const $ = id => document.getElementById(id);
 const params   = new URLSearchParams(location.search);

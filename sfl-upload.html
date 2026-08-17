@@ -280,7 +280,7 @@
 
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, onAuthStateChanged }
+import { getAuth, onAuthStateChanged, browserLocalPersistence, setPersistence }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, collection, addDoc, updateDoc, doc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -301,10 +301,17 @@ const auth    = getAuth(app);
 const db      = getFirestore(app);
 const storage = getStorage(app);
 
-// ── Dev logging (safe — no credentials exposed) ──────────────────────────────
+// ── Ensure session survives navigation / PWA restarts ─────────────────────────
+setPersistence(auth, browserLocalPersistence).catch(() => {/* already set */});
+
+// ── Dev logging (safe — no credentials, tokens, or keys exposed) ──────────────
 function log(tag, data) {
   console.log(`[SFL_UPLOAD] ${tag}`, data !== undefined ? data : '');
 }
+
+// ── Log project identity once on load so mismatches are obvious ───────────────
+log('FIREBASE_PROJECT', FIREBASE_CONFIG.projectId);
+log('FIREBASE_STORAGE_BUCKET', FIREBASE_CONFIG.storageBucket);
 
 const $ = id => document.getElementById(id);
 const toast = (msg, dur=3500) => {
@@ -327,11 +334,14 @@ function hideError() {
 }
 
 // ── Categorise Firebase Storage / Firestore errors ───────────────────────────
+// Differentiate between auth problems, rules rejections, and network issues
+// so the user sees a meaningful message and doesn't loop endlessly through login.
 function describeError(err) {
   if (!err) return 'Unknown error.';
   const code = err.code || '';
+  // ── Storage errors ──
   if (code === 'storage/unauthorized' || code === 'storage/unauthenticated')
-    return 'Permission denied. Make sure you are signed in.';
+    return 'Storage access denied. Make sure you are signed in with a full account.';
   if (code === 'storage/quota-exceeded')
     return 'Storage quota exceeded. Please contact support.';
   if (code === 'storage/invalid-checksum')
@@ -344,15 +354,30 @@ function describeError(err) {
     return 'Network too slow or unstable. Check your connection and retry.';
   if (code === 'storage/invalid-argument')
     return 'Invalid file. Please select a valid video file.';
-  if (code === 'permission-denied')
-    return 'Firestore permission denied. Please sign in again.';
-  if (err.message && err.message.includes('network'))
+  // ── Firestore errors ──
+  // "permission-denied" does NOT always mean "sign in again" — the user may be
+  // signed in and the Firestore rules just rejected the specific operation.
+  if (code === 'permission-denied') {
+    if (!_user) {
+      return 'Your session has expired. Please sign in again.';
+    }
+    return 'Your account is signed in, but this action was rejected by the server. '
+      + 'This may be a temporary issue — please try again or contact support.';
+  }
+  if (code === 'unauthenticated')
+    return 'Your session has expired. Please sign in again.';
+  if (code === 'network-request-failed' || (err.message && err.message.includes('network')))
     return 'Network failure. Check your connection and retry.';
+  if (code === 'resource-exhausted')
+    return 'Service temporarily busy. Please wait a moment and try again.';
+  if (code === 'invalid-argument')
+    return 'Invalid data submitted. Please check your inputs and try again.';
   return err.message || String(err);
 }
 
-let _user     = null;
-let _userData = null;
+let _user        = null;
+let _userData    = null;
+let _authLoading = true;   // true until onAuthStateChanged fires for the first time
 let _videoFile = null;
 let _thumbFile = null;
 let _tags      = [];
@@ -366,10 +391,25 @@ let _lastBytesTransferred = 0;
 let _lastProgressAt   = 0;
 const STALL_THRESHOLD_MS = 30000; // 30 s without progress = stalled
 
-// ── Auth gate ─────────────────────────────────────────────────────────────────
+// ── Auth gate — wait for Firebase to finish restoring the session ─────────────
+// onAuthStateChanged fires once when the SDK finishes initialising (resolved or
+// not).  Until that first callback arrives, _authLoading stays true and Publish
+// is blocked so we never fire a Firestore write before auth is confirmed.
 onAuthStateChanged(auth, async u => {
+  _authLoading = false;
   _user = u;
-  if (!u) { $('authGate').classList.remove('sfl-hidden'); return; }
+
+  log('AUTH_STATE_CHANGED', {
+    signedIn:   !!u,
+    uid:        u?.uid ?? null,
+    provider:   u?.providerData?.[0]?.providerId ?? null,
+    isAnonymous: u?.isAnonymous ?? null,
+  });
+
+  if (!u) {
+    $('authGate').classList.remove('sfl-hidden');
+    return;
+  }
   $('authGate').classList.add('sfl-hidden');
   try {
     const { getDoc, doc: fsDoc } = await import(
@@ -377,7 +417,7 @@ onAuthStateChanged(auth, async u => {
     );
     const snap = await getDoc(fsDoc(db, 'users', u.uid));
     if (snap.exists()) _userData = snap.data();
-  } catch(e) { /* non-critical */ }
+  } catch(e) { /* non-critical — upload can proceed without profile data */ }
 });
 
 // ── Drag & drop / file pick ───────────────────────────────────────────────────
@@ -545,25 +585,57 @@ function setProgress(pct, label) {
 // ── Publish ───────────────────────────────────────────────────────────────────
 $('publishBtn').addEventListener('click', async () => {
   if (_isUploading) return;  // Prevent double-submit
-  if (!_user) { toast('Sign in to upload.'); return; }
+
+  // ── Auth guard: block if Firebase hasn't finished restoring the session ────
+  if (_authLoading) {
+    toast('Still loading your session — please wait a moment and try again.');
+    return;
+  }
+
+  // ── Verify auth.currentUser directly (belt-and-suspenders) ─────────────────
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    log('PUBLISH_BLOCKED', { reason: 'no_authenticated_user', _user_cached: !!_user });
+    toast('Your session has expired. Please sign in again.');
+    $('authGate').classList.remove('sfl-hidden');
+    return;
+  }
+
   if (!_videoFile) { toast('Please select a video.'); return; }
   const title = $('videoTitle').value.trim();
   if (!title) { toast('Please enter a title.'); $('videoTitle').focus(); return; }
+
+  // ── Use auth.currentUser.uid — never trust a stale cached value ────────────
+  const uid = currentUser.uid;
+
+  log('PUBLISH_INITIATED', {
+    projectId:  FIREBASE_CONFIG.projectId,
+    uid,
+    collection: 'videos',
+    provider:   currentUser.providerData?.[0]?.providerId ?? null,
+    isAnonymous: currentUser.isAnonymous,
+  });
 
   setUploading(true);
   hideError();
   $('progressWrap').classList.remove('sfl-hidden');
   setProgress(0, 'Starting upload…');
 
-  const uid = _user.uid;
   const videoId = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
   const ext = (_videoFile.name.split('.').pop() || 'mp4').toLowerCase();
   const vidPath = `videos/${uid}/${videoId}/video.${ext}`;
 
-  log('UPLOAD_STARTED', { fileName: _videoFile.name, fileSize: _videoFile.size, path: vidPath });
+  log('UPLOAD_STARTED', {
+    fileName:   _videoFile.name,
+    fileSize:   _videoFile.size,
+    storagePath: vidPath,
+    firestoreCollection: 'videos',
+    creatorId:  uid,
+  });
 
   // ── Create the Firestore doc immediately with status "uploading" ──────────
   // This doc acts as a lock preventing duplicate submissions.
+  // creatorId is set to auth.currentUser.uid — the Firestore rule validates this.
   let docRef;
   try {
     docRef = await addDoc(collection(db, 'videos'), {
@@ -587,9 +659,21 @@ $('publishBtn').addEventListener('click', async () => {
       status:        'uploading',   // lifecycle: uploading → processing → ready | failed
       processingStatus: 'pending',
     });
-    log('FIRESTORE_DOCUMENT_CREATED', { docId: docRef.id, status: 'uploading' });
+    log('FIRESTORE_DOCUMENT_CREATED', {
+      docId:      docRef.id,
+      collection: 'videos',
+      status:     'uploading',
+      creatorId:  uid,
+    });
   } catch (e) {
-    log('UPLOAD_FAILED', { stage: 'firestore_create', error: e.code || e.message });
+    log('UPLOAD_FAILED', {
+      stage:     'firestore_create',
+      errorCode: e.code,
+      errorMsg:  e.message,
+      uid,
+      collection: 'videos',
+      authCurrentUser: auth.currentUser?.uid ?? null,
+    });
     showError(describeError(e));
     setUploading(false);
     return;
@@ -635,11 +719,17 @@ $('publishBtn').addEventListener('click', async () => {
       );
     });
   } catch (storageErr) {
-    log('UPLOAD_FAILED', { stage: 'storage', error: storageErr.code || storageErr.message });
+    log('UPLOAD_FAILED', {
+      stage:     'storage',
+      errorCode: storageErr.code,
+      errorMsg:  storageErr.message,
+      storagePath: vidPath,
+    });
     const errMsg = describeError(storageErr);
     showError(errMsg);
     setUploading(false);
-    // Mark the Firestore doc as failed — do not delete; the storage file may have been uploaded
+    // Mark the Firestore doc as failed — do NOT delete; the Storage file may have
+    // been partially or fully uploaded and can be retried.
     try {
       await updateDoc(docRef, { status: 'failed', updatedAt: serverTimestamp() });
     } catch (_) { /* non-critical */ }
@@ -682,12 +772,21 @@ $('publishBtn').addEventListener('click', async () => {
     });
     log('VIDEO_READY', { docId: docRef.id, videoUrl: videoUrl.substring(0, 80) + '…' });
   } catch (firestoreErr) {
-    log('UPLOAD_FAILED', { stage: 'firestore_update', error: firestoreErr.code || firestoreErr.message });
-    // Storage file was uploaded successfully — do not delete it.
-    // Tell the user what went wrong so they can retry or report it.
+    log('UPLOAD_FAILED', {
+      stage:     'firestore_update',
+      errorCode: firestoreErr.code,
+      errorMsg:  firestoreErr.message,
+      docId:     docRef?.id,
+      storagePath: vidPath,
+      videoUrl:  videoUrl ? videoUrl.substring(0, 80) + '…' : null,
+      authCurrentUser: auth.currentUser?.uid ?? null,
+    });
+    // Storage upload succeeded — do NOT delete the file.
+    // Keep storagePath + downloadURL available; the metadata write can be retried.
     showError(
-      'Video uploaded, but could not save to feed: ' + describeError(firestoreErr) +
-      ' — your video is stored and will appear once this is resolved.'
+      'Video uploaded successfully, but could not save to the feed: '
+      + describeError(firestoreErr)
+      + ' — your video file is safe and will appear once this is resolved.'
     );
     setUploading(false);
     return;
