@@ -595,15 +595,18 @@ async function loadVideos(tab, category) {
       q = query(videosRef,
         where('creatorId','in', batch),
         where('visibility','==','public'),
+        where('status','==','ready'),
         orderBy('createdAt','desc'), limit(30));
     } else if (tab === 'trending') {
       q = query(videosRef,
         where('visibility','==','public'),
+        where('status','==','ready'),
         orderBy('views','desc'), limit(40));
     } else {
       // Recommended (newest public)
       q = query(videosRef,
         where('visibility','==','public'),
+        where('status','==','ready'),
         orderBy('createdAt','desc'), limit(40));
     }
 

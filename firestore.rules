@@ -715,18 +715,23 @@ service cloud.firestore {
     // ══════════════════════════════════════════════════════════
 
     // /videos/{videoId}  — uploaded video metadata
+    //
+    // status field lifecycle: "uploading" → "processing" → "ready" | "failed"
+    // Feed queries filter where status == "ready".
     match /videos/{videoId} {
-      // Public videos: anyone can read; private/followers: only creator
+      // Public videos readable by anyone; followers-only by signed-in followers; private by creator
       allow read: if resource.data.visibility == 'public'
         || isOwner(resource.data.creatorId)
         || (resource.data.visibility == 'followers'
             && isSignedIn()
             && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.creatorId)).data.followers);
-      // Only signed-in non-anonymous users can create
+      // Only signed-in non-anonymous users can create; creatorId must match caller's uid
       allow create: if isSignedIn()
-        && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
         && request.resource.data.creatorId == request.auth.uid;
-      // Creator can update their own video; allow view/like/comment counter increments
+      // Creator can update their own video (including status transitions);
+      // moderators can update any video;
+      // any signed-in user can increment social counters only.
       allow update: if isOwner(resource.data.creatorId)
         || isModerator()
         || (isSignedIn()
