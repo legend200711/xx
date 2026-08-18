@@ -860,7 +860,7 @@ import {
 import { getFirestore, doc, getDoc, updateDoc, setDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
@@ -1279,34 +1279,62 @@ function blobToDataURL(blob) {
 }
 
 /**
- * Upload an image blob to Firebase Storage.
- * Returns the download URL.
- * Throws with .code set to 'storage/bucket-not-found' or similar on failure.
+ * Upload an image blob to Firebase Storage using uploadBytesResumable so
+ * we get real transfer-progress events.  The onProgress callback receives
+ * a value in [0, 1] reflecting bytes transferred / bytes total.
+ * Returns the download URL when the upload is fully complete.
  */
-async function uploadToStorage(blob, path) {
-  const ref  = storageRef(storage, path);
-  const snap = await uploadBytes(ref, blob, { contentType: 'image/jpeg' });
-  return await getDownloadURL(snap.ref);
+function uploadToStorage(blob, path, onProgress) {
+  return new Promise((resolve, reject) => {
+    const ref  = storageRef(storage, path);
+    const task = uploadBytesResumable(ref, blob, { contentType: 'image/jpeg' });
+
+    task.on('state_changed',
+      snapshot => {
+        const ratio = snapshot.bytesTransferred / snapshot.totalBytes;
+        if (onProgress) onProgress(ratio);
+      },
+      err => {
+        console.error('[Storage] upload error:', err.code, err.message);
+        reject(err);
+      },
+      async () => {
+        // Upload is complete — now get the download URL
+        try {
+          const url = await getDownloadURL(task.snapshot.ref);
+          resolve(url);
+        } catch (urlErr) {
+          console.error('[Storage] getDownloadURL error:', urlErr.code, urlErr.message);
+          reject(Object.assign(urlErr, { code: urlErr.code || 'storage/url-failed' }));
+        }
+      }
+    );
+  });
 }
 
 /**
- * Master image upload function:
- * 1. Compress the image
- * 2. Try Firebase Storage (uploadBytes — simpler than resumable, no XHR chunk issues)
- * 3. If Storage fails → store the compressed image as base64 data URL in Firestore (free fallback)
+ * Master image upload function.
  *
- * @param {File}         file      - original file from input
- * @param {number}       maxW
- * @param {number}       maxH
- * @param {number}       quality   - JPEG quality 0-1
- * @param {string}       storagePath - Firebase Storage path
- * @param {object}       ui        - { progressWrap, progressBar, progressLabel, saveBtn, stages[] }
+ * Stages visible in the UI:
+ *   0 — Preparing image   (compression)
+ *   1 — Uploading          (Firebase Storage transfer, real %)
+ *   2 — Finalizing         (getDownloadURL, returned here)
+ *   3 — Saving profile     (Firestore update — handled by the caller)
+ *
+ * Returns the download URL.  The caller is responsible for the Firestore
+ * write and for showing stage 3 / 100%.
+ *
+ * @param {File}   file
+ * @param {number} maxW
+ * @param {number} maxH
+ * @param {number} quality   JPEG quality 0–1
+ * @param {string} storagePath
+ * @param {object} ui  { progressWrap, progressBar, progressLabel, saveBtn, stages[] }
  */
 async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
   const { progressWrap, progressBar, progressLabel, saveBtn, stages } = ui;
 
-  // Helper: set a stage
-  function setStage(n, state) { // state: 'active' | 'done'
+  function setStage(n, state) {
     stages.forEach((s, i) => {
       s.classList.toggle('active', i === n && state === 'active');
       s.classList.toggle('done',   i <= n && state === 'done');
@@ -1324,65 +1352,66 @@ async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
   setStage(0, 'active');
   setProgress(5, 'Preparing image…');
 
-  // ── Stage 1: Compress ────────────────────────────────────────────────────
+  // ── Stage 0: Compress ────────────────────────────────────────────────────
   let compressed;
   try {
     compressed = await resizeImage(file, maxW, maxH, quality);
-    setStage(0, 'done');
-    setStage(1, 'active');
-    setProgress(25, 'Uploading…');
   } catch(e) {
     throw Object.assign(new Error('Image compression failed'), { code: 'compress/failed', original: e });
   }
+  setStage(0, 'done');
+  setStage(1, 'active');
+  setProgress(20, 'Uploading image…');
 
-  // ── Stage 2: Try Firebase Storage ───────────────────────────────────────
+  // ── Stage 1: Firebase Storage (real progress 20 → 88%) ──────────────────
   let imageUrl = null;
-  let usedStorage = false;
   try {
-    setProgress(35, 'Uploading…');
-    // Animate progress while we wait (uploadBytes gives no events)
-    let fakeProgress = 35;
-    const fakeTimer = setInterval(() => {
-      if (fakeProgress < 85) {
-        fakeProgress += Math.random() * 8;
-        setProgress(Math.min(fakeProgress, 85), `Uploading… ${Math.round(Math.min(fakeProgress, 85))}%`);
-      }
-    }, 250);
-    try {
-      imageUrl = await uploadToStorage(compressed, storagePath);
-    } finally {
-      clearInterval(fakeTimer);
-    }
-    usedStorage = true;
-    setStage(1, 'done');
-    setStage(2, 'active');
-    setProgress(90, 'Saving profile…');
+    imageUrl = await uploadToStorage(compressed, storagePath, ratio => {
+      // Map the real upload ratio (0–1) onto the 20–88% band
+      const pct = 20 + Math.round(ratio * 68);
+      setProgress(pct, `Uploading… ${pct}%`);
+    });
   } catch(storageErr) {
-    console.warn('Firebase Storage upload failed, using Firestore fallback:', storageErr.code || storageErr.message);
+    const isUrlError = storageErr.code === 'storage/url-failed';
+    if (isUrlError) {
+      // Storage succeeded but URL retrieval failed — specific message
+      throw Object.assign(
+        new Error('Upload finished, but we couldn\'t finish saving the image. Please try again.'),
+        { code: 'storage/url-failed', original: storageErr }
+      );
+    }
+    console.warn('[Storage] upload failed, falling back to Firestore data URL:', storageErr.code || storageErr.message);
 
-    // ── Stage 2 fallback: encode as data URL and store in Firestore ─────
-    setStage(1, 'done');
-    setStage(2, 'active');
-    setProgress(75, 'Saving image…');
+    // Fallback: encode as data URL and store in Firestore directly
+    setProgress(75, 'Processing image…');
     try {
       imageUrl = await blobToDataURL(compressed);
     } catch(encErr) {
       throw Object.assign(new Error('Could not process image'), { code: 'encode/failed', original: encErr });
     }
-    setProgress(88, 'Saving profile…');
   }
 
-  // ── Stage 3: Return URL ──────────────────────────────────────────────────
+  // ── Stage 2: Finalizing (URL obtained, hand off to caller) ──────────────
+  setStage(1, 'done');
+  setStage(2, 'active');
+  setProgress(90, 'Finalizing image…');
+
+  // Brief pause so the user sees "Finalizing" before "Saving profile"
+  await new Promise(r => setTimeout(r, 200));
+
   setStage(2, 'done');
   setStage(3, 'active');
   setProgress(95, 'Saving profile…');
+
   return imageUrl;
 }
 
-function storageErrorMsg(code) {
+function storageErrorMsg(code, customMsg) {
+  if (customMsg) return customMsg;
   const map = {
-    'compress/failed':  'Could not compress the image. Please try a JPG or PNG file.',
-    'encode/failed':    'Could not process the image. Please try again.',
+    'compress/failed':              'Could not compress the image. Please try a JPG or PNG file.',
+    'encode/failed':                'Could not process the image. Please try again.',
+    'storage/url-failed':           'Upload finished, but we couldn\'t finish saving the image. Please try again.',
     'storage/unauthorized':         'Permission denied. Please sign in and try again.',
     'storage/canceled':             'Upload cancelled.',
     'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
@@ -1473,8 +1502,26 @@ $('avatarSaveBtn').addEventListener('click', async () => {
       }
     );
 
-    // Save to Firestore
-    await updateDoc(doc(db, 'users', user.uid), { avatar: url });
+    // ── Stage 3: Save URL to Firestore ──────────────────────────────────────
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { avatar: url });
+    } catch(fsErr) {
+      // Storage succeeded — image is uploaded — but Firestore failed.
+      console.error('[Firestore] avatar update error:', fsErr.code, fsErr.message);
+      // Still update local state and thumbnail so the session reflects reality.
+      _userData.avatar = url;
+      const thumb = $('settingsAvatarThumb');
+      thumb.src = url; thumb.style.display = '';
+      stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+      $('avatarProgressBar').style.width = '100%';
+      $('avatarProgressLabel').textContent = '⚠ Saved locally';
+      setMsg('avatarMsg', 'error', 'Image uploaded, but your profile could not be updated. Please try again.');
+      $('avatarSaveBtn').textContent = 'Retry Save';
+      $('avatarSaveBtn').disabled = false;
+      _avatarBusy = false;
+      $('avatarCancelBtn').disabled = false;
+      return;
+    }
     _userData.avatar = url;
 
     // Update thumbnail
@@ -1583,8 +1630,25 @@ $('coverSaveBtn').addEventListener('click', async () => {
       }
     );
 
-    // Save to Firestore
-    await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
+    // ── Stage 3: Save URL to Firestore ──────────────────────────────────────
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
+    } catch(fsErr) {
+      // Storage succeeded — cover is uploaded — but Firestore failed.
+      console.error('[Firestore] cover update error:', fsErr.code, fsErr.message);
+      _userData.coverPhoto = url;
+      const thumb = $('settingsCoverThumb');
+      thumb.src = url; thumb.style.display = '';
+      stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+      $('coverProgressBar').style.width = '100%';
+      $('coverProgressLabel').textContent = '⚠ Saved locally';
+      setMsg('coverMsg', 'error', 'Image uploaded, but your profile could not be updated. Please try again.');
+      $('coverSaveBtn').textContent = 'Retry Save';
+      $('coverSaveBtn').disabled = false;
+      _coverBusy = false;
+      $('coverCancelBtn').disabled = false;
+      return;
+    }
     _userData.coverPhoto = url;
 
     // Update thumbnail
