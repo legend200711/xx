@@ -208,15 +208,23 @@
 }
 .upload-file-btn:hover { background: var(--sfl-bg-hover); }
 .upload-progress-wrap {
-  height: 4px; background: var(--sfl-bg-input);
-  border-radius: 4px; overflow: hidden;
-  margin-top: 10px; display: none;
+  margin-top: 12px; display: none;
+}
+.upload-progress-track {
+  height: 5px; background: rgba(0,140,220,0.18);
+  border-radius: 5px; overflow: hidden;
+  margin-bottom: 6px;
 }
 .upload-progress-bar {
   height: 100%; width: 0;
-  background: var(--sfl-blue);
-  border-radius: 4px;
-  transition: width 0.2s;
+  background: linear-gradient(90deg, var(--sfl-blue-dim), var(--sfl-blue), var(--sfl-blue-bright));
+  border-radius: 5px;
+  transition: width 0.25s ease;
+}
+.upload-progress-label {
+  font-size: 11px; color: var(--sfl-blue);
+  font-weight: 600; text-align: center;
+  letter-spacing: 0.3px;
 }
 /* Thumbnail shown in the Account settings row */
 .settings-avatar-thumb {
@@ -231,6 +239,23 @@
   object-fit: cover;
   border: 2px solid var(--sfl-border);
   flex-shrink: 0;
+}
+
+/* ── Force dark theme on all form controls inside modals ── */
+.acct-modal select,
+.acct-modal option {
+  background: var(--sfl-bg-input);
+  color: var(--sfl-text);
+  border-color: var(--sfl-border);
+}
+/* Override browser autofill white background */
+.acct-modal .sfl-input:-webkit-autofill,
+.acct-modal .sfl-input:-webkit-autofill:hover,
+.acct-modal .sfl-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--sfl-bg-input) inset !important;
+  -webkit-text-fill-color: var(--sfl-text) !important;
+  border-color: var(--sfl-border) !important;
+  caret-color: var(--sfl-text);
 }
 </style>
 </head>
@@ -720,7 +745,10 @@
     <label for="avatarFileInput" class="upload-file-btn">📁 Choose Photo</label>
 
     <div class="upload-progress-wrap" id="avatarProgressWrap">
-      <div class="upload-progress-bar" id="avatarProgressBar"></div>
+      <div class="upload-progress-track">
+        <div class="upload-progress-bar" id="avatarProgressBar"></div>
+      </div>
+      <div class="upload-progress-label" id="avatarProgressLabel">Uploading… 0%</div>
     </div>
 
     <div class="acct-msg" id="avatarMsg"></div>
@@ -749,7 +777,10 @@
     <label for="coverFileInput" class="upload-file-btn">📁 Choose Photo</label>
 
     <div class="upload-progress-wrap" id="coverProgressWrap">
-      <div class="upload-progress-bar" id="coverProgressBar"></div>
+      <div class="upload-progress-track">
+        <div class="upload-progress-bar" id="coverProgressBar"></div>
+      </div>
+      <div class="upload-progress-label" id="coverProgressLabel">Uploading… 0%</div>
     </div>
 
     <div class="acct-msg" id="coverMsg"></div>
@@ -1165,40 +1196,99 @@ $('signOutBtn').addEventListener('click', async () => {
 });
 
 /* ════════════════════════════════════════
-   Image upload helper
+   Image helpers — compression & upload
    ════════════════════════════════════════ */
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 /**
- * Upload a file to Firebase Storage with progress.
- * @param {File}   file       - the File object
- * @param {string} storagePath - e.g. "profile-images/uid/avatar.jpg"
- * @param {HTMLElement} progressBar - the .upload-progress-bar element
- * @param {HTMLElement} progressWrap - the .upload-progress-wrap element
- * @returns {Promise<string>} download URL
+ * Resize + compress an image file client-side using a canvas.
+ * Returns a Promise<Blob> of a JPEG at the requested quality.
+ *
+ * @param {File}   file      - original image file
+ * @param {number} maxW      - maximum output width  (px)
+ * @param {number} maxH      - maximum output height (px)
+ * @param {number} quality   - JPEG quality 0–1 (default 0.85)
  */
-function uploadImageWithProgress(file, storagePath, progressBar, progressWrap) {
+function resizeAndCompress(file, maxW, maxH, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Compute scaled dimensions keeping aspect ratio
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > maxW || h > maxH) {
+        const scale = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')),
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}
+
+/**
+ * Upload a Blob/File to Firebase Storage with live progress.
+ * Updates both the progress bar width AND a text label showing "Uploading… X%"
+ * or "Upload Complete" on success.
+ *
+ * @param {Blob}        blob         - the data to upload
+ * @param {string}      storagePath  - e.g. "profile-images/uid/avatar.jpg"
+ * @param {HTMLElement} progressBar  - .upload-progress-bar element
+ * @param {HTMLElement} progressWrap - .upload-progress-wrap wrapper
+ * @param {HTMLElement} [label]      - optional .upload-progress-label element
+ * @param {HTMLElement} [saveBtn]    - optional save button (text updated live)
+ * @returns {Promise<string>} Firebase Storage download URL
+ */
+function uploadWithProgress(blob, storagePath, progressBar, progressWrap, label, saveBtn) {
   return new Promise((resolve, reject) => {
     const fileRef = storageRef(storage, storagePath);
-    const task    = uploadBytesResumable(fileRef, file, { contentType: file.type });
+    const task    = uploadBytesResumable(fileRef, blob, { contentType: 'image/jpeg' });
 
     progressWrap.style.display = '';
-    progressBar.style.width = '0%';
+    progressBar.style.width    = '0%';
+    if (label)   label.textContent   = 'Uploading… 0%';
+    if (saveBtn) saveBtn.textContent = 'Uploading… 0%';
 
-    task.on('state_changed',
+    task.on(
+      'state_changed',
       snap => {
-        const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+        const pct = snap.totalBytes
+          ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
+          : 0;
         progressBar.style.width = pct + '%';
+        if (label)   label.textContent   = `Uploading… ${pct}%`;
+        if (saveBtn) saveBtn.textContent = `Uploading… ${pct}%`;
       },
       err => {
         progressWrap.style.display = 'none';
         reject(err);
       },
       async () => {
-        progressWrap.style.display = 'none';
-        const url = await getDownloadURL(task.snapshot.ref);
-        resolve(url);
+        progressBar.style.width = '100%';
+        if (label)   label.textContent   = '✓ Upload Complete';
+        if (saveBtn) saveBtn.textContent = 'Upload Complete';
+        try {
+          const url = await getDownloadURL(task.snapshot.ref);
+          resolve(url);
+        } catch(e) {
+          reject(e);
+        } finally {
+          // Hide progress bar after a short success pause
+          setTimeout(() => { progressWrap.style.display = 'none'; }, 1200);
+        }
       }
     );
   });
@@ -1210,29 +1300,46 @@ function validateImageFile(file, msgId) {
     setMsg(msgId, 'error', 'Please choose a JPG, PNG, or WEBP image.');
     return false;
   }
-  if (file.size > MAX_IMAGE_BYTES) {
-    setMsg(msgId, 'error', 'Image is too large. Maximum size is 10 MB.');
+  // 50 MB raw pre-compression limit — we will compress it down before uploading
+  if (file.size > 50 * 1024 * 1024) {
+    setMsg(msgId, 'error', 'Image is too large. Maximum 50 MB before compression.');
     return false;
   }
   return true;
+}
+
+/* ── Storage error messages ── */
+function storageErrorMsg(code) {
+  const map = {
+    'storage/unauthorized':         'Permission denied. Please sign in and try again.',
+    'storage/canceled':             'Upload cancelled.',
+    'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
+    'storage/unauthenticated':      'You must be signed in to upload images.',
+    'storage/retry-limit-exceeded': 'Upload failed — check your connection and tap Retry.',
+    'storage/invalid-format':       'Invalid file format.',
+    'storage/object-not-found':     'Upload failed. Please try again.',
+    'storage/unknown':              'Upload failed — check your connection and tap Retry.',
+  };
+  return map[code] || `Upload failed (${code || 'unknown'}). Tap Save Photo to retry.`;
 }
 
 /* ════════════════════════════════════════
    Profile Picture Upload
    ════════════════════════════════════════ */
 let _avatarFile = null;
+let _avatarUploading = false;
 
 function openAvatarModal() {
-  const user = auth.currentUser;
   _avatarFile = null;
   setMsg('avatarMsg', '');
   $('avatarSaveBtn').disabled = true;
+  $('avatarSaveBtn').textContent = 'Save Photo';
   $('avatarProgressWrap').style.display = 'none';
   $('avatarProgressBar').style.width = '0%';
   // Pre-fill preview with existing avatar if any
-  const existingAvatar = $('settingsAvatarThumb').src;
-  if (existingAvatar && $('settingsAvatarThumb').style.display !== 'none') {
-    $('avatarPreviewImg').src = existingAvatar;
+  const thumb = $('settingsAvatarThumb');
+  if (thumb.src && thumb.style.display !== 'none') {
+    $('avatarPreviewImg').src = thumb.src;
     $('avatarPreviewImg').style.display = '';
     $('avatarPreviewPlaceholder').style.display = 'none';
   } else {
@@ -1241,15 +1348,18 @@ function openAvatarModal() {
   }
   $('avatarOverlay').style.display = 'flex';
 }
-function closeAvatarModal() { $('avatarOverlay').style.display = 'none'; _avatarFile = null; }
+function closeAvatarModal() {
+  if (_avatarUploading) return; // Don't close during an active upload
+  $('avatarOverlay').style.display = 'none';
+  _avatarFile = null;
+}
 
 $('btnEditAvatar').addEventListener('click', openAvatarModal);
 $('avatarClose').addEventListener('click', closeAvatarModal);
 $('avatarCancelBtn').addEventListener('click', closeAvatarModal);
 $('avatarOverlay').addEventListener('click', e => { if (e.target === $('avatarOverlay')) closeAvatarModal(); });
-// Click on the placeholder also triggers the file picker
-$('avatarPreviewPlaceholder').addEventListener('click', () => $('avatarFileInput').click());
-$('avatarPreviewPlaceholder').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') $('avatarFileInput').click(); });
+$('avatarPreviewPlaceholder').addEventListener('click', () => { if (!_avatarUploading) $('avatarFileInput').click(); });
+$('avatarPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_avatarUploading) $('avatarFileInput').click(); });
 
 $('avatarFileInput').addEventListener('change', () => {
   const file = $('avatarFileInput').files[0];
@@ -1257,7 +1367,8 @@ $('avatarFileInput').addEventListener('change', () => {
   setMsg('avatarMsg', '');
   if (!validateImageFile(file, 'avatarMsg')) { $('avatarFileInput').value = ''; return; }
   _avatarFile = file;
-  // Show local preview
+
+  // Show immediate local preview (full resolution is fine for preview)
   const reader = new FileReader();
   reader.onload = ev => {
     $('avatarPreviewImg').src = ev.target.result;
@@ -1271,25 +1382,30 @@ $('avatarFileInput').addEventListener('change', () => {
 
 $('avatarSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user || !_avatarFile) return;
+  if (!user || !_avatarFile || _avatarUploading) return;
 
+  _avatarUploading = true;
   $('avatarSaveBtn').disabled = true;
-  $('avatarSaveBtn').textContent = 'Uploading…';
+  $('avatarSaveBtn').textContent = 'Compressing…';
+  $('avatarCancelBtn').disabled = true;
   setMsg('avatarMsg', '');
 
   try {
-    // Use a fixed filename so replacing overwrites the same Storage object
-    const ext  = _avatarFile.type === 'image/png' ? 'png' : _avatarFile.type === 'image/webp' ? 'webp' : 'jpg';
-    const path = `profile-images/${user.uid}/avatar.${ext}`;
-    const url  = await uploadImageWithProgress(
-      _avatarFile, path,
-      $('avatarProgressBar'), $('avatarProgressWrap')
+    // ── 1. Compress client-side: 400×400 max, JPEG 85% ──────────────────
+    const compressed = await resizeAndCompress(_avatarFile, 400, 400, 0.85);
+
+    // ── 2. Upload to Firebase Storage (always .jpg after compression) ────
+    const path = `profile-images/${user.uid}/avatar.jpg`;
+    const url  = await uploadWithProgress(
+      compressed, path,
+      $('avatarProgressBar'), $('avatarProgressWrap'),
+      $('avatarProgressLabel'), $('avatarSaveBtn')
     );
 
-    // Save to Firestore profile doc
+    // ── 3. Persist URL to Firestore ─────────────────────────────────────
     await updateDoc(doc(db, 'users', user.uid), { avatar: url });
 
-    // Update the thumbnail in settings row
+    // ── 4. Update settings-row thumbnail ────────────────────────────────
     const thumb = $('settingsAvatarThumb');
     thumb.src = url; thumb.style.display = '';
 
@@ -1297,10 +1413,17 @@ $('avatarSaveBtn').addEventListener('click', async () => {
     toast('📷 Profile picture updated!', 3500);
   } catch(e) {
     console.error('Avatar upload error:', e);
-    setMsg('avatarMsg', 'error', storageErrorMsg(e.code));
+    const msg = storageErrorMsg(e.code);
+    setMsg('avatarMsg', 'error', msg);
+    $('avatarSaveBtn').textContent = 'Retry Upload';
+    $('avatarSaveBtn').disabled = false; // Re-enable so user can retry
   } finally {
-    $('avatarSaveBtn').disabled = false;
-    $('avatarSaveBtn').textContent = 'Save Photo';
+    _avatarUploading = false;
+    $('avatarCancelBtn').disabled = false;
+    // Only reset button text if not already set to Retry
+    if ($('avatarSaveBtn').textContent === 'Upload Complete') {
+      $('avatarSaveBtn').textContent = 'Save Photo';
+    }
   }
 });
 
@@ -1308,17 +1431,19 @@ $('avatarSaveBtn').addEventListener('click', async () => {
    Cover Photo Upload
    ════════════════════════════════════════ */
 let _coverFile = null;
+let _coverUploading = false;
 
 function openCoverModal() {
   _coverFile = null;
   setMsg('coverMsg', '');
   $('coverSaveBtn').disabled = true;
+  $('coverSaveBtn').textContent = 'Save Photo';
   $('coverProgressWrap').style.display = 'none';
   $('coverProgressBar').style.width = '0%';
   // Pre-fill preview with existing cover if any
-  const existingCover = $('settingsCoverThumb').src;
-  if (existingCover && $('settingsCoverThumb').style.display !== 'none') {
-    $('coverPreviewImg').src = existingCover;
+  const thumb = $('settingsCoverThumb');
+  if (thumb.src && thumb.style.display !== 'none') {
+    $('coverPreviewImg').src = thumb.src;
     $('coverPreviewImg').style.display = '';
     $('coverPreviewPlaceholder').style.display = 'none';
   } else {
@@ -1327,15 +1452,18 @@ function openCoverModal() {
   }
   $('coverOverlay').style.display = 'flex';
 }
-function closeCoverModal() { $('coverOverlay').style.display = 'none'; _coverFile = null; }
+function closeCoverModal() {
+  if (_coverUploading) return; // Don't close during active upload
+  $('coverOverlay').style.display = 'none';
+  _coverFile = null;
+}
 
 $('btnEditCover').addEventListener('click', openCoverModal);
 $('coverClose').addEventListener('click', closeCoverModal);
 $('coverCancelBtn').addEventListener('click', closeCoverModal);
 $('coverOverlay').addEventListener('click', e => { if (e.target === $('coverOverlay')) closeCoverModal(); });
-// Click on placeholder triggers file picker
-$('coverPreviewPlaceholder').addEventListener('click', () => $('coverFileInput').click());
-$('coverPreviewPlaceholder').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') $('coverFileInput').click(); });
+$('coverPreviewPlaceholder').addEventListener('click', () => { if (!_coverUploading) $('coverFileInput').click(); });
+$('coverPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_coverUploading) $('coverFileInput').click(); });
 
 $('coverFileInput').addEventListener('change', () => {
   const file = $('coverFileInput').files[0];
@@ -1343,7 +1471,8 @@ $('coverFileInput').addEventListener('change', () => {
   setMsg('coverMsg', '');
   if (!validateImageFile(file, 'coverMsg')) { $('coverFileInput').value = ''; return; }
   _coverFile = file;
-  // Show local preview
+
+  // Immediate local preview
   const reader = new FileReader();
   reader.onload = ev => {
     $('coverPreviewImg').src = ev.target.result;
@@ -1357,24 +1486,30 @@ $('coverFileInput').addEventListener('change', () => {
 
 $('coverSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user || !_coverFile) return;
+  if (!user || !_coverFile || _coverUploading) return;
 
+  _coverUploading = true;
   $('coverSaveBtn').disabled = true;
-  $('coverSaveBtn').textContent = 'Uploading…';
+  $('coverSaveBtn').textContent = 'Compressing…';
+  $('coverCancelBtn').disabled = true;
   setMsg('coverMsg', '');
 
   try {
-    const ext  = _coverFile.type === 'image/png' ? 'png' : _coverFile.type === 'image/webp' ? 'webp' : 'jpg';
-    const path = `covers/${user.uid}/cover.${ext}`;
-    const url  = await uploadImageWithProgress(
-      _coverFile, path,
-      $('coverProgressBar'), $('coverProgressWrap')
+    // ── 1. Compress client-side: 1200×400 max, JPEG 82% ─────────────────
+    const compressed = await resizeAndCompress(_coverFile, 1200, 400, 0.82);
+
+    // ── 2. Upload to Firebase Storage ───────────────────────────────────
+    const path = `covers/${user.uid}/cover.jpg`;
+    const url  = await uploadWithProgress(
+      compressed, path,
+      $('coverProgressBar'), $('coverProgressWrap'),
+      $('coverProgressLabel'), $('coverSaveBtn')
     );
 
-    // Save to Firestore profile doc
+    // ── 3. Persist to Firestore ─────────────────────────────────────────
     await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
 
-    // Update thumbnail in settings row
+    // ── 4. Update settings-row thumbnail ────────────────────────────────
     const thumb = $('settingsCoverThumb');
     thumb.src = url; thumb.style.display = '';
 
@@ -1382,32 +1517,26 @@ $('coverSaveBtn').addEventListener('click', async () => {
     toast('🖼️ Cover photo updated!', 3500);
   } catch(e) {
     console.error('Cover upload error:', e);
-    setMsg('coverMsg', 'error', storageErrorMsg(e.code));
-  } finally {
+    const msg = storageErrorMsg(e.code);
+    setMsg('coverMsg', 'error', msg);
+    $('coverSaveBtn').textContent = 'Retry Upload';
     $('coverSaveBtn').disabled = false;
-    $('coverSaveBtn').textContent = 'Save Photo';
+  } finally {
+    _coverUploading = false;
+    $('coverCancelBtn').disabled = false;
+    if ($('coverSaveBtn').textContent === 'Upload Complete') {
+      $('coverSaveBtn').textContent = 'Save Photo';
+    }
   }
 });
 
-/* ── Storage error messages ── */
-function storageErrorMsg(code) {
-  const map = {
-    'storage/unauthorized':     'Permission denied. Please sign in and try again.',
-    'storage/canceled':         'Upload cancelled.',
-    'storage/quota-exceeded':   'Storage quota exceeded. Contact support.',
-    'storage/unauthenticated':  'You must be signed in to upload images.',
-    'storage/retry-limit-exceeded': 'Upload failed after multiple retries. Check your connection.',
-    'storage/invalid-format':   'Invalid file format.',
-  };
-  return map[code] || 'Upload failed. Please try again.';
-}
-
-/* ── Escape key closes any open modal ── */
+/* ── Escape key closes any open modal (respects upload guards) ── */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if ($('reAuthOverlay').style.display  !== 'none') closeReAuth();
   if ($('emailOverlay').style.display   !== 'none') closeEmailModal();
   if ($('pwOverlay').style.display      !== 'none') closePwModal();
+  // closeAvatarModal / closeCoverModal are no-ops while uploading
   if ($('avatarOverlay').style.display  !== 'none') closeAvatarModal();
   if ($('coverOverlay').style.display   !== 'none') closeCoverModal();
 });

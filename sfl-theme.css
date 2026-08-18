@@ -674,14 +674,30 @@ body.sfl-body {
   transition: border-color var(--sfl-t), box-shadow var(--sfl-t);
   outline: none;
   font-family: inherit;
+  /* Prevent iOS/Android from overriding with white backgrounds */
+  -webkit-appearance: none;
+  appearance: none;
 }
 .sfl-input:focus, .sfl-textarea:focus, .sfl-select:focus {
   border-color: var(--sfl-border-hot);
   box-shadow: 0 0 0 3px rgba(0,174,239,0.12);
 }
 .sfl-input::placeholder, .sfl-textarea::placeholder { color: var(--sfl-text-faint); }
-.sfl-textarea { resize: vertical; min-height: 80px; }
-.sfl-select { appearance: none; cursor: pointer; }
+/* Override browser autofill white flash */
+.sfl-input:-webkit-autofill,
+.sfl-input:-webkit-autofill:hover,
+.sfl-input:-webkit-autofill:focus,
+.sfl-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--sfl-bg-input) inset !important;
+  -webkit-text-fill-color: var(--sfl-text) !important;
+  caret-color: var(--sfl-text);
+  border-color: var(--sfl-border) !important;
+  transition: background-color 99999s ease 0s !important; /* block Chrome autofill color */
+}
+.sfl-textarea { resize: vertical; min-height: 80px; -webkit-appearance: none; }
+.sfl-select { cursor: pointer; }
+/* Ensure select option elements use dark background */
+.sfl-select option { background: var(--sfl-bg-input); color: var(--sfl-text); }
 .sfl-label {
   display: block; font-size: 12px; font-weight: 600;
   color: var(--sfl-text-label); margin-bottom: 6px; letter-spacing: 0.3px;
