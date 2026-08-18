@@ -781,8 +781,9 @@
     <img class="upload-avatar-preview" id="avatarPreviewImg" src="" alt="Preview" style="display:none;">
 
     <!-- File input -->
-    <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp,image/gif" capture="user" style="display:none;">
+    <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
     <button class="upload-choose-btn" id="avatarChooseBtn" type="button">📁 Choose Photo</button>
+    <button class="upload-choose-btn" id="avatarRemoveBtn" type="button" style="margin-top:8px; color:#d32f2f; border-color:rgba(211,47,47,0.3); display:none;">🗑️ Remove Profile Picture</button>
 
     <!-- Progress -->
     <div class="upload-progress-wrap" id="avatarProgressWrap">
@@ -1248,13 +1249,31 @@ function resizeImage(file, maxW, maxH, quality = 0.85) {
     img.onload = () => {
       URL.revokeObjectURL(url);
       let w = img.naturalWidth, h = img.naturalHeight;
+      
+      // Cap dimensions early to prevent OOM on large mobile photos
+      const MAX_CANVAS_DIM = 4096;
+      if (w > MAX_CANVAS_DIM || h > MAX_CANVAS_DIM) {
+        const safetyScale = Math.min(MAX_CANVAS_DIM / w, MAX_CANVAS_DIM / h);
+        w = Math.round(w * safetyScale);
+        h = Math.round(h * safetyScale);
+      }
+      
+      // Now resize to target dimensions
       if (w > maxW || h > maxH) {
         const s = Math.min(maxW / w, maxH / h);
-        w = Math.round(w * s); h = Math.round(h * s);
+        w = Math.round(w * s);
+        h = Math.round(h * s);
       }
+      
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
       canvas.toBlob(
         b => b ? resolve(b) : reject(new Error('Canvas compression failed')),
         'image/jpeg', quality
@@ -1289,22 +1308,34 @@ function uploadToStorage(blob, path, onProgress) {
     const ref  = storageRef(storage, path);
     const task = uploadBytesResumable(ref, blob, { contentType: 'image/jpeg' });
 
+    // Safety timeout: if Firebase hangs for >60s, surface an error
+    const timeoutId = setTimeout(() => {
+      console.error('[Storage] Upload timeout after 60s');
+      task.cancel();
+      reject(Object.assign(new Error('Upload timed out'), { code: 'storage/timeout' }));
+    }, 60000);
+
     task.on('state_changed',
       snapshot => {
-        const ratio = snapshot.bytesTransferred / snapshot.totalBytes;
+        // Guard against NaN when totalBytes = 0 (preflight/initial state)
+        const ratio = (snapshot.totalBytes > 0)
+          ? snapshot.bytesTransferred / snapshot.totalBytes
+          : 0;
         if (onProgress) onProgress(ratio);
       },
       err => {
-        console.error('[Storage] upload error:', err.code, err.message);
+        clearTimeout(timeoutId);
+        console.error('[Storage] upload error:', err.code, err.message, err);
         reject(err);
       },
       async () => {
+        clearTimeout(timeoutId);
         // Upload is complete — now get the download URL
         try {
           const url = await getDownloadURL(task.snapshot.ref);
           resolve(url);
         } catch (urlErr) {
-          console.error('[Storage] getDownloadURL error:', urlErr.code, urlErr.message);
+          console.error('[Storage] getDownloadURL error:', urlErr.code, urlErr.message, urlErr);
           reject(Object.assign(urlErr, { code: urlErr.code || 'storage/url-failed' }));
         }
       }
@@ -1414,9 +1445,11 @@ function storageErrorMsg(code, customMsg) {
     'storage/url-failed':           'Upload finished, but we couldn\'t finish saving the image. Please try again.',
     'storage/unauthorized':         'Permission denied. Please sign in and try again.',
     'storage/canceled':             'Upload cancelled.',
+    'storage/timeout':              'Upload took too long. Check your connection and try again.',
     'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
     'storage/unauthenticated':      'You must be signed in to upload images.',
     'storage/retry-limit-exceeded': 'Upload failed — check your connection and tap Retry.',
+    'storage/unknown':              'Upload failed. Check your connection and try again.',
   };
   return map[code] || `Upload failed. Please try again. (${code || 'unknown'})`;
 }
@@ -1435,15 +1468,20 @@ function openAvatarModal() {
   $('avatarSaveBtn').textContent = 'Save Photo';
   $('avatarProgressWrap').style.display = 'none';
   $('avatarProgressBar').style.width = '0%';
+  
   // Show existing avatar or placeholder
   const thumb = $('settingsAvatarThumb');
-  if (thumb.src && thumb.style.display !== 'none') {
+  const hasAvatar = thumb.src && thumb.style.display !== 'none' && !thumb.src.includes('default');
+  
+  if (hasAvatar) {
     $('avatarPreviewImg').src = thumb.src;
     $('avatarPreviewImg').style.display = '';
     $('avatarPlaceholderWrap').style.display = 'none';
+    $('avatarRemoveBtn').style.display = '';  // Show remove button
   } else {
     $('avatarPreviewImg').style.display = 'none';
     $('avatarPlaceholderWrap').style.display = '';
+    $('avatarRemoveBtn').style.display = 'none';  // Hide remove button
   }
   openOverlay('avatarOverlay');
 }
@@ -1463,7 +1501,10 @@ $('avatarPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 
 $('avatarFileInput').addEventListener('change', () => {
   const file = $('avatarFileInput').files[0];
   if (!file) return;
-  if (!VALID_TYPES.includes(file.type)) { setMsg('avatarMsg', 'error', 'Please choose a JPG, PNG, or WEBP image.'); return; }
+  if (!VALID_TYPES.includes(file.type)) {
+    setMsg('avatarMsg', 'error', 'Please choose a JPG, PNG, WEBP, or GIF image.');
+    return;
+  }
   _avatarFile = file;
   // Immediate local preview
   const reader = new FileReader();
@@ -1473,18 +1514,64 @@ $('avatarFileInput').addEventListener('change', () => {
     $('avatarPlaceholderWrap').style.display = 'none';
     setMsg('avatarMsg', '');
   };
+  reader.onerror = () => {
+    setMsg('avatarMsg', 'error', 'Could not read the image file. Please try another.');
+  };
   reader.readAsDataURL(file);
   $('avatarSaveBtn').disabled = false;
+  $('avatarRemoveBtn').style.display = 'none';  // Hide remove when new file selected
   setMsg('avatarMsg', 'success', '✓ Photo selected. Tap Save Photo to upload.');
+});
+
+// Remove profile picture
+$('avatarRemoveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user || _avatarBusy) return;
+  
+  if (!confirm('Remove your profile picture?')) return;
+  
+  _avatarBusy = true;
+  $('avatarRemoveBtn').disabled = true;
+  setMsg('avatarMsg', '');
+  
+  try {
+    await updateDoc(doc(db, 'users', user.uid), { avatar: null });
+    _userData.avatar = null;
+    
+    const thumb = $('settingsAvatarThumb');
+    thumb.src = '';
+    thumb.style.display = 'none';
+    
+    $('avatarPreviewImg').style.display = 'none';
+    $('avatarPlaceholderWrap').style.display = '';
+    $('avatarRemoveBtn').style.display = 'none';
+    
+    setMsg('avatarMsg', 'success', '✓ Profile picture removed.');
+    setTimeout(() => {
+      closeAvatarModal();
+      toast('Profile picture removed', 2500);
+    }, 800);
+  } catch(err) {
+    console.error('[Firestore] avatar remove error:', err);
+    setMsg('avatarMsg', 'error', 'Could not remove profile picture. Please try again.');
+    $('avatarRemoveBtn').disabled = false;
+  } finally {
+    _avatarBusy = false;
+  }
 });
 
 $('avatarSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user || !_avatarFile || _avatarBusy) return;
+  if (!user) {
+    setMsg('avatarMsg', 'error', 'You must be signed in to upload a profile picture.');
+    return;
+  }
+  if (!_avatarFile || _avatarBusy) return;
 
   _avatarBusy = true;
   $('avatarSaveBtn').disabled = true;
   $('avatarCancelBtn').disabled = true;
+  $('avatarRemoveBtn').disabled = true;
   setMsg('avatarMsg', '');
 
   const stages = [$('avStage1'), $('avStage2'), $('avStage3'), $('avStage4')];
@@ -1539,7 +1626,8 @@ $('avatarSaveBtn').addEventListener('click', async () => {
     }, 700);
   } catch(e) {
     console.error('Avatar upload error:', e);
-    setMsg('avatarMsg', 'error', storageErrorMsg(e.code));
+    const errorMsg = e.message || storageErrorMsg(e.code);
+    setMsg('avatarMsg', 'error', errorMsg);
     $('avatarSaveBtn').textContent = 'Retry Upload';
     $('avatarSaveBtn').disabled = false;
     $('avatarProgressWrap').style.display = 'none';
@@ -1547,6 +1635,7 @@ $('avatarSaveBtn').addEventListener('click', async () => {
   } finally {
     _avatarBusy = false;
     $('avatarCancelBtn').disabled = false;
+    $('avatarRemoveBtn').disabled = false;
   }
 });
 
