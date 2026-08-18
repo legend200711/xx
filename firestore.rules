@@ -77,6 +77,25 @@ service cloud.firestore {
                .hasAny(themeFields);
     }
 
+    // Fields the profile editor is allowed to write when the owner saves their profile.
+    // Protected fields (uid, role, email, followers, following, followerCount,
+    // followingCount, createdAt, isLive, liveRoomId) are intentionally excluded.
+    function isProfileEditUpdate() {
+      let allowed = [
+        'displayName',
+        'username',
+        'bio',
+        'website',
+        'avatar',
+        'coverPhoto',
+        // Canonical aliases — kept for forward compat
+        'profilePhotoURL',
+        'coverPhotoURL',
+        'updatedAt'
+      ];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────────
 
     match /users/{uid} {
@@ -88,6 +107,12 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow delete: if isOwner(uid);
 
+      // Owner can write any field in their own document (profile edits, settings, etc.).
+      // Non-owner signed-in users can only deliver social fields (followers, notifications).
+      // Moderators/founders can update any document for moderation purposes.
+      // IMPORTANT: allow write: if isSignedIn() is intentionally NOT used here — that would
+      // let any user overwrite any profile. The isOwner(uid) rule scopes writes to the
+      // document whose ID matches the authenticated user's UID.
       allow update: if
         isOwner(uid)
         || (isSignedIn() && isDeliveryUpdate() && !touchesThemeFields())
