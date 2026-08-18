@@ -153,6 +153,85 @@
 
 /* Hide main settings when privacy panel is open */
 .settings-main { transition: opacity 0.18s; }
+
+/* ── Image Upload Modals ── */
+.upload-preview-wrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+.upload-preview-avatar {
+  width: 96px; height: 96px; border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--sfl-border-hot);
+  display: block;
+  margin: 0 auto 10px;
+  background: var(--sfl-bg-input);
+}
+.upload-preview-cover {
+  width: 100%; height: 120px;
+  object-fit: cover;
+  border-radius: var(--sfl-r-sm);
+  border: 2px solid var(--sfl-border-hot);
+  display: block;
+  margin-bottom: 10px;
+  background: var(--sfl-bg-input);
+}
+.upload-preview-placeholder {
+  width: 96px; height: 96px; border-radius: 50%;
+  background: var(--sfl-bg-input);
+  border: 2px dashed var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px; margin: 0 auto 10px; cursor: pointer;
+  transition: border-color 0.18s;
+}
+.upload-preview-placeholder:hover { border-color: var(--sfl-blue); }
+.upload-preview-cover-placeholder {
+  width: 100%; height: 100px;
+  background: var(--sfl-bg-input);
+  border: 2px dashed var(--sfl-border);
+  border-radius: var(--sfl-r-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--sfl-text-muted);
+  cursor: pointer; margin-bottom: 10px;
+  transition: border-color 0.18s;
+}
+.upload-preview-cover-placeholder:hover { border-color: var(--sfl-blue); }
+.upload-file-btn {
+  display: block; width: 100%;
+  padding: 10px 14px;
+  background: var(--sfl-bg-input);
+  border: 1px dashed var(--sfl-border-hot);
+  border-radius: var(--sfl-r-sm);
+  color: var(--sfl-blue); font-size: 13px; font-weight: 600;
+  text-align: center; cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+}
+.upload-file-btn:hover { background: var(--sfl-bg-hover); }
+.upload-progress-wrap {
+  height: 4px; background: var(--sfl-bg-input);
+  border-radius: 4px; overflow: hidden;
+  margin-top: 10px; display: none;
+}
+.upload-progress-bar {
+  height: 100%; width: 0;
+  background: var(--sfl-blue);
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+/* Thumbnail shown in the Account settings row */
+.settings-avatar-thumb {
+  width: 38px; height: 38px; border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--sfl-border);
+  flex-shrink: 0;
+}
+.settings-cover-thumb {
+  width: 56px; height: 32px;
+  border-radius: var(--sfl-r-xs);
+  object-fit: cover;
+  border: 2px solid var(--sfl-border);
+  flex-shrink: 0;
+}
 </style>
 </head>
 <body class="sfl-body">
@@ -313,6 +392,26 @@
                 <div class="settings-row-label">Change Password</div>
                 <div class="settings-row-sub">Update your account password</div>
               </div>
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnEditAvatar">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Profile Picture</div>
+                <div class="settings-row-sub">Change your profile photo</div>
+              </div>
+              <img id="settingsAvatarThumb" class="settings-avatar-thumb" src="" alt="" style="display:none;">
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnEditCover">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Cover Photo</div>
+                <div class="settings-row-sub">Change your profile banner</div>
+              </div>
+              <img id="settingsCoverThumb" class="settings-cover-thumb" src="" alt="" style="display:none;">
               <span class="settings-chevron">›</span>
             </button>
           </div>
@@ -603,6 +702,64 @@
   </div>
 </div>
 
+<!-- ── Profile Picture Upload Modal ── -->
+<div class="acct-overlay" id="avatarOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="avatarModalTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="avatarClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="avatarModalTitle">📷 Profile Picture</div>
+    <div class="acct-modal-sub">Choose a photo from your device. JPG, PNG, or WEBP · Max 10 MB.</div>
+
+    <!-- Preview area — click to pick file -->
+    <div class="upload-preview-wrap" id="avatarPreviewWrap">
+      <div class="upload-preview-placeholder" id="avatarPreviewPlaceholder" role="button" tabindex="0" aria-label="Choose profile picture">👤</div>
+      <img class="upload-preview-avatar" id="avatarPreviewImg" src="" alt="Preview" style="display:none;">
+    </div>
+
+    <!-- Hidden file input — accept mobile camera too -->
+    <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
+    <label for="avatarFileInput" class="upload-file-btn">📁 Choose Photo</label>
+
+    <div class="upload-progress-wrap" id="avatarProgressWrap">
+      <div class="upload-progress-bar" id="avatarProgressBar"></div>
+    </div>
+
+    <div class="acct-msg" id="avatarMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="avatarCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="avatarSaveBtn" disabled>Save Photo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Cover Photo Upload Modal ── -->
+<div class="acct-overlay" id="coverOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="coverModalTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="coverClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="coverModalTitle">🖼️ Cover Photo</div>
+    <div class="acct-modal-sub">Choose a banner image. JPG, PNG, or WEBP · Max 10 MB. Best at 1200×400 px.</div>
+
+    <!-- Preview area -->
+    <div class="upload-preview-wrap" id="coverPreviewWrap">
+      <div class="upload-preview-cover-placeholder" id="coverPreviewPlaceholder" role="button" tabindex="0" aria-label="Choose cover photo">🖼️ Tap to choose banner image</div>
+      <img class="upload-preview-cover" id="coverPreviewImg" src="" alt="Preview" style="display:none;">
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="coverFileInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
+    <label for="coverFileInput" class="upload-file-btn">📁 Choose Photo</label>
+
+    <div class="upload-progress-wrap" id="coverProgressWrap">
+      <div class="upload-progress-bar" id="coverProgressBar"></div>
+    </div>
+
+    <div class="acct-msg" id="coverMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="coverCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="coverSaveBtn" disabled>Save Photo</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
@@ -612,6 +769,10 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, updateDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import {
+  getStorage, ref as storageRef,
+  uploadBytesResumable, getDownloadURL, deleteObject
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
   apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
@@ -622,9 +783,10 @@ const FIREBASE_CONFIG = {
   messagingSenderId:'933810617818',
   appId:'1:933810617818:web:efb24f123337dd987c14e3'
 };
-const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const auth = getAuth(app);
-const db   = getFirestore(app);
+const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth    = getAuth(app);
+const db      = getFirestore(app);
+const storage = getStorage(app);
 
 const $ = id => document.getElementById(id);
 const toast = (msg,dur=3000) => {
@@ -723,6 +885,16 @@ onAuthStateChanged(auth, async user => {
     if(Notification.permission === 'granted') {
       $('btnPushNotifs').textContent = '✓ Enabled';
       $('btnPushNotifs').disabled = true;
+    }
+    // Show existing avatar thumbnail
+    if (data.avatar) {
+      const t = $('settingsAvatarThumb');
+      t.src = data.avatar; t.style.display = '';
+    }
+    // Show existing cover thumbnail
+    if (data.coverPhoto) {
+      const t = $('settingsCoverThumb');
+      t.src = data.coverPhoto; t.style.display = '';
     }
   } catch(e) {}
 });
@@ -992,12 +1164,252 @@ $('signOutBtn').addEventListener('click', async () => {
   catch(e) { toast('Error signing out.'); }
 });
 
+/* ════════════════════════════════════════
+   Image upload helper
+   ════════════════════════════════════════ */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+/**
+ * Upload a file to Firebase Storage with progress.
+ * @param {File}   file       - the File object
+ * @param {string} storagePath - e.g. "profile-images/uid/avatar.jpg"
+ * @param {HTMLElement} progressBar - the .upload-progress-bar element
+ * @param {HTMLElement} progressWrap - the .upload-progress-wrap element
+ * @returns {Promise<string>} download URL
+ */
+function uploadImageWithProgress(file, storagePath, progressBar, progressWrap) {
+  return new Promise((resolve, reject) => {
+    const fileRef = storageRef(storage, storagePath);
+    const task    = uploadBytesResumable(fileRef, file, { contentType: file.type });
+
+    progressWrap.style.display = '';
+    progressBar.style.width = '0%';
+
+    task.on('state_changed',
+      snap => {
+        const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+        progressBar.style.width = pct + '%';
+      },
+      err => {
+        progressWrap.style.display = 'none';
+        reject(err);
+      },
+      async () => {
+        progressWrap.style.display = 'none';
+        const url = await getDownloadURL(task.snapshot.ref);
+        resolve(url);
+      }
+    );
+  });
+}
+
+function validateImageFile(file, msgId) {
+  if (!file) return false;
+  if (!VALID_TYPES.includes(file.type)) {
+    setMsg(msgId, 'error', 'Please choose a JPG, PNG, or WEBP image.');
+    return false;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    setMsg(msgId, 'error', 'Image is too large. Maximum size is 10 MB.');
+    return false;
+  }
+  return true;
+}
+
+/* ════════════════════════════════════════
+   Profile Picture Upload
+   ════════════════════════════════════════ */
+let _avatarFile = null;
+
+function openAvatarModal() {
+  const user = auth.currentUser;
+  _avatarFile = null;
+  setMsg('avatarMsg', '');
+  $('avatarSaveBtn').disabled = true;
+  $('avatarProgressWrap').style.display = 'none';
+  $('avatarProgressBar').style.width = '0%';
+  // Pre-fill preview with existing avatar if any
+  const existingAvatar = $('settingsAvatarThumb').src;
+  if (existingAvatar && $('settingsAvatarThumb').style.display !== 'none') {
+    $('avatarPreviewImg').src = existingAvatar;
+    $('avatarPreviewImg').style.display = '';
+    $('avatarPreviewPlaceholder').style.display = 'none';
+  } else {
+    $('avatarPreviewImg').style.display = 'none';
+    $('avatarPreviewPlaceholder').style.display = 'flex';
+  }
+  $('avatarOverlay').style.display = 'flex';
+}
+function closeAvatarModal() { $('avatarOverlay').style.display = 'none'; _avatarFile = null; }
+
+$('btnEditAvatar').addEventListener('click', openAvatarModal);
+$('avatarClose').addEventListener('click', closeAvatarModal);
+$('avatarCancelBtn').addEventListener('click', closeAvatarModal);
+$('avatarOverlay').addEventListener('click', e => { if (e.target === $('avatarOverlay')) closeAvatarModal(); });
+// Click on the placeholder also triggers the file picker
+$('avatarPreviewPlaceholder').addEventListener('click', () => $('avatarFileInput').click());
+$('avatarPreviewPlaceholder').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') $('avatarFileInput').click(); });
+
+$('avatarFileInput').addEventListener('change', () => {
+  const file = $('avatarFileInput').files[0];
+  if (!file) return;
+  setMsg('avatarMsg', '');
+  if (!validateImageFile(file, 'avatarMsg')) { $('avatarFileInput').value = ''; return; }
+  _avatarFile = file;
+  // Show local preview
+  const reader = new FileReader();
+  reader.onload = ev => {
+    $('avatarPreviewImg').src = ev.target.result;
+    $('avatarPreviewImg').style.display = '';
+    $('avatarPreviewPlaceholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+  $('avatarSaveBtn').disabled = false;
+  setMsg('avatarMsg', 'success', '✓ Photo selected — tap "Save Photo" to upload.');
+});
+
+$('avatarSaveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user || !_avatarFile) return;
+
+  $('avatarSaveBtn').disabled = true;
+  $('avatarSaveBtn').textContent = 'Uploading…';
+  setMsg('avatarMsg', '');
+
+  try {
+    // Use a fixed filename so replacing overwrites the same Storage object
+    const ext  = _avatarFile.type === 'image/png' ? 'png' : _avatarFile.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `profile-images/${user.uid}/avatar.${ext}`;
+    const url  = await uploadImageWithProgress(
+      _avatarFile, path,
+      $('avatarProgressBar'), $('avatarProgressWrap')
+    );
+
+    // Save to Firestore profile doc
+    await updateDoc(doc(db, 'users', user.uid), { avatar: url });
+
+    // Update the thumbnail in settings row
+    const thumb = $('settingsAvatarThumb');
+    thumb.src = url; thumb.style.display = '';
+
+    closeAvatarModal();
+    toast('📷 Profile picture updated!', 3500);
+  } catch(e) {
+    console.error('Avatar upload error:', e);
+    setMsg('avatarMsg', 'error', storageErrorMsg(e.code));
+  } finally {
+    $('avatarSaveBtn').disabled = false;
+    $('avatarSaveBtn').textContent = 'Save Photo';
+  }
+});
+
+/* ════════════════════════════════════════
+   Cover Photo Upload
+   ════════════════════════════════════════ */
+let _coverFile = null;
+
+function openCoverModal() {
+  _coverFile = null;
+  setMsg('coverMsg', '');
+  $('coverSaveBtn').disabled = true;
+  $('coverProgressWrap').style.display = 'none';
+  $('coverProgressBar').style.width = '0%';
+  // Pre-fill preview with existing cover if any
+  const existingCover = $('settingsCoverThumb').src;
+  if (existingCover && $('settingsCoverThumb').style.display !== 'none') {
+    $('coverPreviewImg').src = existingCover;
+    $('coverPreviewImg').style.display = '';
+    $('coverPreviewPlaceholder').style.display = 'none';
+  } else {
+    $('coverPreviewImg').style.display = 'none';
+    $('coverPreviewPlaceholder').style.display = 'flex';
+  }
+  $('coverOverlay').style.display = 'flex';
+}
+function closeCoverModal() { $('coverOverlay').style.display = 'none'; _coverFile = null; }
+
+$('btnEditCover').addEventListener('click', openCoverModal);
+$('coverClose').addEventListener('click', closeCoverModal);
+$('coverCancelBtn').addEventListener('click', closeCoverModal);
+$('coverOverlay').addEventListener('click', e => { if (e.target === $('coverOverlay')) closeCoverModal(); });
+// Click on placeholder triggers file picker
+$('coverPreviewPlaceholder').addEventListener('click', () => $('coverFileInput').click());
+$('coverPreviewPlaceholder').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') $('coverFileInput').click(); });
+
+$('coverFileInput').addEventListener('change', () => {
+  const file = $('coverFileInput').files[0];
+  if (!file) return;
+  setMsg('coverMsg', '');
+  if (!validateImageFile(file, 'coverMsg')) { $('coverFileInput').value = ''; return; }
+  _coverFile = file;
+  // Show local preview
+  const reader = new FileReader();
+  reader.onload = ev => {
+    $('coverPreviewImg').src = ev.target.result;
+    $('coverPreviewImg').style.display = '';
+    $('coverPreviewPlaceholder').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+  $('coverSaveBtn').disabled = false;
+  setMsg('coverMsg', 'success', '✓ Photo selected — tap "Save Photo" to upload.');
+});
+
+$('coverSaveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user || !_coverFile) return;
+
+  $('coverSaveBtn').disabled = true;
+  $('coverSaveBtn').textContent = 'Uploading…';
+  setMsg('coverMsg', '');
+
+  try {
+    const ext  = _coverFile.type === 'image/png' ? 'png' : _coverFile.type === 'image/webp' ? 'webp' : 'jpg';
+    const path = `covers/${user.uid}/cover.${ext}`;
+    const url  = await uploadImageWithProgress(
+      _coverFile, path,
+      $('coverProgressBar'), $('coverProgressWrap')
+    );
+
+    // Save to Firestore profile doc
+    await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
+
+    // Update thumbnail in settings row
+    const thumb = $('settingsCoverThumb');
+    thumb.src = url; thumb.style.display = '';
+
+    closeCoverModal();
+    toast('🖼️ Cover photo updated!', 3500);
+  } catch(e) {
+    console.error('Cover upload error:', e);
+    setMsg('coverMsg', 'error', storageErrorMsg(e.code));
+  } finally {
+    $('coverSaveBtn').disabled = false;
+    $('coverSaveBtn').textContent = 'Save Photo';
+  }
+});
+
+/* ── Storage error messages ── */
+function storageErrorMsg(code) {
+  const map = {
+    'storage/unauthorized':     'Permission denied. Please sign in and try again.',
+    'storage/canceled':         'Upload cancelled.',
+    'storage/quota-exceeded':   'Storage quota exceeded. Contact support.',
+    'storage/unauthenticated':  'You must be signed in to upload images.',
+    'storage/retry-limit-exceeded': 'Upload failed after multiple retries. Check your connection.',
+    'storage/invalid-format':   'Invalid file format.',
+  };
+  return map[code] || 'Upload failed. Please try again.';
+}
+
 /* ── Escape key closes any open modal ── */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if ($('reAuthOverlay').style.display  !== 'none') closeReAuth();
   if ($('emailOverlay').style.display   !== 'none') closeEmailModal();
   if ($('pwOverlay').style.display      !== 'none') closePwModal();
+  if ($('avatarOverlay').style.display  !== 'none') closeAvatarModal();
+  if ($('coverOverlay').style.display   !== 'none') closeCoverModal();
 });
 </script>
 
