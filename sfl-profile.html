@@ -27,12 +27,6 @@
   position: absolute; inset: 0;
   background: radial-gradient(ellipse 80% 80% at 50% 120%, rgba(0,174,239,0.18) 0%, transparent 60%);
 }
-.profile-cover-img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover; object-position: center;
-  display: block;
-}
 .profile-cover-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to bottom, transparent 60%, rgba(6,13,24,0.85) 100%);
@@ -75,15 +69,6 @@
 .profile-display-name { font-size: 22px; font-weight: 900; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .profile-username { font-size: 14px; color: var(--sfl-text-muted); margin-top: 3px; }
 .profile-bio { font-size: 14px; color: var(--sfl-text-label); margin-top: 8px; line-height: 1.6; max-width: 600px; }
-.profile-website {
-  font-size: 13px; margin-top: 6px;
-  display: flex; align-items: center; gap: 6px;
-}
-.profile-website a {
-  color: var(--sfl-blue); text-decoration: none;
-  word-break: break-all;
-}
-.profile-website a:hover { text-decoration: underline; }
 
 /* Live badge */
 .profile-live-badge {
@@ -207,6 +192,22 @@
 .follow-person-handle { font-size: 12px; color: var(--sfl-text-muted); margin-top: 1px; }
 .follow-person-btn { flex-shrink: 0; }
 
+@media (max-width: 768px) {
+  .profile-page { padding-top: var(--sfl-nav-h); }
+  .profile-cover { height: 150px; }
+  .profile-avatar-row { padding: 0 14px; margin-top: -46px; }
+  .profile-avatar { width: 82px; height: 82px; }
+  .profile-avatar-placeholder { width: 82px; height: 82px; font-size: 28px; }
+  .profile-info { padding: 0 14px 14px; }
+  .profile-stats { padding: 12px 14px 14px; gap: 20px; }
+  .profile-tabs { padding: 0 14px; }
+  .profile-content { padding: 16px 14px; }
+  .profile-display-name { font-size: 18px; }
+}
+@media (max-width: 480px) {
+  .profile-stats { gap: 14px; }
+  .profile-stat-num { font-size: 15px; }
+}
 /* ── Delete button on video cards ── */
 .sfl-card-delete-btn {
   position: absolute; top: 8px; right: 8px; z-index: 10;
@@ -222,7 +223,6 @@
   opacity: 1; pointer-events: auto;
 }
 .sfl-video-card { position: relative; }
-
 /* Delete confirmation modal */
 .sfl-del-overlay {
   position: fixed; inset: 0; z-index: 9999;
@@ -243,242 +243,6 @@
 .sfl-del-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; color: var(--sfl-text); }
 .sfl-del-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
 .sfl-del-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-
-/* ══════════════════════════════
-   EDIT PROFILE MODAL
-   ══════════════════════════════ */
-.ep-overlay {
-  position: fixed; inset: 0; z-index: 2000;
-  background: rgba(0,0,0,0.80);
-  display: flex; align-items: flex-end;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  animation: sflFadeIn 0.18s ease;
-  padding: 0;
-}
-@media (min-width: 600px) {
-  .ep-overlay { align-items: center; padding: 20px; }
-}
-.ep-modal {
-  background: var(--sfl-bg-panel);
-  border: 1px solid var(--sfl-border-hot);
-  border-radius: var(--sfl-r-xl) var(--sfl-r-xl) 0 0;
-  width: 100%;
-  max-height: 92dvh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 -8px 60px rgba(0,174,239,0.15), 0 0 0 1px rgba(0,174,239,0.08);
-  animation: sflFadeUp 0.22s ease;
-  overflow: hidden;
-}
-@media (min-width: 600px) {
-  .ep-modal {
-    max-width: 520px;
-    margin: 0 auto;
-    border-radius: var(--sfl-r-xl);
-    max-height: 90dvh;
-  }
-}
-.ep-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--sfl-border);
-  flex-shrink: 0;
-  background: var(--sfl-bg-panel);
-  position: sticky; top: 0; z-index: 10;
-}
-.ep-title {
-  font-size: 16px; font-weight: 900;
-  color: var(--sfl-flame-hot);
-  letter-spacing: 0.5px;
-}
-.ep-close {
-  width: 34px; height: 34px;
-  background: var(--sfl-bg-hover);
-  border: 1px solid var(--sfl-border);
-  border-radius: 50%; cursor: pointer;
-  font-size: 16px; display: flex; align-items: center; justify-content: center;
-  color: var(--sfl-text-muted); transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-.ep-close:hover { background: var(--sfl-bg-card); color: var(--sfl-text); }
-
-.ep-body {
-  overflow-y: auto;
-  flex: 1;
-  padding: 0 0 8px;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Cover picker */
-.ep-cover-picker {
-  position: relative;
-  height: 140px;
-  background: linear-gradient(135deg, #061830 0%, #0d2444 40%, #060d18 100%);
-  cursor: pointer;
-  overflow: hidden;
-}
-.ep-cover-picker img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-}
-.ep-cover-picker-overlay {
-  position: absolute; inset: 0;
-  background: rgba(0,0,0,0.38);
-  display: flex; align-items: center; justify-content: center;
-  gap: 8px;
-  font-size: 13px; font-weight: 700;
-  color: #fff;
-  transition: background 0.18s;
-}
-.ep-cover-picker:hover .ep-cover-picker-overlay { background: rgba(0,0,0,0.55); }
-.ep-cover-picker input[type="file"] {
-  position: absolute; inset: 0;
-  opacity: 0; cursor: pointer;
-  width: 100%; height: 100%;
-}
-
-/* Avatar picker in modal */
-.ep-avatar-row {
-  display: flex; align-items: center; gap: 16px;
-  padding: 0 20px 20px;
-  margin-top: -36px;
-  position: relative; z-index: 5;
-}
-.ep-avatar-wrap {
-  position: relative; cursor: pointer; flex-shrink: 0;
-}
-.ep-avatar-img {
-  width: 72px; height: 72px;
-  border-radius: 50%;
-  border: 3px solid var(--sfl-bg-panel);
-  object-fit: cover;
-  background: var(--sfl-bg-card);
-  box-shadow: var(--sfl-glow-sm);
-  display: block;
-}
-.ep-avatar-placeholder {
-  width: 72px; height: 72px;
-  border-radius: 50%;
-  border: 3px solid var(--sfl-bg-panel);
-  background: var(--sfl-bg-card);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 28px;
-  box-shadow: var(--sfl-glow-sm);
-}
-.ep-avatar-badge {
-  position: absolute; bottom: 0; right: 0;
-  width: 24px; height: 24px;
-  background: var(--sfl-blue);
-  border-radius: 50%;
-  border: 2px solid var(--sfl-bg-panel);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px;
-  cursor: pointer;
-  pointer-events: none;
-}
-.ep-avatar-wrap input[type="file"] {
-  position: absolute; inset: 0;
-  opacity: 0; cursor: pointer;
-  width: 100%; height: 100%;
-  border-radius: 50%;
-}
-.ep-avatar-hint {
-  font-size: 12px; color: var(--sfl-text-muted); padding-top: 36px;
-}
-
-/* Form fields */
-.ep-fields { padding: 0 20px 8px; }
-.ep-field { margin-bottom: 18px; }
-.ep-label {
-  display: block;
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.8px;
-  color: var(--sfl-text-muted);
-  margin-bottom: 7px;
-}
-.ep-input, .ep-textarea {
-  width: 100%;
-  background: var(--sfl-bg-input);
-  border: 1px solid var(--sfl-border);
-  border-radius: var(--sfl-r-sm);
-  color: var(--sfl-text);
-  font-size: 14px;
-  font-family: inherit;
-  padding: 12px 14px;
-  transition: border-color var(--sfl-t), box-shadow var(--sfl-t);
-  outline: none;
-  -webkit-appearance: none;
-}
-.ep-input:focus, .ep-textarea:focus {
-  border-color: var(--sfl-blue);
-  box-shadow: 0 0 0 2px rgba(0,174,239,0.18);
-}
-.ep-input.ep-error { border-color: #ff4455; }
-.ep-textarea { resize: vertical; min-height: 80px; max-height: 160px; }
-.ep-field-hint {
-  font-size: 11px; color: var(--sfl-text-muted);
-  margin-top: 5px;
-}
-.ep-field-error {
-  font-size: 11px; color: #ff4455;
-  margin-top: 5px; display: none;
-}
-.ep-field-error.visible { display: block; }
-
-/* Footer / save */
-.ep-footer {
-  padding: 14px 20px 20px;
-  border-top: 1px solid var(--sfl-border);
-  flex-shrink: 0;
-  background: var(--sfl-bg-panel);
-  position: sticky; bottom: 0;
-  /* safe area for iOS */
-  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-}
-.ep-save-btn {
-  width: 100%;
-  background: linear-gradient(135deg, #0077aa 0%, #00AEEF 100%);
-  color: #fff;
-  border: none;
-  border-radius: var(--sfl-r-md);
-  font-size: 15px; font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 14px;
-  cursor: pointer;
-  transition: opacity var(--sfl-t), box-shadow var(--sfl-t);
-  box-shadow: var(--sfl-glow-sm);
-}
-.ep-save-btn:hover:not(:disabled) { opacity: 0.9; box-shadow: var(--sfl-glow-md); }
-.ep-save-btn:disabled {
-  opacity: 0.55; cursor: not-allowed;
-  background: var(--sfl-bg-card);
-  box-shadow: none;
-}
-.ep-status-msg {
-  font-size: 12px; text-align: center;
-  margin-top: 10px; min-height: 18px;
-  color: var(--sfl-text-muted);
-}
-.ep-status-msg.ep-ok { color: #22dd88; }
-.ep-status-msg.ep-err { color: #ff4455; }
-
-@media (max-width: 768px) {
-  .profile-page { padding-top: var(--sfl-nav-h); }
-  .profile-cover { height: 150px; }
-  .profile-avatar-row { padding: 0 14px; margin-top: -46px; }
-  .profile-avatar { width: 82px; height: 82px; }
-  .profile-avatar-placeholder { width: 82px; height: 82px; font-size: 28px; }
-  .profile-info { padding: 0 14px 14px; }
-  .profile-stats { padding: 12px 14px 14px; gap: 20px; }
-  .profile-tabs { padding: 0 14px; }
-  .profile-content { padding: 16px 14px; }
-  .profile-display-name { font-size: 18px; }
-}
-@media (max-width: 480px) {
-  .profile-stats { gap: 14px; }
-  .profile-stat-num { font-size: 15px; }
-}
 </style>
 </head>
 <body class="sfl-body">
@@ -528,7 +292,6 @@
 
       <!-- Cover -->
       <div class="profile-cover" id="profileCover">
-        <img id="profileCoverImg" class="profile-cover-img" src="" alt="" style="display:none;">
         <div class="profile-cover-overlay"></div>
       </div>
 
@@ -546,7 +309,7 @@
           <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnFollow" style="display:none;" aria-label="Follow this creator">Follow</button>
           <!-- Own profile buttons -->
           <a href="sfl-upload.html" class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnUpload" style="display:none;">📤 Upload</a>
-          <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnEditProfile" style="display:none;" aria-label="Edit your profile">✏️ Edit Profile</button>
+          <a href="sfl-settings.html" class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnEditProfile" style="display:none;">✏️ Edit Profile</a>
         </div>
       </div>
 
@@ -555,9 +318,6 @@
         <div class="profile-display-name" id="profileName">—</div>
         <div class="profile-username" id="profileUsername"></div>
         <div class="profile-bio" id="profileBio"></div>
-        <div class="profile-website" id="profileWebsiteRow" style="display:none;">
-          🔗 <a id="profileWebsiteLink" href="#" target="_blank" rel="noopener noreferrer"></a>
-        </div>
       </div>
 
       <!-- Stats -->
@@ -636,100 +396,14 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     EDIT PROFILE MODAL
-     ══════════════════════════════════════════ -->
-<div id="editProfileOverlay" class="ep-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="epTitle">
-  <div class="ep-modal">
-    <!-- Header -->
-    <div class="ep-header">
-      <div class="ep-title" id="epTitle">✏️ Edit Profile</div>
-      <button class="ep-close" id="epClose" aria-label="Close editor">✕</button>
-    </div>
-
-    <!-- Scrollable body -->
-    <div class="ep-body" id="epBody">
-
-      <!-- Cover image picker -->
-      <div class="ep-cover-picker" id="epCoverPicker" title="Change cover image">
-        <img id="epCoverPreview" src="" alt="" style="display:none;">
-        <div class="ep-cover-picker-overlay">📷 Change Cover</div>
-        <input type="file" id="epCoverInput" accept="image/*" aria-label="Choose cover image">
-      </div>
-
-      <!-- Avatar picker -->
-      <div class="ep-avatar-row">
-        <div class="ep-avatar-wrap" title="Change profile picture">
-          <img id="epAvatarPreview" class="ep-avatar-img" src="" alt="Profile preview" style="display:none;">
-          <div id="epAvatarPlaceholder" class="ep-avatar-placeholder">👤</div>
-          <div class="ep-avatar-badge">📷</div>
-          <input type="file" id="epAvatarInput" accept="image/*" aria-label="Choose profile picture">
-        </div>
-        <div class="ep-avatar-hint">Tap photo to change</div>
-      </div>
-
-      <!-- Fields -->
-      <div class="ep-fields">
-
-        <div class="ep-field">
-          <label class="ep-label" for="epDisplayName">Display Name</label>
-          <input class="ep-input" type="text" id="epDisplayName" placeholder="Your display name" maxlength="60" autocomplete="off">
-          <div class="ep-field-error" id="epDisplayNameErr"></div>
-        </div>
-
-        <div class="ep-field">
-          <label class="ep-label" for="epUsername">Username</label>
-          <input class="ep-input" type="text" id="epUsername" placeholder="your_username" maxlength="30" autocomplete="off" autocapitalize="none" spellcheck="false">
-          <div class="ep-field-hint">Letters, numbers, underscores. 2–30 characters.</div>
-          <div class="ep-field-error" id="epUsernameErr"></div>
-        </div>
-
-        <div class="ep-field">
-          <label class="ep-label" for="epBio">Bio</label>
-          <textarea class="ep-textarea" id="epBio" placeholder="Tell the world about yourself…" maxlength="300"></textarea>
-          <div class="ep-field-error" id="epBioErr"></div>
-        </div>
-
-        <div class="ep-field">
-          <label class="ep-label" for="epWebsite">Website</label>
-          <input class="ep-input" type="url" id="epWebsite" placeholder="https://yoursite.com" maxlength="200" autocomplete="off">
-          <div class="ep-field-error" id="epWebsiteErr"></div>
-        </div>
-
-      </div><!-- /ep-fields -->
-    </div><!-- /ep-body -->
-
-    <!-- Footer / save -->
-    <div class="ep-footer">
-      <button class="ep-save-btn" id="epSaveBtn">SAVE PROFILE</button>
-      <div class="ep-status-msg" id="epStatusMsg"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Delete confirmation modal (profile page) -->
-<div class="sfl-del-overlay sfl-hidden" id="profileDeleteModal" role="dialog" aria-modal="true" aria-labelledby="profileDeleteTitle">
-  <div class="sfl-del-modal">
-    <div class="sfl-del-modal-icon">🗑️</div>
-    <div class="sfl-del-modal-title" id="profileDeleteTitle">Delete this video?</div>
-    <div class="sfl-del-modal-body">This action cannot be undone.</div>
-    <div class="sfl-del-modal-actions">
-      <button class="sfl-btn sfl-btn-outline" id="profileDeleteCancel">Cancel</button>
-      <button class="sfl-btn" id="profileDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
-    </div>
-  </div>
-</div>
-
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, getDocs, setDoc, collection, query, where, orderBy, limit,
+  getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
   updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
   apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
@@ -740,10 +414,9 @@ const FIREBASE_CONFIG = {
   messagingSenderId:'933810617818',
   appId:'1:933810617818:web:efb24f123337dd987c14e3'
 };
-const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const auth    = getAuth(app);
-const db      = getFirestore(app);
-const storage = getStorage(app);
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
 
 const $ = id => document.getElementById(id);
 const toast = (msg, dur=3200) => {
@@ -781,16 +454,6 @@ function fmtTime(s) {
   return `${m}:${String(sec).padStart(2,'0')}`;
 }
 
-/* Normalise profile data — handle both old field names (avatar, coverPhoto)
-   and new names (profilePhotoURL, coverPhotoURL) transparently */
-function normaliseProfile(data) {
-  return {
-    ...data,
-    avatar:       data.avatar       || data.profilePhotoURL || '',
-    coverPhoto:   data.coverPhoto   || data.coverPhotoURL   || '',
-  };
-}
-
 /* ─────────────────────────────────────────────────────────────
    Load profile
 ───────────────────────────────────────────────────────────── */
@@ -798,48 +461,14 @@ async function loadProfile() {
   if (!_targetUid) { showNotFound(); return; }
   try {
     const snap = await getDoc(doc(db, 'users', _targetUid));
-    if (!snap.exists()) {
-      // If viewing our own profile and doc is missing, auto-create it
-      if (_user && _user.uid === _targetUid) {
-        await ensureProfileDoc(_user);
-        const snap2 = await getDoc(doc(db, 'users', _targetUid));
-        if (!snap2.exists()) { showNotFound(); return; }
-        _targetData = normaliseProfile(snap2.data());
-      } else {
-        showNotFound(); return;
-      }
-    } else {
-      _targetData = normaliseProfile(snap.data());
-    }
+    if (!snap.exists()) { showNotFound(); return; }
+    _targetData = snap.data();
     renderProfile(_targetData);
     await loadVideos('videos');
   } catch(e) {
     console.error('loadProfile:', e);
     showNotFound();
   }
-}
-
-/* Create a minimal profile doc for a new Firebase Auth user */
-async function ensureProfileDoc(user) {
-  const ref = doc(db, 'users', user.uid);
-  await setDoc(ref, {
-    uid:            user.uid,
-    displayName:    user.displayName || '',
-    username:       '',
-    email:          user.email || '',
-    avatar:         user.photoURL || '',
-    bio:            '',
-    website:        '',
-    role:           'member',
-    followers:      [],
-    following:      [],
-    followerCount:  0,
-    followingCount: 0,
-    isLive:         false,
-    liveRoomId:     null,
-    createdAt:      serverTimestamp(),
-    updatedAt:      serverTimestamp(),
-  }, { merge: true });
 }
 
 function showNotFound() {
@@ -861,43 +490,22 @@ function renderProfile(data) {
   $('profileUsername').textContent = data.username ? `@${data.username}` : '';
   $('profileBio').textContent = data.bio || '';
 
-  // Website
-  const website = (data.website || '').trim();
-  if (website) {
-    const wsRow  = $('profileWebsiteRow');
-    const wsLink = $('profileWebsiteLink');
-    const href   = website.startsWith('http') ? website : `https://${website}`;
-    wsLink.href        = href;
-    wsLink.textContent = website.replace(/^https?:\/\//, '');
-    wsRow.style.display = 'flex';
-  } else {
-    $('profileWebsiteRow').style.display = 'none';
-  }
-
   // Avatar
-  const avatarUrl = data.avatar || '';
-  if (avatarUrl) {
-    $('profileAvatar').src = avatarUrl;
+  if (data.avatar) {
+    $('profileAvatar').src = data.avatar;
     $('profileAvatar').style.display = '';
     $('profileAvatarPlaceholder').style.display = 'none';
     $('profileAvatar').onerror = () => {
       $('profileAvatar').style.display = 'none';
       $('profileAvatarPlaceholder').style.display = '';
     };
-  } else {
-    $('profileAvatar').style.display = 'none';
-    $('profileAvatarPlaceholder').style.display = '';
   }
 
   // Cover image
-  const coverUrl = data.coverPhoto || '';
-  if (coverUrl) {
-    const coverImg = $('profileCoverImg');
-    coverImg.src = coverUrl;
-    coverImg.style.display = '';
-    coverImg.onerror = () => { coverImg.style.display = 'none'; };
-  } else {
-    $('profileCoverImg').style.display = 'none';
+  if (data.coverPhoto) {
+    $('profileCover').style.backgroundImage = `url(${data.coverPhoto})`;
+    $('profileCover').style.backgroundSize = 'cover';
+    $('profileCover').style.backgroundPosition = 'center';
   }
 
   // Stats
@@ -916,13 +524,16 @@ function renderProfile(data) {
   const isOwnProfile = _user && _user.uid === _targetUid;
 
   if (isOwnProfile) {
+    // Own profile — show Upload + Edit Profile, never Follow
     $('btnUpload').style.display = '';
     $('btnEditProfile').style.display = '';
     $('btnFollow').style.display = 'none';
   } else {
+    // Another user's profile — show Follow
     $('btnUpload').style.display = 'none';
     $('btnEditProfile').style.display = 'none';
     $('btnFollow').style.display = '';
+    // Determine follow state from target's followers array
     _following = !!(
       _user &&
       Array.isArray(data.followers) &&
@@ -952,6 +563,7 @@ function updateFollowBtn() {
 
 $('btnFollow').addEventListener('click', async () => {
   if (!_user) { toast('Sign in to follow creators.'); return; }
+  // Prevent self-follow (belt-and-suspenders)
   if (_user.uid === _targetUid) return;
 
   const btn = $('btnFollow');
@@ -962,18 +574,23 @@ $('btnFollow').addEventListener('click', async () => {
     const myRef     = doc(db, 'users', _user.uid);
 
     if (_following) {
+      /* ── UNFOLLOW ── */
       await updateDoc(targetRef, { followers: arrayRemove(_user.uid) });
       await updateDoc(myRef,     { following: arrayRemove(_targetUid) });
       _following = false;
     } else {
+      /* ── FOLLOW ── */
       await updateDoc(targetRef, { followers: arrayUnion(_user.uid) });
       await updateDoc(myRef,     { following: arrayUnion(_targetUid) });
       _following = true;
+
+      // Send follow notification to the followed user
       await sendFollowNotification();
     }
 
     updateFollowBtn();
 
+    // Refresh follower count from live data
     const fresh = await getDoc(targetRef);
     if (fresh.exists()) {
       const d   = fresh.data();
@@ -988,6 +605,7 @@ $('btnFollow').addEventListener('click', async () => {
   }
 });
 
+/* Send a follow notification to the target user */
 async function sendFollowNotification() {
   if (!_user || !_targetUid) return;
   try {
@@ -1004,21 +622,26 @@ async function sendFollowNotification() {
       ts:         serverTimestamp(),
       createdAt:  Date.now(),
     });
-  } catch(e) { /* non-critical */ }
+  } catch(e) {
+    // Notification failure is non-critical; don't surface to user
+  }
 }
+
 /* ─────────────────────────────────────────────────────────────
    Followers / Following modal
 ───────────────────────────────────────────────────────────── */
 async function openFollowModal(type) {
+  // type: 'followers' | 'following'
   $('followModalTitle').textContent = type === 'followers' ? 'Followers' : 'Following';
   $('followModalBody').innerHTML = '<div class="follow-modal-loader">Loading…</div>';
   $('followModal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
   try {
-    const snap    = await getDoc(doc(db, 'users', _targetUid));
+    // Get the list of UIDs from target's doc
+    const snap   = await getDoc(doc(db, 'users', _targetUid));
     if (!snap.exists()) { $('followModalBody').innerHTML = '<div class="follow-modal-empty">No data found.</div>'; return; }
-    const data    = snap.data();
+    const data   = snap.data();
     const uidList = Array.isArray(data[type]) ? data[type] : [];
 
     if (!uidList.length) {
@@ -1028,8 +651,11 @@ async function openFollowModal(type) {
       return;
     }
 
+    // Fetch user docs in batches of 30 (Firestore 'in' limit)
     const batches = [];
-    for (let i = 0; i < uidList.length; i += 30) batches.push(uidList.slice(i, i + 30));
+    for (let i = 0; i < uidList.length; i += 30) {
+      batches.push(uidList.slice(i, i + 30));
+    }
 
     const userMap = {};
     for (const batch of batches) {
@@ -1038,23 +664,25 @@ async function openFollowModal(type) {
       docs.forEach(d => { userMap[d.id] = d.data(); });
     }
 
+    // Build rows
     const body = $('followModalBody');
     body.innerHTML = '';
 
+    // Determine which UIDs the current user already follows (for modal follow buttons)
     const myFollowingSet = new Set(
       Array.isArray(_userData?.following) ? _userData.following : []
     );
 
     for (const uid of uidList) {
       const u = userMap[uid] || {};
-      const isMe        = _user && uid === _user.uid;
+      const isMe   = _user && uid === _user.uid;
       const isFollowing = myFollowingSet.has(uid);
       const row = document.createElement('div');
       row.className = 'follow-person-row';
       row.dataset.uid = uid;
 
-      const avatarHTML = (u.avatar || u.profilePhotoURL)
-        ? `<img class="follow-person-avatar" src="${u.avatar || u.profilePhotoURL}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\'follow-person-avatar-placeholder\\'>👤</div>'">`
+      const avatarHTML = u.avatar
+        ? `<img class="follow-person-avatar" src="${u.avatar}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\'follow-person-avatar-placeholder\\'>👤</div>'">`
         : `<div class="follow-person-avatar-placeholder">👤</div>`;
 
       const followBtnHTML = isMe
@@ -1074,6 +702,7 @@ async function openFollowModal(type) {
         <div class="follow-person-btn">${followBtnHTML}</div>
       `;
 
+      // Navigate to profile on row click (not on button)
       row.addEventListener('click', e => {
         if (e.target.closest('.modal-follow-btn')) return;
         closeFollowModal();
@@ -1083,34 +712,36 @@ async function openFollowModal(type) {
       body.appendChild(row);
     }
 
+    // Wire modal follow buttons
     body.querySelectorAll('.modal-follow-btn').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
         if (!_user) { toast('Sign in to follow.'); return; }
-        const tUid        = btn.dataset.uid;
+        const targetUid   = btn.dataset.uid;
         const wasFollowing = btn.dataset.following === 'true';
         btn.disabled = true;
         try {
-          const tRef = doc(db, 'users', tUid);
+          const tRef = doc(db, 'users', targetUid);
           const mRef = doc(db, 'users', _user.uid);
           if (wasFollowing) {
             await updateDoc(tRef, { followers: arrayRemove(_user.uid) });
-            await updateDoc(mRef, { following: arrayRemove(tUid) });
+            await updateDoc(mRef, { following: arrayRemove(targetUid) });
             btn.textContent = 'Follow';
             btn.className = 'sfl-btn sfl-btn-sm sfl-btn-primary modal-follow-btn';
             btn.dataset.following = 'false';
-            myFollowingSet.delete(tUid);
+            myFollowingSet.delete(targetUid);
           } else {
             await updateDoc(tRef, { followers: arrayUnion(_user.uid) });
-            await updateDoc(mRef, { following: arrayUnion(tUid) });
+            await updateDoc(mRef, { following: arrayUnion(targetUid) });
             btn.textContent = '✓ Following';
             btn.className = 'sfl-btn sfl-btn-sm is-following sfl-btn-outline modal-follow-btn';
             btn.dataset.following = 'true';
-            myFollowingSet.add(tUid);
-            if (_user && tUid !== _user.uid) {
+            myFollowingSet.add(targetUid);
+            // Notify the followed user
+            if (_user && targetUid !== _user.uid) {
               const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
               const myAvatar = _userData?.avatar || _user.photoURL || '';
-              addDoc(collection(db, 'notifications', tUid, 'items'), {
+              addDoc(collection(db, 'notifications', targetUid, 'items'), {
                 type: 'follow', fromUid: _user.uid, fromName: myName, fromAvatar: myAvatar,
                 fromProfile: `sfl-profile.html?uid=${_user.uid}`,
                 message: `${myName} started following you.`,
@@ -1118,7 +749,8 @@ async function openFollowModal(type) {
               }).catch(() => {});
             }
           }
-          if (tUid === _targetUid) {
+          // Also refresh main page follow button if this is the profile we're viewing
+          if (targetUid === _targetUid) {
             _following = !wasFollowing;
             updateFollowBtn();
           }
@@ -1146,6 +778,12 @@ $('followModal').addEventListener('click', e => {
   if (e.target === $('followModal')) closeFollowModal();
 });
 
+// Keyboard close
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('followModal').style.display !== 'none') closeFollowModal();
+});
+
+// Stat click handlers for Followers / Following
 $('statFollowers').addEventListener('click', () => openFollowModal('followers'));
 $('statFollowers').addEventListener('keydown', e => { if (e.key === 'Enter') openFollowModal('followers'); });
 $('statFollowing').addEventListener('click', () => openFollowModal('following'));
@@ -1210,19 +848,20 @@ async function loadVideos(tab) {
     let docs = [];
 
     if (tab === 'videos') {
-      const isOwn = _user && _user.uid === _targetUid;
-      const constraints = [
+      const isOwnProfile = _user && _user.uid === _targetUid;
+      const constraints  = [
         where('creatorId', '==', _targetUid),
-        ...(!isOwn ? [where('status', '==', 'published')] : []),
-        ...(!isOwn ? [where('visibility', '==', 'public')] : []),
+        ...(!isOwnProfile ? [where('status', '==', 'published')] : []),
+        ...(!isOwnProfile ? [where('visibility', '==', 'public')] : []),
         orderBy('createdAt', 'desc'),
         limit(40),
       ];
       const snap = await getDocs(query(collection(db, 'videos'), ...constraints));
       docs = snap.docs;
+      // Tally total views
       let totalViews = 0;
       docs.forEach(d => { totalViews += (d.data().views || 0); });
-      $('statViews').textContent    = fmtNum(totalViews);
+      $('statViews').textContent   = fmtNum(totalViews);
       $('statVideosNum').textContent = fmtNum(docs.length);
 
     } else if (tab === 'liked') {
@@ -1296,346 +935,15 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
-      if (snap.exists()) _userData = normaliseProfile(snap.data());
+      if (snap.exists()) _userData = snap.data();
     } catch(e) {}
   }
+  // If no uid param, show current user's profile
   if (!_targetUid) {
     if (!user) { window.location.href = 'sfl-login.html'; return; }
     _targetUid = user.uid;
   }
   loadProfile();
-});
-
-/* ─────────────────────────────────────────────────────────────
-   Edit Profile Modal
-───────────────────────────────────────────────────────────── */
-
-// State for pending image uploads
-let _ep_avatarFile  = null;  // File object for new avatar
-let _ep_coverFile   = null;  // File object for new cover
-
-function epSetStatus(msg, cls = '') {
-  const el = $('epStatusMsg');
-  el.textContent  = msg;
-  el.className    = `ep-status-msg${cls ? ' ' + cls : ''}`;
-}
-
-function epClearErrors() {
-  ['epDisplayNameErr','epUsernameErr','epBioErr','epWebsiteErr'].forEach(id => {
-    const el = $(id);
-    el.textContent = '';
-    el.classList.remove('visible');
-  });
-  $('epDisplayName').classList.remove('ep-error');
-  $('epUsername').classList.remove('ep-error');
-}
-
-function epShowError(fieldErrId, inputId, msg) {
-  const errEl = $(fieldErrId);
-  errEl.textContent = msg;
-  errEl.classList.add('visible');
-  if (inputId) $(inputId).classList.add('ep-error');
-}
-
-/** Open the edit profile modal and pre-fill current values */
-function openEditProfile() {
-  // Must be signed in and own profile
-  const liveUser = auth.currentUser;
-  if (!liveUser || liveUser.uid !== _targetUid) return;
-
-  const data = _targetData || {};
-
-  // Pre-fill fields
-  $('epDisplayName').value = data.displayName || '';
-  $('epUsername').value    = data.username    || '';
-  $('epBio').value         = data.bio         || '';
-  $('epWebsite').value     = data.website     || '';
-
-  // Avatar preview
-  const avatarUrl = data.avatar || '';
-  if (avatarUrl) {
-    $('epAvatarPreview').src = avatarUrl;
-    $('epAvatarPreview').style.display = '';
-    $('epAvatarPlaceholder').style.display = 'none';
-  } else {
-    $('epAvatarPreview').style.display = 'none';
-    $('epAvatarPlaceholder').style.display = '';
-  }
-
-  // Cover preview
-  const coverUrl = data.coverPhoto || '';
-  if (coverUrl) {
-    $('epCoverPreview').src = coverUrl;
-    $('epCoverPreview').style.display = '';
-  } else {
-    $('epCoverPreview').style.display = 'none';
-  }
-
-  // Reset pending files and UI state
-  _ep_avatarFile = null;
-  _ep_coverFile  = null;
-  epClearErrors();
-  epSetStatus('');
-  $('epSaveBtn').disabled   = false;
-  $('epSaveBtn').textContent = 'SAVE PROFILE';
-
-  // Show overlay
-  $('editProfileOverlay').style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-
-  // Scroll to top of modal body
-  setTimeout(() => { $('epBody').scrollTop = 0; }, 30);
-}
-
-function closeEditProfile() {
-  $('editProfileOverlay').style.display = 'none';
-  document.body.style.overflow = '';
-}
-
-$('btnEditProfile').addEventListener('click', openEditProfile);
-$('epClose').addEventListener('click', closeEditProfile);
-$('editProfileOverlay').addEventListener('click', e => {
-  if (e.target === $('editProfileOverlay')) closeEditProfile();
-});
-
-// Avatar file picker
-$('epAvatarInput').addEventListener('change', e => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('Please select an image file.'); return; }
-  if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10 MB.'); return; }
-  _ep_avatarFile = file;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    $('epAvatarPreview').src = ev.target.result;
-    $('epAvatarPreview').style.display = '';
-    $('epAvatarPlaceholder').style.display = 'none';
-  };
-  reader.readAsDataURL(file);
-  // Reset input so the same file can be re-selected
-  e.target.value = '';
-});
-
-// Cover file picker
-$('epCoverInput').addEventListener('change', e => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  if (!file.type.startsWith('image/')) { toast('Please select an image file.'); return; }
-  if (file.size > 10 * 1024 * 1024) { toast('Image must be under 10 MB.'); return; }
-  _ep_coverFile = file;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    $('epCoverPreview').src = ev.target.result;
-    $('epCoverPreview').style.display = '';
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
-});
-
-/**
- * Compress/resize an image File to a maximum dimension while preserving aspect ratio.
- * Returns a new Blob of the resized JPEG.
- */
-function compressImage(file, maxPx = 1200, quality = 0.82) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      if (width > maxPx || height > maxPx) {
-        if (width >= height) { height = Math.round((height / width) * maxPx); width = maxPx; }
-        else                  { width  = Math.round((width / height) * maxPx); height = maxPx; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width  = width;
-      canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-      canvas.toBlob(blob => {
-        if (blob) resolve(blob);
-        else reject(new Error('Canvas toBlob failed'));
-      }, 'image/jpeg', quality);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
-    img.src = url;
-  });
-}
-
-/** Upload a file (or compressed blob) to Firebase Storage and return download URL */
-async function uploadProfileImage(uid, file, storePath) {
-  const blob = await compressImage(file, 1200, 0.82);
-  const ref  = storageRef(storage, storePath);
-  await uploadBytes(ref, blob, { contentType: 'image/jpeg' });
-  return await getDownloadURL(ref);
-}
-
-/** Check if a username is taken by another account */
-async function isUsernameTaken(username, currentUid) {
-  if (!username) return false;
-  const q    = query(collection(db, 'users'), where('username', '==', username), limit(2));
-  const snap = await getDocs(q);
-  // Allow if the only match is the current user
-  for (const d of snap.docs) {
-    if (d.id !== currentUid) return true;
-  }
-  return false;
-}
-
-/* Save profile handler */
-$('epSaveBtn').addEventListener('click', async () => {
-  const liveUser = auth.currentUser;
-  // Step 1 — verify authentication
-  if (!liveUser) {
-    epSetStatus('You must be signed in.', 'ep-err');
-    return;
-  }
-  // Step 2 — verify ownership (never trust _targetUid alone without live auth check)
-  if (liveUser.uid !== _targetUid) {
-    epSetStatus('You can only edit your own profile.', 'ep-err');
-    return;
-  }
-
-  epClearErrors();
-  epSetStatus('');
-
-  // Step 3 — validate fields
-  const displayName = $('epDisplayName').value.trim();
-  const username    = $('epUsername').value.trim().toLowerCase();
-  const bio         = $('epBio').value.trim();
-  const website     = $('epWebsite').value.trim();
-
-  let hasErrors = false;
-
-  if (!displayName) {
-    epShowError('epDisplayNameErr', 'epDisplayName', 'Display name is required.');
-    hasErrors = true;
-  } else if (displayName.length > 60) {
-    epShowError('epDisplayNameErr', 'epDisplayName', 'Display name must be 60 characters or fewer.');
-    hasErrors = true;
-  }
-
-  if (username && !/^[a-zA-Z0-9_]{2,30}$/.test(username)) {
-    epShowError('epUsernameErr', 'epUsername', 'Username: letters, numbers, underscores, 2–30 characters.');
-    hasErrors = true;
-  }
-
-  if (bio.length > 300) {
-    epShowError('epBioErr', 'epBio', 'Bio must be 300 characters or fewer.');
-    hasErrors = true;
-  }
-
-  if (website && !/^https?:\/\/.+/.test(website) && website.length > 0) {
-    // Accept URLs without scheme — we'll add https:// when displaying
-    if (website.includes(' ') || website.length > 200) {
-      epShowError('epWebsiteErr', 'epWebsite', 'Enter a valid website URL.');
-      hasErrors = true;
-    }
-  }
-
-  if (hasErrors) return;
-
-  // Step 3b — check username uniqueness before proceeding
-  if (username && username !== (_targetData?.username || '')) {
-    epSetStatus('Checking username…');
-    const taken = await isUsernameTaken(username, liveUser.uid);
-    if (taken) {
-      epShowError('epUsernameErr', 'epUsername', 'That username is already taken.');
-      epSetStatus('');
-      return;
-    }
-  }
-
-  // Step 4 — disable button + show saving state
-  const saveBtn = $('epSaveBtn');
-  saveBtn.disabled   = true;
-  saveBtn.textContent = 'Saving…';
-  epSetStatus('Saving your profile…');
-
-  try {
-    // Step 4a — upload new avatar if selected
-    let newAvatarUrl = null;
-    if (_ep_avatarFile) {
-      epSetStatus('Uploading profile picture…');
-      try {
-        newAvatarUrl = await uploadProfileImage(
-          liveUser.uid,
-          _ep_avatarFile,
-          `profile-images/${liveUser.uid}/avatar.jpg`
-        );
-      } catch(uploadErr) {
-        epSetStatus(`Profile picture upload failed: ${uploadErr.message}`, 'ep-err');
-        saveBtn.disabled   = false;
-        saveBtn.textContent = 'SAVE PROFILE';
-        return;
-      }
-    }
-
-    // Step 4b — upload new cover if selected
-    let newCoverUrl = null;
-    if (_ep_coverFile) {
-      epSetStatus('Uploading cover image…');
-      try {
-        newCoverUrl = await uploadProfileImage(
-          liveUser.uid,
-          _ep_coverFile,
-          `covers/${liveUser.uid}/cover.jpg`
-        );
-      } catch(uploadErr) {
-        epSetStatus(`Cover image upload failed: ${uploadErr.message}`, 'ep-err');
-        saveBtn.disabled   = false;
-        saveBtn.textContent = 'SAVE PROFILE';
-        return;
-      }
-    }
-
-    // Step 5 — build the partial update (only allowed profile fields)
-    // Protected fields (uid, role, followers, following, followerCount, followingCount,
-    // createdAt, isLive, liveRoomId, email) are NEVER included.
-    const updates = {
-      displayName,
-      username,
-      bio,
-      website,
-      updatedAt: serverTimestamp(),
-    };
-    if (newAvatarUrl !== null) updates.avatar = newAvatarUrl;
-    if (newCoverUrl  !== null) updates.coverPhoto = newCoverUrl;
-
-    // Step 6 — partial Firestore update (updateDoc, not setDoc)
-    epSetStatus('Saving to Firestore…');
-    await updateDoc(doc(db, 'users', liveUser.uid), updates);
-
-    // Step 7 — refresh local profile data
-    const freshSnap = await getDoc(doc(db, 'users', liveUser.uid));
-    if (freshSnap.exists()) {
-      _targetData = normaliseProfile(freshSnap.data());
-      _userData   = _targetData;
-    }
-
-    // Step 8 — re-render profile
-    renderProfile(_targetData);
-
-    // Step 9 — close editor and show success
-    closeEditProfile();
-    toast('Profile updated successfully.', 4000);
-
-  } catch(err) {
-    console.error('saveProfile error:', err);
-    const msg = err.code === 'permission-denied'
-      ? 'Permission denied. Check you are signed in as the profile owner.'
-      : (err.message || 'Could not save profile. Please try again.');
-    epSetStatus(msg, 'ep-err');
-    saveBtn.disabled   = false;
-    saveBtn.textContent = 'SAVE PROFILE';
-  }
-});
-
-// Keyboard escape to close modals
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    if ($('editProfileOverlay').style.display !== 'none') { closeEditProfile(); return; }
-    if ($('followModal').style.display !== 'none') closeFollowModal();
-  }
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -1656,7 +964,14 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
   const liveUser = auth.currentUser;
   if (!liveUser || !_pendingDeleteId) return;
 
+  // ── Ownership check ──────────────────────────────────────────────────────
+  console.log('[DELETE] AUTH UID:', liveUser.uid);
+  console.log('[DELETE] VIDEO OWNER ID (creatorId):', _pendingDeleteData?.creatorId);
+  console.log('[DELETE] OWNER MATCH:', liveUser.uid === _pendingDeleteData?.creatorId);
+  console.log('[DELETE] FIRESTORE PATH: videos/' + _pendingDeleteId);
+
   if (!_pendingDeleteData || _pendingDeleteData.creatorId !== liveUser.uid) {
+    console.warn('[DELETE] BLOCKED — creatorId mismatch. auth:', liveUser.uid, 'doc:', _pendingDeleteData?.creatorId);
     toast('You can only delete your own videos.');
     $('profileDeleteModal').classList.add('sfl-hidden');
     return;
@@ -1670,8 +985,10 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
   const vidData = _pendingDeleteData;
 
   try {
-    const idToken = await liveUser.getIdToken(true);
+    // Force-refresh the token so it is never stale
+    const idToken = await liveUser.getIdToken(/* forceRefresh */ true);
 
+    // Delete Cloudflare Stream video if applicable
     const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
     if (streamId) {
       try {
@@ -1687,6 +1004,7 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
       } catch(e) { console.error('[DELETE] Stream delete network error:', e.message); }
     }
 
+    // Delete R2 video file if applicable
     const r2Key = vidData.r2Key || vidData.storageKey || null;
     if (r2Key && !streamId) {
       try {
@@ -1702,24 +1020,50 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
       } catch(e) { console.error('[DELETE] R2 delete network error:', e.message); }
     }
 
+    // Delete Firestore document
+    // Rule: allow delete: if isOwner(resource.data.creatorId) || isFounder()
+    console.log('[DELETE] DELETE OPERATION: deleteDoc videos/' + vidId);
     await deleteDoc(doc(db, 'videos', vidId));
 
+    // Remove the card from the DOM immediately
     const card = document.querySelector(`.sfl-video-card .sfl-card-delete-btn[data-vid="${vidId}"]`)?.closest('.sfl-video-card');
     card?.remove();
 
     $('profileDeleteModal').classList.add('sfl-hidden');
     _pendingDeleteId = null; _pendingDeleteData = null;
     toast('Video deleted.');
+
+    // Refresh stats
     loadVideos(_activeTab);
   } catch(e) {
-    console.error('Delete failed:', e.code, e.message);
-    toast('Unable to delete. ' + (e.message || 'Check console for details.'));
+    console.error('DELETE ERROR: Firestore deleteDoc failed');
+    console.error('ERROR CODE:', e.code || '(none)');
+    console.error('ERROR MESSAGE:', e.message || String(e));
+    console.error('FIREBASE USER UID:', liveUser.uid);
+    console.error('VIDEO OWNER ID (creatorId):', vidData?.creatorId);
+    console.error('VIDEO DOCUMENT PATH: videos/' + vidId);
+    console.error('FIRESTORE COLLECTION: videos');
+    console.error('DELETE OPERATION: deleteDoc(doc(db, "videos", vidId))');
+    toast('Unable to delete. Check console for error details.');
   } finally {
     btn.disabled = false;
     btn.textContent = 'DELETE';
   }
 });
 </script>
+
+<!-- Delete confirmation modal (profile page) -->
+<div class="sfl-del-overlay sfl-hidden" id="profileDeleteModal" role="dialog" aria-modal="true" aria-labelledby="profileDeleteTitle">
+  <div class="sfl-del-modal">
+    <div class="sfl-del-modal-icon">🗑️</div>
+    <div class="sfl-del-modal-title" id="profileDeleteTitle">Delete this video?</div>
+    <div class="sfl-del-modal-body">This action cannot be undone.</div>
+    <div class="sfl-del-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="profileDeleteCancel">Cancel</button>
+      <button class="sfl-btn" id="profileDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
+    </div>
+  </div>
+</div>
 
 <script src="pwa-install.js" defer></script>
 </body>
