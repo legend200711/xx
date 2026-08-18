@@ -13,95 +13,131 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="sfl-theme.css">
 <style>
-.settings-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
-.settings-head { font-size: 20px; font-weight: 800; margin-bottom: 24px; }
-.settings-section { margin-bottom: 24px; }
-.settings-section-title {
-  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
-  text-transform: uppercase; color: var(--sfl-text-muted);
-  margin-bottom: 8px; padding: 0 4px;
+/* ── Page layout ── */
+.settings-page { max-width: 680px; margin: 0 auto; padding: 28px 20px 80px; }
+@media (max-width: 768px) {
+  .settings-page { padding: 12px 12px calc(72px + env(safe-area-inset-bottom,0px)); padding-top: calc(var(--sfl-nav-h) + 12px); }
 }
+
+/* ── Section headings ── */
+.settings-head {
+  font-size: 22px; font-weight: 900; margin-bottom: 28px;
+  color: var(--sfl-text);
+  display: flex; align-items: center; gap: 10px;
+}
+.settings-section { margin-bottom: 28px; }
+.settings-section-title {
+  font-size: 10px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--sfl-text-muted);
+  margin-bottom: 8px; padding: 0 2px;
+}
+
+/* ── Card ── */
 .settings-card {
   background: var(--sfl-bg-card);
   border: 1px solid var(--sfl-border);
   border-radius: var(--sfl-r-md);
   overflow: hidden;
 }
+.settings-card + .settings-card { margin-top: 10px; }
+
+/* ── Row ── */
 .settings-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--sfl-border);
-  gap: 14px;
+  gap: 12px; min-height: 52px;
 }
 .settings-row:last-child { border-bottom: none; }
 .settings-row-info { flex: 1; min-width: 0; }
 .settings-row-label { font-size: 14px; font-weight: 600; color: var(--sfl-text); }
-.settings-row-sub { font-size: 12px; color: var(--sfl-text-muted); margin-top: 2px; }
+.settings-row-sub { font-size: 12px; color: var(--sfl-text-muted); margin-top: 2px; line-height: 1.45; }
 .settings-row-link {
   cursor: pointer; text-decoration: none;
   color: inherit; display: flex; width: 100%;
   align-items: center; justify-content: space-between;
-  gap: 14px;
+  gap: 12px; background: none; border: none; text-align: left;
+  padding: 0; font-family: inherit;
 }
 .settings-row-link:hover .settings-row-label { color: var(--sfl-blue); }
-.settings-chevron { color: var(--sfl-text-faint); font-size: 14px; flex-shrink: 0; }
+.settings-chevron { color: var(--sfl-text-faint); font-size: 16px; flex-shrink: 0; line-height: 1; }
 
-/* Toggle switch */
+/* ── Toggle switch ── */
 .sfl-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
-.sfl-toggle input { opacity: 0; width: 0; height: 0; }
+.sfl-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
 .sfl-toggle-slider {
   position: absolute; inset: 0;
-  background: rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.10);
   border-radius: 12px; cursor: pointer;
-  transition: background 0.2s;
+  border: 1px solid var(--sfl-border);
+  transition: background 0.2s, border-color 0.2s;
 }
 .sfl-toggle-slider::before {
   content: '';
-  position: absolute; left: 3px; top: 3px;
+  position: absolute; left: 3px; top: 2px;
   width: 18px; height: 18px; border-radius: 50%;
   background: #fff;
   transition: transform 0.2s;
 }
-.sfl-toggle input:checked + .sfl-toggle-slider { background: var(--sfl-blue); }
+.sfl-toggle input:checked + .sfl-toggle-slider { background: var(--sfl-blue); border-color: var(--sfl-blue); }
 .sfl-toggle input:checked + .sfl-toggle-slider::before { transform: translateX(20px); }
 
-/* Danger zone */
+/* ── Danger zone ── */
 .settings-danger .settings-card { border-color: rgba(255,50,50,0.2); }
 .settings-danger .settings-row-label { color: #ff5566; }
 
-@media (max-width: 768px) {
-  .settings-page { padding: 16px 12px calc(58px + 16px); padding-top: calc(60px + 16px); }
+/* ── Image thumbnails in rows ── */
+.settings-avatar-thumb {
+  width: 40px; height: 40px; border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--sfl-border-hot);
+  flex-shrink: 0;
+  background: var(--sfl-bg-input);
+}
+.settings-cover-thumb {
+  width: 58px; height: 34px;
+  border-radius: var(--sfl-r-xs);
+  object-fit: cover;
+  border: 2px solid var(--sfl-border-hot);
+  flex-shrink: 0;
+  background: var(--sfl-bg-input);
 }
 
-/* ── Account modals ── */
+/* ══════════════════════════════════════════
+   Account modals
+   ══════════════════════════════════════════ */
 .acct-overlay {
   position: fixed; inset: 0; z-index: 900;
-  background: rgba(4,10,20,0.82);
+  background: rgba(4,10,20,0.88);
   display: flex; align-items: center; justify-content: center;
-  padding: 20px;
-  backdrop-filter: blur(5px);
+  padding: 16px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   animation: sflFadeIn 0.18s ease;
+  overflow-y: auto;
 }
 .acct-modal {
   background: var(--sfl-bg-panel);
   border: 1px solid var(--sfl-border-hot);
   border-radius: var(--sfl-r-lg);
-  padding: 28px 24px 24px;
+  padding: 24px 20px 20px;
   max-width: 420px; width: 100%;
-  box-shadow: var(--sfl-shadow);
+  box-shadow: 0 0 40px rgba(0,174,239,0.12), var(--sfl-shadow);
   animation: sflFadeUp 0.2s ease;
   position: relative;
+  /* No white backgrounds */
+  color: var(--sfl-text);
 }
 .acct-modal-title {
   font-size: 16px; font-weight: 800;
-  margin-bottom: 6px; color: var(--sfl-text);
+  margin-bottom: 5px; color: var(--sfl-text);
 }
 .acct-modal-sub {
   font-size: 13px; color: var(--sfl-text-muted);
-  margin-bottom: 20px; line-height: 1.55;
+  margin-bottom: 18px; line-height: 1.55;
 }
 .acct-modal-close {
-  position: absolute; top: 14px; right: 16px;
+  position: absolute; top: 14px; right: 14px;
   background: var(--sfl-bg-hover);
   border: 1px solid var(--sfl-border);
   border-radius: 50%; width: 28px; height: 28px;
@@ -110,153 +146,166 @@
   color: var(--sfl-text-muted); transition: background 0.15s;
 }
 .acct-modal-close:hover { background: var(--sfl-bg-card); color: var(--sfl-text); }
-.acct-field { margin-bottom: 14px; }
+.acct-field { margin-bottom: 13px; }
 .acct-field label {
-  display: block; font-size: 12px; font-weight: 600;
-  color: var(--sfl-text-label); margin-bottom: 6px;
-  text-transform: uppercase; letter-spacing: 0.8px;
+  display: block; font-size: 11px; font-weight: 700;
+  color: var(--sfl-text-muted); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 1px;
 }
+.acct-field input[type="text"],
+.acct-field input[type="email"],
+.acct-field input[type="password"],
+.acct-field input[type="url"],
+.acct-field textarea,
 .acct-field .sfl-input {
-  width: 100%; padding: 10px 14px;
+  width: 100%; padding: 10px 13px;
   background: var(--sfl-bg-input);
   border: 1px solid var(--sfl-border);
   border-radius: var(--sfl-r-sm);
   color: var(--sfl-text); font-size: 14px;
-  transition: border-color 0.18s;
-}
-.acct-field .sfl-input:focus {
+  transition: border-color 0.18s, box-shadow 0.18s;
   outline: none;
+  font-family: inherit;
+  -webkit-appearance: none; appearance: none;
+  box-sizing: border-box;
+}
+.acct-field input:focus,
+.acct-field textarea:focus,
+.acct-field .sfl-input:focus {
   border-color: var(--sfl-blue);
   box-shadow: 0 0 0 2px rgba(0,174,239,0.15);
 }
+.acct-field input:-webkit-autofill,
+.acct-field input:-webkit-autofill:hover,
+.acct-field input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--sfl-bg-input) inset !important;
+  -webkit-text-fill-color: var(--sfl-text) !important;
+  caret-color: var(--sfl-text);
+  transition: background-color 99999s ease 0s !important;
+}
+.acct-field textarea { resize: vertical; min-height: 72px; }
 .acct-msg {
   font-size: 13px; border-radius: var(--sfl-r-sm);
-  padding: 9px 13px; margin-top: 14px; display: none;
+  padding: 9px 13px; margin-top: 12px; display: none;
+  line-height: 1.45;
 }
 .acct-msg.success { background: rgba(0,180,80,0.12); color: #4ade80; border: 1px solid rgba(0,180,80,0.25); display: block; }
 .acct-msg.error   { background: rgba(255,50,50,0.10); color: #ff7088; border: 1px solid rgba(255,50,50,0.22); display: block; }
-.acct-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 20px; }
+.acct-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 18px; }
 
 /* ── Privacy sub-panel ── */
-.privacy-panel {
-  display: none;
-  animation: sflFadeIn 0.18s ease;
-}
+.privacy-panel { display: none; animation: sflFadeIn 0.18s ease; }
 .privacy-panel.active { display: block; }
 .privacy-panel-back {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 600; color: var(--sfl-blue);
-  cursor: pointer; margin-bottom: 16px;
+  cursor: pointer; margin-bottom: 18px;
   background: none; border: none; padding: 0;
 }
 .privacy-panel-back:hover { color: var(--sfl-blue-bright); }
-
-/* Hide main settings when privacy panel is open */
 .settings-main { transition: opacity 0.18s; }
 
-/* ── Image Upload Modals ── */
-.upload-preview-wrap {
-  position: relative;
-  margin-bottom: 14px;
-}
-.upload-preview-avatar {
-  width: 96px; height: 96px; border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--sfl-border-hot);
-  display: block;
-  margin: 0 auto 10px;
+/* ══════════════════════════════════════════
+   Upload modals — image specific
+   ══════════════════════════════════════════ */
+.upload-modal-body { padding: 0; }
+
+/* Avatar preview circle */
+.upload-avatar-preview {
+  width: 100px; height: 100px; border-radius: 50%;
+  border: 3px solid var(--sfl-border-hot);
   background: var(--sfl-bg-input);
-}
-.upload-preview-cover {
-  width: 100%; height: 120px;
   object-fit: cover;
+  display: block; margin: 0 auto 16px;
+  box-shadow: var(--sfl-glow-sm);
+}
+.upload-avatar-placeholder {
+  width: 100px; height: 100px; border-radius: 50%;
+  background: var(--sfl-bg-input);
+  border: 2px dashed rgba(0,174,239,0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px; margin: 0 auto 16px;
+  cursor: pointer; transition: border-color 0.18s, background 0.18s;
+}
+.upload-avatar-placeholder:hover, .upload-avatar-placeholder:focus { border-color: var(--sfl-blue); background: var(--sfl-bg-hover); outline: none; }
+
+/* Cover preview */
+.upload-cover-preview {
+  width: 100%; height: 110px;
   border-radius: var(--sfl-r-sm);
   border: 2px solid var(--sfl-border-hot);
-  display: block;
-  margin-bottom: 10px;
   background: var(--sfl-bg-input);
+  object-fit: cover;
+  display: block; margin-bottom: 14px;
 }
-.upload-preview-placeholder {
-  width: 96px; height: 96px; border-radius: 50%;
+.upload-cover-placeholder {
+  width: 100%; height: 90px;
   background: var(--sfl-bg-input);
-  border: 2px dashed var(--sfl-border);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 32px; margin: 0 auto 10px; cursor: pointer;
-  transition: border-color 0.18s;
-}
-.upload-preview-placeholder:hover { border-color: var(--sfl-blue); }
-.upload-preview-cover-placeholder {
-  width: 100%; height: 100px;
-  background: var(--sfl-bg-input);
-  border: 2px dashed var(--sfl-border);
+  border: 2px dashed rgba(0,174,239,0.35);
   border-radius: var(--sfl-r-sm);
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; color: var(--sfl-text-muted);
-  cursor: pointer; margin-bottom: 10px;
-  transition: border-color 0.18s;
+  gap: 8px; font-size: 13px; color: var(--sfl-text-muted);
+  cursor: pointer; margin-bottom: 14px;
+  transition: border-color 0.18s, background 0.18s;
 }
-.upload-preview-cover-placeholder:hover { border-color: var(--sfl-blue); }
-.upload-file-btn {
-  display: block; width: 100%;
-  padding: 10px 14px;
+.upload-cover-placeholder:hover, .upload-cover-placeholder:focus { border-color: var(--sfl-blue); background: var(--sfl-bg-hover); outline: none; }
+
+/* Choose file button */
+.upload-choose-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 10px 14px;
   background: var(--sfl-bg-input);
-  border: 1px dashed var(--sfl-border-hot);
+  border: 1px solid var(--sfl-border-hot);
   border-radius: var(--sfl-r-sm);
   color: var(--sfl-blue); font-size: 13px; font-weight: 600;
-  text-align: center; cursor: pointer;
-  transition: background 0.18s, border-color 0.18s;
+  cursor: pointer; transition: background 0.18s;
+  font-family: inherit;
+  -webkit-appearance: none;
 }
-.upload-file-btn:hover { background: var(--sfl-bg-hover); }
-.upload-progress-wrap {
-  margin-top: 12px; display: none;
+.upload-choose-btn:hover { background: var(--sfl-bg-hover); }
+.upload-choose-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Progress bar */
+.upload-progress-wrap { margin-top: 14px; display: none; }
+.upload-progress-stages {
+  display: flex; gap: 4px; margin-bottom: 8px;
 }
+.upload-stage {
+  flex: 1; height: 3px; border-radius: 3px;
+  background: rgba(0,140,220,0.15);
+  transition: background 0.3s;
+}
+.upload-stage.active { background: var(--sfl-blue); }
+.upload-stage.done { background: var(--sfl-blue-bright); }
 .upload-progress-track {
-  height: 5px; background: rgba(0,140,220,0.18);
-  border-radius: 5px; overflow: hidden;
-  margin-bottom: 6px;
+  height: 5px; background: rgba(0,140,220,0.15);
+  border-radius: 5px; overflow: hidden; margin-bottom: 6px;
 }
 .upload-progress-bar {
-  height: 100%; width: 0;
+  height: 100%; width: 0%;
   background: linear-gradient(90deg, var(--sfl-blue-dim), var(--sfl-blue), var(--sfl-blue-bright));
   border-radius: 5px;
-  transition: width 0.25s ease;
+  transition: width 0.3s ease;
 }
 .upload-progress-label {
-  font-size: 11px; color: var(--sfl-blue);
-  font-weight: 600; text-align: center;
-  letter-spacing: 0.3px;
-}
-/* Thumbnail shown in the Account settings row */
-.settings-avatar-thumb {
-  width: 38px; height: 38px; border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--sfl-border);
-  flex-shrink: 0;
-}
-.settings-cover-thumb {
-  width: 56px; height: 32px;
-  border-radius: var(--sfl-r-xs);
-  object-fit: cover;
-  border: 2px solid var(--sfl-border);
-  flex-shrink: 0;
+  font-size: 12px; color: var(--sfl-blue);
+  font-weight: 600; text-align: center; letter-spacing: 0.2px;
 }
 
-/* ── Force dark theme on all form controls inside modals ── */
-.acct-modal select,
-.acct-modal option {
+/* Select dropdown inside modals */
+.acct-field select {
+  width: 100%; padding: 10px 13px;
   background: var(--sfl-bg-input);
-  color: var(--sfl-text);
-  border-color: var(--sfl-border);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-sm);
+  color: var(--sfl-text); font-size: 14px;
+  cursor: pointer; outline: none;
+  font-family: inherit;
+  -webkit-appearance: none; appearance: none;
+  box-sizing: border-box;
 }
-/* Override browser autofill white background */
-.acct-modal .sfl-input:-webkit-autofill,
-.acct-modal .sfl-input:-webkit-autofill:hover,
-.acct-modal .sfl-input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px var(--sfl-bg-input) inset !important;
-  -webkit-text-fill-color: var(--sfl-text) !important;
-  border-color: var(--sfl-border) !important;
-  caret-color: var(--sfl-text);
-}
+.acct-field select option { background: var(--sfl-bg-input); color: var(--sfl-text); }
+.acct-field select:focus { border-color: var(--sfl-blue); }
 </style>
 </head>
 <body class="sfl-body">
@@ -264,6 +313,7 @@
 <div id="sfl-toast" role="status"></div>
 
 <header class="sfl-topbar">
+  <a href="sfl-home.html" style="font-size:18px;text-decoration:none;color:var(--sfl-text);">←</a>
   <div class="sfl-topbar-title">⚙️ Settings</div>
   <div></div>
 </header>
@@ -292,7 +342,7 @@
   <main class="sfl-main" role="main">
     <div class="settings-page">
 
-      <!-- ── Privacy sub-panel (shown instead of main settings) ── -->
+      <!-- ── Privacy sub-panel ── -->
       <div class="privacy-panel" id="privacyPanel">
         <button class="privacy-panel-back" id="privacyBack">← Back to Settings</button>
         <div class="settings-head">🔒 Privacy</div>
@@ -305,7 +355,7 @@
                 <div class="settings-row-label">Default Video Visibility</div>
                 <div class="settings-row-sub">Default for new uploads</div>
               </div>
-              <select class="sfl-input sfl-select" id="defaultVisibility2" style="width:auto;padding:6px 12px;font-size:13px;">
+              <select class="sfl-select" id="defaultVisibility2" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
                 <option value="public">Public</option>
                 <option value="followers">Followers</option>
                 <option value="private">Private</option>
@@ -316,7 +366,7 @@
                 <div class="settings-row-label">Comment Controls</div>
                 <div class="settings-row-sub">Who can comment on your videos</div>
               </div>
-              <select class="sfl-input sfl-select" id="commentControl2" style="width:auto;padding:6px 12px;font-size:13px;">
+              <select class="sfl-select" id="commentControl2" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
                 <option value="all">Everyone</option>
                 <option value="followers">Followers</option>
                 <option value="none">No one</option>
@@ -333,30 +383,21 @@
                 <div class="settings-row-label">Private Profile</div>
                 <div class="settings-row-sub">Only followers can see your content</div>
               </div>
-              <label class="sfl-toggle" aria-label="Private profile toggle">
-                <input type="checkbox" id="togglePrivateProfile">
-                <span class="sfl-toggle-slider"></span>
-              </label>
+              <label class="sfl-toggle"><input type="checkbox" id="togglePrivateProfile"><span class="sfl-toggle-slider"></span></label>
             </div>
             <div class="settings-row">
               <div class="settings-row-info">
                 <div class="settings-row-label">Hide Follower Count</div>
                 <div class="settings-row-sub">Others won't see how many followers you have</div>
               </div>
-              <label class="sfl-toggle" aria-label="Hide follower count toggle">
-                <input type="checkbox" id="toggleHideFollowers">
-                <span class="sfl-toggle-slider"></span>
-              </label>
+              <label class="sfl-toggle"><input type="checkbox" id="toggleHideFollowers"><span class="sfl-toggle-slider"></span></label>
             </div>
             <div class="settings-row">
               <div class="settings-row-info">
                 <div class="settings-row-label">Show Activity Status</div>
                 <div class="settings-row-sub">Let others see when you're active</div>
               </div>
-              <label class="sfl-toggle" aria-label="Activity status toggle">
-                <input type="checkbox" id="toggleActivityStatus" checked>
-                <span class="sfl-toggle-slider"></span>
-              </label>
+              <label class="sfl-toggle"><input type="checkbox" id="toggleActivityStatus" checked><span class="sfl-toggle-slider"></span></label>
             </div>
           </div>
         </div>
@@ -369,7 +410,7 @@
                 <div class="settings-row-label">Allow Direct Messages</div>
                 <div class="settings-row-sub">Who can send you direct messages</div>
               </div>
-              <select class="sfl-input sfl-select" id="privacyDMs" style="width:auto;padding:6px 12px;font-size:13px;">
+              <select class="sfl-select" id="privacyDMs" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
                 <option value="all">Everyone</option>
                 <option value="followers">Followers only</option>
                 <option value="none">No one</option>
@@ -384,23 +425,63 @@
             </div>
           </div>
         </div>
-      </div>
-      <!-- /privacy-panel -->
+      </div><!-- /privacyPanel -->
 
-      <!-- ── Main settings (hidden when privacy panel open) ── -->
+      <!-- ── Main settings ── -->
       <div class="settings-main" id="settingsMain">
       <div class="settings-head">⚙️ Settings</div>
 
-      <!-- Account -->
+      <!-- PROFILE section -->
+      <div class="settings-section">
+        <div class="settings-section-title">Profile</div>
+        <div class="settings-card">
+
+          <!-- Avatar row -->
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnEditAvatar">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Profile Picture</div>
+                <div class="settings-row-sub">Change your profile photo</div>
+              </div>
+              <img id="settingsAvatarThumb" class="settings-avatar-thumb" src="" alt="" style="display:none;">
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+
+          <!-- Cover row -->
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnEditCover">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Cover Photo</div>
+                <div class="settings-row-sub">Change your profile banner</div>
+              </div>
+              <img id="settingsCoverThumb" class="settings-cover-thumb" src="" alt="" style="display:none;">
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+
+          <!-- Edit profile info row -->
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnEditProfile">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Edit Profile Info</div>
+                <div class="settings-row-sub" id="settingsUserName">Display name, bio, links</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNT section -->
       <div class="settings-section">
         <div class="settings-section-title">Account</div>
         <div class="settings-card">
           <div class="settings-row" id="accountInfoRow">
             <div class="settings-row-info">
-              <div class="settings-row-label" id="settingsUserName">Loading…</div>
+              <div class="settings-row-label" id="settingsDisplayName">Loading…</div>
               <div class="settings-row-sub" id="settingsUserEmail"></div>
             </div>
-            <a href="sfl-profile.html" class="sfl-btn sfl-btn-ghost sfl-btn-sm">Edit Profile</a>
           </div>
           <div class="settings-row">
             <button class="settings-row-link" id="btnEditEmail">
@@ -421,26 +502,6 @@
             </button>
           </div>
           <div class="settings-row">
-            <button class="settings-row-link" id="btnEditAvatar">
-              <div class="settings-row-info">
-                <div class="settings-row-label">Profile Picture</div>
-                <div class="settings-row-sub">Change your profile photo</div>
-              </div>
-              <img id="settingsAvatarThumb" class="settings-avatar-thumb" src="" alt="" style="display:none;">
-              <span class="settings-chevron">›</span>
-            </button>
-          </div>
-          <div class="settings-row">
-            <button class="settings-row-link" id="btnEditCover">
-              <div class="settings-row-info">
-                <div class="settings-row-label">Cover Photo</div>
-                <div class="settings-row-sub">Change your profile banner</div>
-              </div>
-              <img id="settingsCoverThumb" class="settings-cover-thumb" src="" alt="" style="display:none;">
-              <span class="settings-chevron">›</span>
-            </button>
-          </div>
-          <div class="settings-row">
             <button class="settings-row-link" id="btnPrivacy">
               <div class="settings-row-info">
                 <div class="settings-row-label">Privacy</div>
@@ -452,7 +513,7 @@
         </div>
       </div>
 
-      <!-- Video Settings -->
+      <!-- VIDEO section -->
       <div class="settings-section">
         <div class="settings-section-title">Video</div>
         <div class="settings-card">
@@ -461,17 +522,14 @@
               <div class="settings-row-label">Autoplay</div>
               <div class="settings-row-sub">Automatically play next video</div>
             </div>
-            <label class="sfl-toggle" aria-label="Autoplay toggle">
-              <input type="checkbox" id="toggleAutoplay" checked>
-              <span class="sfl-toggle-slider"></span>
-            </label>
+            <label class="sfl-toggle"><input type="checkbox" id="toggleAutoplay" checked><span class="sfl-toggle-slider"></span></label>
           </div>
           <div class="settings-row">
             <div class="settings-row-info">
               <div class="settings-row-label">Video Quality</div>
               <div class="settings-row-sub">Default playback quality</div>
             </div>
-            <select class="sfl-input sfl-select" id="videoQuality" style="width:auto;padding:6px 12px;font-size:13px;">
+            <select class="sfl-select" id="videoQuality" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
               <option value="auto">Auto</option>
               <option value="1080">1080p</option>
               <option value="720">720p</option>
@@ -484,15 +542,12 @@
               <div class="settings-row-label">Captions</div>
               <div class="settings-row-sub">Show captions when available</div>
             </div>
-            <label class="sfl-toggle" aria-label="Captions toggle">
-              <input type="checkbox" id="toggleCaptions">
-              <span class="sfl-toggle-slider"></span>
-            </label>
+            <label class="sfl-toggle"><input type="checkbox" id="toggleCaptions"><span class="sfl-toggle-slider"></span></label>
           </div>
         </div>
       </div>
 
-      <!-- Notifications -->
+      <!-- NOTIFICATIONS section -->
       <div class="settings-section">
         <div class="settings-section-title">Notifications</div>
         <div class="settings-card">
@@ -501,30 +556,21 @@
               <div class="settings-row-label">Live Notifications</div>
               <div class="settings-row-sub">Notify when followed creators go live</div>
             </div>
-            <label class="sfl-toggle" aria-label="Live notifications toggle">
-              <input type="checkbox" id="toggleLiveNotifs" checked>
-              <span class="sfl-toggle-slider"></span>
-            </label>
+            <label class="sfl-toggle"><input type="checkbox" id="toggleLiveNotifs" checked><span class="sfl-toggle-slider"></span></label>
           </div>
           <div class="settings-row">
             <div class="settings-row-info">
               <div class="settings-row-label">New Videos</div>
               <div class="settings-row-sub">Notify when followed creators upload</div>
             </div>
-            <label class="sfl-toggle" aria-label="New video notifications toggle">
-              <input type="checkbox" id="toggleVideoNotifs" checked>
-              <span class="sfl-toggle-slider"></span>
-            </label>
+            <label class="sfl-toggle"><input type="checkbox" id="toggleVideoNotifs" checked><span class="sfl-toggle-slider"></span></label>
           </div>
           <div class="settings-row">
             <div class="settings-row-info">
-              <div class="settings-row-label">Comments & Likes</div>
+              <div class="settings-row-label">Comments &amp; Likes</div>
               <div class="settings-row-sub">Activity on your videos</div>
             </div>
-            <label class="sfl-toggle" aria-label="Comments notifications toggle">
-              <input type="checkbox" id="toggleInteractNotifs" checked>
-              <span class="sfl-toggle-slider"></span>
-            </label>
+            <label class="sfl-toggle"><input type="checkbox" id="toggleInteractNotifs" checked><span class="sfl-toggle-slider"></span></label>
           </div>
           <div class="settings-row">
             <div class="settings-row-info">
@@ -536,7 +582,7 @@
         </div>
       </div>
 
-      <!-- Privacy -->
+      <!-- PRIVACY (quick) section -->
       <div class="settings-section">
         <div class="settings-section-title">Privacy</div>
         <div class="settings-card">
@@ -545,7 +591,7 @@
               <div class="settings-row-label">Default Video Visibility</div>
               <div class="settings-row-sub">Default for new uploads</div>
             </div>
-            <select class="sfl-input sfl-select" id="defaultVisibility" style="width:auto;padding:6px 12px;font-size:13px;">
+            <select class="sfl-select" id="defaultVisibility" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
               <option value="public">Public</option>
               <option value="followers">Followers</option>
               <option value="private">Private</option>
@@ -556,57 +602,23 @@
               <div class="settings-row-label">Comment Controls</div>
               <div class="settings-row-sub">Who can comment on your videos</div>
             </div>
-            <select class="sfl-input sfl-select" id="commentControl" style="width:auto;padding:6px 12px;font-size:13px;">
+            <select class="sfl-select" id="commentControl" style="width:auto;padding:6px 12px;font-size:13px;background:var(--sfl-bg-input);border:1px solid var(--sfl-border);border-radius:var(--sfl-r-sm);color:var(--sfl-text);">
               <option value="all">Everyone</option>
               <option value="followers">Followers</option>
               <option value="none">No one</option>
             </select>
           </div>
-          <div class="settings-row">
-            <a href="sfl-settings.html" class="settings-row-link">
-              <div class="settings-row-info">
-                <div class="settings-row-label">Blocked Users</div>
-                <div class="settings-row-sub">Manage who you've blocked</div>
-              </div>
-              <span class="settings-chevron">›</span>
-            </a>
-          </div>
         </div>
       </div>
 
-      <!-- Navigation -->
-      <div class="settings-section">
-        <div class="settings-section-title">Navigation</div>
-        <div class="settings-card">
-          <div class="settings-row">
-            <a href="index.html" class="settings-row-link">
-              <div class="settings-row-info">
-                <div class="settings-row-label">🔥 Shadow Fire Live Home</div>
-                <div class="settings-row-sub">Go to the video home page</div>
-              </div>
-              <span class="settings-chevron">›</span>
-            </a>
-          </div>
-          <div class="settings-row">
-            <a href="sfl-settings.html" class="settings-row-link">
-              <div class="settings-row-info">
-                <div class="settings-row-label">Full Account Settings</div>
-                <div class="settings-row-sub">All account options in one place</div>
-              </div>
-              <span class="settings-chevron">›</span>
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Install App -->
+      <!-- APP section -->
       <div class="settings-section" id="installAppSection">
         <div class="settings-section-title">App</div>
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-row-info">
               <div class="settings-row-label" id="installRowLabel">🔥 Install Shadow Fire Live</div>
-              <div class="settings-row-sub" id="installRowSub">Add to your home screen or desktop for quick access</div>
+              <div class="settings-row-sub" id="installRowSub">Add to your home screen for quick access</div>
             </div>
             <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnInstallApp">Install</button>
           </div>
@@ -619,7 +631,7 @@
         </div>
       </div>
 
-      <!-- About -->
+      <!-- ABOUT section -->
       <div class="settings-section">
         <div class="settings-section-title">About</div>
         <div class="settings-card">
@@ -632,12 +644,12 @@
         </div>
       </div>
 
-      <!-- Sign Out -->
+      <!-- SIGN OUT -->
       <div class="settings-section settings-danger">
-        <div class="settings-section-title">Account</div>
+        <div class="settings-section-title">Session</div>
         <div class="settings-card">
           <div class="settings-row">
-            <button class="settings-row-link" id="signOutBtn" style="background:none;border:none;width:100%;cursor:pointer;padding:14px 16px;">
+            <button class="settings-row-link" id="signOutBtn">
               <div class="settings-row-info">
                 <div class="settings-row-label">Sign Out</div>
                 <div class="settings-row-sub" style="color:var(--sfl-text-muted);">Sign out of your account</div>
@@ -647,29 +659,31 @@
         </div>
       </div>
 
-      </div><!-- /settings-main -->
-
+      </div><!-- /settingsMain -->
     </div>
   </main>
 </div>
 
-<nav class="sfl-bottom-nav">
+<nav class="sfl-bottom-nav" aria-label="Mobile navigation">
   <a href="sfl-home.html" class="sfl-bn-item"><span class="sfl-bn-icon">🏠</span><span>Home</span></a>
   <a href="sfl-search.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔍</span><span>Discover</span></a>
   <a href="sfl-upload.html" class="sfl-bn-item"><span class="sfl-bn-icon">📤</span><span>Upload</span></a>
   <a href="sfl-notifications.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔔</span><span>Alerts</span></a>
   <a href="sfl-profile.html" class="sfl-bn-item"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
 </nav>
+<!-- ════════════════════════════════════════
+     MODALS
+     ════════════════════════════════════════ -->
 
-<!-- ── Re-auth Modal ── -->
+<!-- Re-auth Modal -->
 <div class="acct-overlay" id="reAuthOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="reAuthTitle">
   <div class="acct-modal">
     <button class="acct-modal-close" id="reAuthClose" aria-label="Close">✕</button>
-    <div class="acct-modal-title" id="reAuthTitle">Confirm Your Password</div>
+    <div class="acct-modal-title" id="reAuthTitle">🔐 Confirm Password</div>
     <div class="acct-modal-sub" id="reAuthSub">For your security, please re-enter your current password to continue.</div>
     <div class="acct-field">
       <label for="reAuthPassword">Current Password</label>
-      <input class="sfl-input" type="password" id="reAuthPassword" placeholder="Enter current password" autocomplete="current-password">
+      <input type="password" id="reAuthPassword" placeholder="Enter current password" autocomplete="current-password">
     </div>
     <div class="acct-msg" id="reAuthMsg"></div>
     <div class="acct-actions">
@@ -679,23 +693,23 @@
   </div>
 </div>
 
-<!-- ── Edit Email Modal ── -->
+<!-- Edit Email Modal -->
 <div class="acct-overlay" id="emailOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="emailModalTitle">
   <div class="acct-modal">
     <button class="acct-modal-close" id="emailClose" aria-label="Close">✕</button>
     <div class="acct-modal-title" id="emailModalTitle">✉️ Edit Email</div>
-    <div class="acct-modal-sub">Enter your new email address. You will be signed in with the new email going forward. Your profile, posts, and followers are not affected.</div>
+    <div class="acct-modal-sub">Enter a new email address. Your profile and followers are not affected.</div>
     <div class="acct-field">
       <label for="emailCurrent">Current Email</label>
-      <input class="sfl-input" type="email" id="emailCurrent" readonly style="opacity:0.6;cursor:default;">
+      <input type="email" id="emailCurrent" readonly style="opacity:0.55;cursor:default;">
     </div>
     <div class="acct-field">
       <label for="emailNew">New Email Address</label>
-      <input class="sfl-input" type="email" id="emailNew" placeholder="new@example.com" autocomplete="email">
+      <input type="email" id="emailNew" placeholder="new@example.com" autocomplete="email">
     </div>
     <div class="acct-field">
       <label for="emailConfirm">Confirm New Email</label>
-      <input class="sfl-input" type="email" id="emailConfirm" placeholder="Confirm new email" autocomplete="email">
+      <input type="email" id="emailConfirm" placeholder="Confirm new email" autocomplete="email">
     </div>
     <div class="acct-msg" id="emailMsg"></div>
     <div class="acct-actions">
@@ -705,19 +719,19 @@
   </div>
 </div>
 
-<!-- ── Change Password Modal ── -->
+<!-- Change Password Modal -->
 <div class="acct-overlay" id="pwOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="pwModalTitle">
   <div class="acct-modal">
     <button class="acct-modal-close" id="pwClose" aria-label="Close">✕</button>
     <div class="acct-modal-title" id="pwModalTitle">🔑 Change Password</div>
-    <div class="acct-modal-sub">Your new password must be at least 6 characters. You'll remain signed in after changing it.</div>
+    <div class="acct-modal-sub">New password must be at least 6 characters. You'll stay signed in after changing it.</div>
     <div class="acct-field">
       <label for="pwNew">New Password</label>
-      <input class="sfl-input" type="password" id="pwNew" placeholder="New password (min 6 chars)" autocomplete="new-password">
+      <input type="password" id="pwNew" placeholder="New password (min 6 chars)" autocomplete="new-password">
     </div>
     <div class="acct-field">
       <label for="pwConfirm">Confirm New Password</label>
-      <input class="sfl-input" type="password" id="pwConfirm" placeholder="Confirm new password" autocomplete="new-password">
+      <input type="password" id="pwConfirm" placeholder="Confirm new password" autocomplete="new-password">
     </div>
     <div class="acct-msg" id="pwMsg"></div>
     <div class="acct-actions">
@@ -727,28 +741,61 @@
   </div>
 </div>
 
-<!-- ── Profile Picture Upload Modal ── -->
+<!-- Edit Profile Info Modal -->
+<div class="acct-overlay" id="profileInfoOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="profileInfoTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="profileInfoClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="profileInfoTitle">✏️ Edit Profile</div>
+    <div class="acct-modal-sub">Your public profile information.</div>
+    <div class="acct-field">
+      <label for="piDisplayName">Display Name</label>
+      <input type="text" id="piDisplayName" placeholder="Your display name" maxlength="50" autocomplete="name">
+    </div>
+    <div class="acct-field">
+      <label for="piUsername">Username</label>
+      <input type="text" id="piUsername" placeholder="username (no spaces)" maxlength="30" autocomplete="username">
+    </div>
+    <div class="acct-field">
+      <label for="piBio">Bio</label>
+      <textarea id="piBio" placeholder="A short bio about yourself…" maxlength="200"></textarea>
+    </div>
+    <div class="acct-msg" id="profileInfoMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="profileInfoCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="profileInfoSaveBtn">Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Picture Upload Modal -->
 <div class="acct-overlay" id="avatarOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="avatarModalTitle">
   <div class="acct-modal">
     <button class="acct-modal-close" id="avatarClose" aria-label="Close">✕</button>
     <div class="acct-modal-title" id="avatarModalTitle">📷 Profile Picture</div>
-    <div class="acct-modal-sub">Choose a photo from your device. JPG, PNG, or WEBP · Max 10 MB.</div>
+    <div class="acct-modal-sub">Choose a photo from your device. JPG, PNG, or WEBP.</div>
 
-    <!-- Preview area — click to pick file -->
-    <div class="upload-preview-wrap" id="avatarPreviewWrap">
-      <div class="upload-preview-placeholder" id="avatarPreviewPlaceholder" role="button" tabindex="0" aria-label="Choose profile picture">👤</div>
-      <img class="upload-preview-avatar" id="avatarPreviewImg" src="" alt="Preview" style="display:none;">
+    <!-- Preview -->
+    <div id="avatarPlaceholderWrap">
+      <div class="upload-avatar-placeholder" id="avatarPreviewPlaceholder" role="button" tabindex="0" aria-label="Tap to choose photo">👤</div>
     </div>
+    <img class="upload-avatar-preview" id="avatarPreviewImg" src="" alt="Preview" style="display:none;">
 
-    <!-- Hidden file input — accept mobile camera too -->
-    <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
-    <label for="avatarFileInput" class="upload-file-btn">📁 Choose Photo</label>
+    <!-- File input -->
+    <input type="file" id="avatarFileInput" accept="image/jpeg,image/png,image/webp,image/gif" capture="user" style="display:none;">
+    <button class="upload-choose-btn" id="avatarChooseBtn" type="button">📁 Choose Photo</button>
 
+    <!-- Progress -->
     <div class="upload-progress-wrap" id="avatarProgressWrap">
+      <div class="upload-progress-stages">
+        <div class="upload-stage" id="avStage1"></div>
+        <div class="upload-stage" id="avStage2"></div>
+        <div class="upload-stage" id="avStage3"></div>
+        <div class="upload-stage" id="avStage4"></div>
+      </div>
       <div class="upload-progress-track">
         <div class="upload-progress-bar" id="avatarProgressBar"></div>
       </div>
-      <div class="upload-progress-label" id="avatarProgressLabel">Uploading… 0%</div>
+      <div class="upload-progress-label" id="avatarProgressLabel">Preparing…</div>
     </div>
 
     <div class="acct-msg" id="avatarMsg"></div>
@@ -759,28 +806,37 @@
   </div>
 </div>
 
-<!-- ── Cover Photo Upload Modal ── -->
+<!-- Cover Photo Upload Modal -->
 <div class="acct-overlay" id="coverOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="coverModalTitle">
   <div class="acct-modal">
     <button class="acct-modal-close" id="coverClose" aria-label="Close">✕</button>
     <div class="acct-modal-title" id="coverModalTitle">🖼️ Cover Photo</div>
-    <div class="acct-modal-sub">Choose a banner image. JPG, PNG, or WEBP · Max 10 MB. Best at 1200×400 px.</div>
+    <div class="acct-modal-sub">Choose a banner image. Best at 1200×400 px.</div>
 
-    <!-- Preview area -->
-    <div class="upload-preview-wrap" id="coverPreviewWrap">
-      <div class="upload-preview-cover-placeholder" id="coverPreviewPlaceholder" role="button" tabindex="0" aria-label="Choose cover photo">🖼️ Tap to choose banner image</div>
-      <img class="upload-preview-cover" id="coverPreviewImg" src="" alt="Preview" style="display:none;">
+    <!-- Preview -->
+    <div id="coverPlaceholderWrap">
+      <div class="upload-cover-placeholder" id="coverPreviewPlaceholder" role="button" tabindex="0" aria-label="Tap to choose cover photo">
+        <span>🖼️</span><span>Tap to choose banner</span>
+      </div>
     </div>
+    <img class="upload-cover-preview" id="coverPreviewImg" src="" alt="Preview" style="display:none;">
 
-    <!-- Hidden file input -->
+    <!-- File input -->
     <input type="file" id="coverFileInput" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none;">
-    <label for="coverFileInput" class="upload-file-btn">📁 Choose Photo</label>
+    <button class="upload-choose-btn" id="coverChooseBtn" type="button">📁 Choose Photo</button>
 
+    <!-- Progress -->
     <div class="upload-progress-wrap" id="coverProgressWrap">
+      <div class="upload-progress-stages">
+        <div class="upload-stage" id="cvStage1"></div>
+        <div class="upload-stage" id="cvStage2"></div>
+        <div class="upload-stage" id="cvStage3"></div>
+        <div class="upload-stage" id="cvStage4"></div>
+      </div>
       <div class="upload-progress-track">
         <div class="upload-progress-bar" id="coverProgressBar"></div>
       </div>
-      <div class="upload-progress-label" id="coverProgressLabel">Uploading… 0%</div>
+      <div class="upload-progress-label" id="coverProgressLabel">Preparing…</div>
     </div>
 
     <div class="acct-msg" id="coverMsg"></div>
@@ -791,146 +847,134 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, signOut,
   EmailAuthProvider, reauthenticateWithCredential,
-  updateEmail, updatePassword, verifyBeforeUpdateEmail
+  updatePassword, verifyBeforeUpdateEmail
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, updateDoc }
+import { getFirestore, doc, getDoc, updateDoc, setDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
-  getStorage, ref as storageRef,
-  uploadBytesResumable, getDownloadURL, deleteObject
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
-  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:'horr-a08f4.firebaseapp.com',
-  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:'horr-a08f4',
-  storageBucket:'horr-a08f4.firebasestorage.app',
+  apiKey:           'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:       'horr-a08f4.firebaseapp.com',
+  databaseURL:      'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:        'horr-a08f4',
+  storageBucket:    'horr-a08f4.firebasestorage.app',
   messagingSenderId:'933810617818',
-  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+  appId:            '1:933810617818:web:efb24f123337dd987c14e3'
 };
 const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth    = getAuth(app);
 const db      = getFirestore(app);
 const storage = getStorage(app);
 
-const $ = id => document.getElementById(id);
-const toast = (msg,dur=3000) => {
-  const t=$('sfl-toast');t.textContent=msg;t.classList.add('visible');
-  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('visible'),dur);
+const $  = id => document.getElementById(id);
+const toast = (msg, dur = 3000) => {
+  const t = $('sfl-toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('visible'), dur);
 };
 
-/* ── Save pref to localStorage ── */
+/* ════════════════════════════════════════
+   Local preferences
+   ════════════════════════════════════════ */
 const PREFS_KEY = 'sfl_prefs';
-function loadPrefs() {
-  try { return JSON.parse(localStorage.getItem(PREFS_KEY)||'{}'); } catch(e) { return {}; }
-}
-function savePrefs(prefs) {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e) {}
-}
+const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch { return {}; } };
+const savePrefs = p  => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch {} };
 
 function applyPrefs() {
   const p = loadPrefs();
-  $('toggleAutoplay').checked       = p.autoplay    !== false;
-  $('toggleLiveNotifs').checked     = p.liveNotifs  !== false;
-  $('toggleVideoNotifs').checked    = p.videoNotifs !== false;
-  $('toggleInteractNotifs').checked = p.interactNotifs !== false;
-  $('toggleCaptions').checked       = p.captions    === true;
-  $('videoQuality').value           = p.quality     || 'auto';
-  $('defaultVisibility').value      = p.visibility  || 'public';
-  $('commentControl').value         = p.commentCtrl || 'all';
-  // Privacy panel controls (mirror same keys)
-  $('defaultVisibility2').value     = p.visibility  || 'public';
-  $('commentControl2').value        = p.commentCtrl || 'all';
-  $('togglePrivateProfile').checked = p.privateProfile  === true;
-  $('toggleHideFollowers').checked  = p.hideFollowers   === true;
-  $('toggleActivityStatus').checked = p.activityStatus  !== false;
-  $('privacyDMs').value             = p.privacyDMs      || 'all';
+  $('toggleAutoplay').checked       = p.autoplay        !== false;
+  $('toggleLiveNotifs').checked     = p.liveNotifs       !== false;
+  $('toggleVideoNotifs').checked    = p.videoNotifs      !== false;
+  $('toggleInteractNotifs').checked = p.interactNotifs   !== false;
+  $('toggleCaptions').checked       = p.captions         === true;
+  $('videoQuality').value           = p.quality          || 'auto';
+  $('defaultVisibility').value      = p.visibility       || 'public';
+  $('commentControl').value         = p.commentCtrl      || 'all';
+  $('defaultVisibility2').value     = p.visibility       || 'public';
+  $('commentControl2').value        = p.commentCtrl      || 'all';
+  $('togglePrivateProfile').checked = p.privateProfile   === true;
+  $('toggleHideFollowers').checked  = p.hideFollowers    === true;
+  $('toggleActivityStatus').checked = p.activityStatus   !== false;
+  $('privacyDMs').value             = p.privacyDMs       || 'all';
 }
+const bindToggle = (id, key) => $(id).addEventListener('change', () => { const p = loadPrefs(); p[key] = $(id).checked; savePrefs(p); toast('Setting saved.'); });
+const bindSelect = (id, key) => $(id).addEventListener('change', () => { const p = loadPrefs(); p[key] = $(id).value; savePrefs(p); toast('Setting saved.'); });
 
-function bindToggle(id, key) {
-  $(id).addEventListener('change', () => {
-    const p = loadPrefs(); p[key] = $(id).checked; savePrefs(p);
-    toast('Setting saved.');
-  });
-}
-function bindSelect(id, key) {
-  $(id).addEventListener('change', () => {
-    const p = loadPrefs(); p[key] = $(id).value; savePrefs(p);
-    toast('Setting saved.');
-  });
-}
-
-bindToggle('toggleAutoplay',        'autoplay');
-bindToggle('toggleLiveNotifs',      'liveNotifs');
-bindToggle('toggleVideoNotifs',     'videoNotifs');
-bindToggle('toggleInteractNotifs',  'interactNotifs');
-bindToggle('toggleCaptions',        'captions');
-bindSelect('videoQuality',          'quality');
-bindSelect('defaultVisibility',     'visibility');
-bindSelect('commentControl',        'commentCtrl');
-// Privacy panel bindings (sync to same pref keys + also keep the main Privacy section in sync)
-bindToggle('togglePrivateProfile',  'privateProfile');
-bindToggle('toggleHideFollowers',   'hideFollowers');
-bindToggle('toggleActivityStatus',  'activityStatus');
-bindSelect('privacyDMs',            'privacyDMs');
-$('defaultVisibility2').addEventListener('change', () => {
-  const p = loadPrefs(); p.visibility = $('defaultVisibility2').value; savePrefs(p);
-  $('defaultVisibility').value = p.visibility;
-  toast('Setting saved.');
-});
-$('commentControl2').addEventListener('change', () => {
-  const p = loadPrefs(); p.commentCtrl = $('commentControl2').value; savePrefs(p);
-  $('commentControl').value = p.commentCtrl;
-  toast('Setting saved.');
-});
+bindToggle('toggleAutoplay',       'autoplay');
+bindToggle('toggleLiveNotifs',     'liveNotifs');
+bindToggle('toggleVideoNotifs',    'videoNotifs');
+bindToggle('toggleInteractNotifs', 'interactNotifs');
+bindToggle('toggleCaptions',       'captions');
+bindSelect('videoQuality',         'quality');
+bindSelect('defaultVisibility',    'visibility');
+bindSelect('commentControl',       'commentCtrl');
+bindToggle('togglePrivateProfile', 'privateProfile');
+bindToggle('toggleHideFollowers',  'hideFollowers');
+bindToggle('toggleActivityStatus', 'activityStatus');
+bindSelect('privacyDMs',           'privacyDMs');
+$('defaultVisibility2').addEventListener('change', () => { const p = loadPrefs(); p.visibility = $('defaultVisibility2').value; savePrefs(p); $('defaultVisibility').value = p.visibility; toast('Setting saved.'); });
+$('commentControl2').addEventListener('change',    () => { const p = loadPrefs(); p.commentCtrl = $('commentControl2').value; savePrefs(p); $('commentControl').value = p.commentCtrl; toast('Setting saved.'); });
 
 applyPrefs();
 
-/* ── Push notifications ── */
+/* ════════════════════════════════════════
+   Push notifications
+   ════════════════════════════════════════ */
 $('btnPushNotifs').addEventListener('click', async () => {
-  if(!('Notification' in window)) { toast('Push notifications not supported in this browser.'); return; }
+  if (!('Notification' in window)) { toast('Push notifications not supported.'); return; }
   const perm = await Notification.requestPermission();
-  if(perm === 'granted') {
-    toast('Push notifications enabled!');
+  if (perm === 'granted') {
     $('btnPushNotifs').textContent = '✓ Enabled';
     $('btnPushNotifs').disabled = true;
+    toast('Push notifications enabled!');
   } else {
-    toast('Permission denied. Please enable notifications in browser settings.');
+    toast('Permission denied — enable notifications in browser settings.');
   }
 });
 
-/* ── Auth state ── */
+/* ════════════════════════════════════════
+   Auth state — populate account info
+   ════════════════════════════════════════ */
+let _currentUser = null;
+let _userData    = {};
+
 onAuthStateChanged(auth, async user => {
-  if(!user) return;
+  if (!user) { window.location.href = 'sfl-login.html'; return; }
+  _currentUser = user;
   try {
-    const snap = await getDoc(doc(db,'users',user.uid));
-    const data = snap.exists() ? snap.data() : {};
-    $('settingsUserName').textContent  = data.displayName || data.username || user.displayName || 'User';
-    $('settingsUserEmail').textContent = user.email || '';
-    if(Notification.permission === 'granted') {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    _userData = snap.exists() ? snap.data() : {};
+    $('settingsDisplayName').textContent = _userData.displayName || _userData.username || user.displayName || 'User';
+    $('settingsUserEmail').textContent   = user.email || '';
+    // Profile section sub-label
+    const name = _userData.displayName || _userData.username || '';
+    $('settingsUserName').textContent = name ? `@${_userData.username || ''} · ${name}` : 'Display name, bio, links';
+    // Thumbnails
+    if (_userData.avatar) { const t = $('settingsAvatarThumb'); t.src = _userData.avatar; t.style.display = ''; }
+    if (_userData.coverPhoto) { const t = $('settingsCoverThumb'); t.src = _userData.coverPhoto; t.style.display = ''; }
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       $('btnPushNotifs').textContent = '✓ Enabled';
       $('btnPushNotifs').disabled = true;
     }
-    // Show existing avatar thumbnail
-    if (data.avatar) {
-      const t = $('settingsAvatarThumb');
-      t.src = data.avatar; t.style.display = '';
-    }
-    // Show existing cover thumbnail
-    if (data.coverPhoto) {
-      const t = $('settingsCoverThumb');
-      t.src = data.coverPhoto; t.style.display = '';
-    }
-  } catch(e) {}
+  } catch(e) { console.error('loadUser:', e); }
 });
 
-/* ── Privacy panel ── */
+/* ════════════════════════════════════════
+   Privacy panel
+   ════════════════════════════════════════ */
 $('btnPrivacy').addEventListener('click', () => {
   $('privacyPanel').classList.add('active');
   $('settingsMain').style.display = 'none';
@@ -943,9 +987,64 @@ $('privacyBack').addEventListener('click', () => {
 });
 
 /* ════════════════════════════════════════
+   Install App
+   ════════════════════════════════════════ */
+(function() {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) {
+    $('installInstalledRow').style.display = '';
+    $('installAppSection').querySelector('.settings-row:first-child').style.display = 'none';
+    return;
+  }
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS) $('installRowSub').textContent = 'Tap Share ⬆️ in Safari → Add to Home Screen';
+  $('btnInstallApp').addEventListener('click', () => {
+    if (window._SFLInstall) { window._SFLInstall.triggerInstall(); return; }
+    if (isIOS) toast('Tap Share ⬆️ in Safari → Add to Home Screen');
+    else toast('Look for "Install App" in your browser menu (⋮).');
+  });
+})();
+
+/* ── SW version ── */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.ready.then(reg => reg.active?.postMessage({ type: 'GET_VERSION' }));
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_VERSION' && $('settingsVersion')) {
+      $('settingsVersion').textContent = `Version 1.0.0 · Cache ${e.data.version}`;
+    }
+  });
+}
+
+/* ── Sign out ── */
+$('signOutBtn').addEventListener('click', async () => {
+  if (!confirm('Sign out of Shadow Fire Live?')) return;
+  try { await signOut(auth); window.location.href = 'sfl-login.html'; }
+  catch { toast('Error signing out.'); }
+});
+
+/* ════════════════════════════════════════
+   Modal utility
+   ════════════════════════════════════════ */
+function setMsg(id, type, text) {
+  const el = $(id);
+  el.className = 'acct-msg' + (type ? ' ' + type : '');
+  el.textContent = text || '';
+  if (!type) el.style.display = 'none';
+  else el.style.display = '';
+}
+function openOverlay(id)  { $(id).style.display = 'flex'; }
+function closeOverlay(id) { $(id).style.display = 'none'; }
+function bindClose(overlayId, closeId, cancelId, onClose) {
+  const close = () => { closeOverlay(overlayId); if (onClose) onClose(); };
+  $(closeId)?.addEventListener('click', close);
+  $(cancelId)?.addEventListener('click', close);
+  $(overlayId).addEventListener('click', e => { if (e.target === $(overlayId)) close(); });
+  return close;
+}
+
+/* ════════════════════════════════════════
    Re-auth helper
    ════════════════════════════════════════ */
-// Returns a Promise that resolves when re-auth succeeds, rejects if user cancels.
 let _reAuthResolve = null, _reAuthReject = null;
 
 function requireReAuth(subtitle) {
@@ -955,110 +1054,78 @@ function requireReAuth(subtitle) {
     $('reAuthPassword').value = '';
     setMsg('reAuthMsg', '');
     if (subtitle) $('reAuthSub').textContent = subtitle;
-    $('reAuthOverlay').style.display = 'flex';
+    openOverlay('reAuthOverlay');
     setTimeout(() => $('reAuthPassword').focus(), 80);
   });
 }
-
 function closeReAuth() {
-  $('reAuthOverlay').style.display = 'none';
+  closeOverlay('reAuthOverlay');
   if (_reAuthReject) { _reAuthReject(new Error('cancelled')); _reAuthReject = null; }
 }
-
 $('reAuthClose').addEventListener('click', closeReAuth);
 $('reAuthCancelBtn').addEventListener('click', closeReAuth);
 $('reAuthOverlay').addEventListener('click', e => { if (e.target === $('reAuthOverlay')) closeReAuth(); });
+$('reAuthPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('reAuthConfirmBtn').click(); });
 
 $('reAuthConfirmBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
   if (!user) { closeReAuth(); return; }
   const pw = $('reAuthPassword').value.trim();
   if (!pw) { setMsg('reAuthMsg', 'error', 'Please enter your current password.'); return; }
-
   $('reAuthConfirmBtn').disabled = true;
   $('reAuthConfirmBtn').textContent = 'Verifying…';
   setMsg('reAuthMsg', '');
-
   try {
     const cred = EmailAuthProvider.credential(user.email, pw);
     await reauthenticateWithCredential(user, cred);
-    $('reAuthOverlay').style.display = 'none';
+    closeOverlay('reAuthOverlay');
     if (_reAuthResolve) { _reAuthResolve(); _reAuthResolve = null; }
   } catch(e) {
-    const msg = firebaseAuthError(e.code);
-    setMsg('reAuthMsg', 'error', msg);
+    setMsg('reAuthMsg', 'error', firebaseAuthError(e.code));
   } finally {
     $('reAuthConfirmBtn').disabled = false;
     $('reAuthConfirmBtn').textContent = 'Confirm';
   }
 });
 
-// Allow Enter key in re-auth password field
-$('reAuthPassword').addEventListener('keydown', e => {
-  if (e.key === 'Enter') $('reAuthConfirmBtn').click();
-});
-
 /* ════════════════════════════════════════
    Edit Email
    ════════════════════════════════════════ */
 $('btnEditEmail').addEventListener('click', () => {
-  const user = auth.currentUser;
-  $('emailCurrent').value = user?.email || '';
+  $('emailCurrent').value = auth.currentUser?.email || '';
   $('emailNew').value = '';
   $('emailConfirm').value = '';
   setMsg('emailMsg', '');
-  $('emailOverlay').style.display = 'flex';
+  openOverlay('emailOverlay');
   setTimeout(() => $('emailNew').focus(), 80);
 });
-
-function closeEmailModal() { $('emailOverlay').style.display = 'none'; }
-$('emailClose').addEventListener('click', closeEmailModal);
-$('emailCancelBtn').addEventListener('click', closeEmailModal);
-$('emailOverlay').addEventListener('click', e => { if (e.target === $('emailOverlay')) closeEmailModal(); });
+bindClose('emailOverlay', 'emailClose', 'emailCancelBtn');
 
 $('emailSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user) { setMsg('emailMsg', 'error', 'You must be signed in.'); return; }
-
-  const newEmail     = $('emailNew').value.trim().toLowerCase();
-  const confirmEmail = $('emailConfirm').value.trim().toLowerCase();
-
+  if (!user) return;
+  const newEmail  = $('emailNew').value.trim().toLowerCase();
+  const confEmail = $('emailConfirm').value.trim().toLowerCase();
   if (!newEmail) { setMsg('emailMsg', 'error', 'Please enter a new email address.'); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-    setMsg('emailMsg', 'error', 'Please enter a valid email address.'); return;
-  }
-  if (newEmail !== confirmEmail) { setMsg('emailMsg', 'error', 'Email addresses do not match.'); return; }
-  if (newEmail === user.email?.toLowerCase()) {
-    setMsg('emailMsg', 'error', 'New email is the same as your current email.'); return;
-  }
-
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { setMsg('emailMsg', 'error', 'Please enter a valid email.'); return; }
+  if (newEmail !== confEmail) { setMsg('emailMsg', 'error', 'Email addresses do not match.'); return; }
+  if (newEmail === user.email?.toLowerCase()) { setMsg('emailMsg', 'error', 'New email is the same as your current email.'); return; }
   $('emailSaveBtn').disabled = true;
   $('emailSaveBtn').textContent = 'Saving…';
   setMsg('emailMsg', '');
-
   try {
-    // Re-authenticate first (required for email change)
-    closeEmailModal();
+    closeOverlay('emailOverlay');
     await requireReAuth('To change your email, please confirm your current password.');
-
-    // Send verification to new email (Firebase 10.x recommended approach)
     await verifyBeforeUpdateEmail(user, newEmail);
-
-    // Update Firestore profile email field
-    try {
-      await updateDoc(doc(db, 'users', user.uid), { email: newEmail });
-    } catch(fe) { /* non-critical */ }
-
-    $('emailOverlay').style.display = 'none';
+    try { await updateDoc(doc(db, 'users', user.uid), { email: newEmail }); } catch {}
     $('settingsUserEmail').textContent = `${newEmail} (verify email sent)`;
-    toast('✉️ Verification email sent! Check your inbox to confirm the new address.', 6000);
+    toast('✉️ Verification email sent — check your inbox.', 6000);
   } catch(e) {
-    if (e.message === 'cancelled') {
-      // User closed re-auth — reopen the email modal so they can try again
-      $('emailOverlay').style.display = 'flex';
-    } else {
-      $('emailOverlay').style.display = 'flex';
+    if (e.message !== 'cancelled') {
+      openOverlay('emailOverlay');
       setMsg('emailMsg', 'error', firebaseAuthError(e.code));
+    } else {
+      openOverlay('emailOverlay');
     }
   } finally {
     $('emailSaveBtn').disabled = false;
@@ -1073,45 +1140,32 @@ $('btnChangePassword').addEventListener('click', () => {
   $('pwNew').value = '';
   $('pwConfirm').value = '';
   setMsg('pwMsg', '');
-  $('pwOverlay').style.display = 'flex';
+  openOverlay('pwOverlay');
   setTimeout(() => $('pwNew').focus(), 80);
 });
-
-function closePwModal() { $('pwOverlay').style.display = 'none'; }
-$('pwClose').addEventListener('click', closePwModal);
-$('pwCancelBtn').addEventListener('click', closePwModal);
-$('pwOverlay').addEventListener('click', e => { if (e.target === $('pwOverlay')) closePwModal(); });
+bindClose('pwOverlay', 'pwClose', 'pwCancelBtn');
 
 $('pwSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user) { setMsg('pwMsg', 'error', 'You must be signed in.'); return; }
-
+  if (!user) return;
   const newPw  = $('pwNew').value;
   const confPw = $('pwConfirm').value;
-
   if (!newPw) { setMsg('pwMsg', 'error', 'Please enter a new password.'); return; }
   if (newPw.length < 6) { setMsg('pwMsg', 'error', 'Password must be at least 6 characters.'); return; }
   if (newPw !== confPw) { setMsg('pwMsg', 'error', 'Passwords do not match.'); return; }
-
   $('pwSaveBtn').disabled = true;
   $('pwSaveBtn').textContent = 'Saving…';
-  setMsg('pwMsg', '');
-
   try {
-    // Re-authenticate first
-    closePwModal();
+    closeOverlay('pwOverlay');
     await requireReAuth('To change your password, please confirm your current password.');
-
     await updatePassword(user, newPw);
-
-    $('pwOverlay').style.display = 'none';
-    toast('🔑 Password changed successfully!', 4000);
+    toast('🔑 Password changed!', 4000);
   } catch(e) {
-    if (e.message === 'cancelled') {
-      $('pwOverlay').style.display = 'flex';
-    } else {
-      $('pwOverlay').style.display = 'flex';
+    if (e.message !== 'cancelled') {
+      openOverlay('pwOverlay');
       setMsg('pwMsg', 'error', firebaseAuthError(e.code));
+    } else {
+      openOverlay('pwOverlay');
     }
   } finally {
     $('pwSaveBtn').disabled = false;
@@ -1119,311 +1173,333 @@ $('pwSaveBtn').addEventListener('click', async () => {
   }
 });
 
-/* ── Utility: set modal message ── */
-function setMsg(id, type, text) {
-  const el = $(id);
-  el.className = 'acct-msg' + (type ? ' ' + type : '');
-  el.textContent = text || '';
-  if (!type) el.style.display = 'none';
-}
+/* ════════════════════════════════════════
+   Edit Profile Info
+   ════════════════════════════════════════ */
+$('btnEditProfile').addEventListener('click', () => {
+  $('piDisplayName').value = _userData.displayName || '';
+  $('piUsername').value    = _userData.username    || '';
+  $('piBio').value         = _userData.bio         || '';
+  setMsg('profileInfoMsg', '');
+  openOverlay('profileInfoOverlay');
+  setTimeout(() => $('piDisplayName').focus(), 80);
+});
+bindClose('profileInfoOverlay', 'profileInfoClose', 'profileInfoCancelBtn');
 
-/* ── Utility: human-readable Firebase auth errors ── */
+$('profileInfoSaveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user) return;
+  const displayName = $('piDisplayName').value.trim();
+  const username    = $('piUsername').value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const bio         = $('piBio').value.trim();
+  if (!displayName) { setMsg('profileInfoMsg', 'error', 'Please enter a display name.'); return; }
+  $('profileInfoSaveBtn').disabled = true;
+  $('profileInfoSaveBtn').textContent = 'Saving…';
+  setMsg('profileInfoMsg', '');
+  try {
+    const updates = { displayName, bio };
+    if (username) updates.username = username;
+    await updateDoc(doc(db, 'users', user.uid), updates);
+    Object.assign(_userData, updates);
+    $('settingsDisplayName').textContent = displayName;
+    $('settingsUserName').textContent = username ? `@${username} · ${displayName}` : displayName;
+    closeOverlay('profileInfoOverlay');
+    toast('✓ Profile updated!', 3000);
+  } catch(e) {
+    setMsg('profileInfoMsg', 'error', 'Could not save profile. Try again.');
+    console.error('profileInfo save:', e);
+  } finally {
+    $('profileInfoSaveBtn').disabled = false;
+    $('profileInfoSaveBtn').textContent = 'Save Profile';
+  }
+});
+
+/* ════════════════════════════════════════
+   Auth error messages
+   ════════════════════════════════════════ */
 function firebaseAuthError(code) {
   const map = {
     'auth/wrong-password':        'Incorrect password. Please try again.',
     'auth/invalid-credential':    'Incorrect password. Please try again.',
-    'auth/too-many-requests':     'Too many attempts. Please wait a few minutes and try again.',
+    'auth/too-many-requests':     'Too many attempts. Please wait and try again.',
     'auth/user-disabled':         'This account has been disabled.',
     'auth/requires-recent-login': 'Please re-authenticate to complete this action.',
-    'auth/email-already-in-use':  'That email address is already in use by another account.',
+    'auth/email-already-in-use':  'That email is already in use by another account.',
     'auth/invalid-email':         'Invalid email address format.',
-    'auth/operation-not-allowed': 'This operation is not allowed. Contact support.',
     'auth/weak-password':         'Password must be at least 6 characters.',
-    'auth/network-request-failed':'Network error. Check your connection and try again.',
+    'auth/network-request-failed':'Network error. Check your connection.',
   };
   return map[code] || 'An error occurred. Please try again.';
 }
 
-/* ── Install App button ── */
-function _initInstallRow() {
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.navigator.standalone === true;
-
-  if (isStandalone) {
-    $('installInstalledRow').style.display = '';
-    $('installAppSection').querySelector('.settings-row:first-child').style.display = 'none';
-    return;
-  }
-
-  $('btnInstallApp').addEventListener('click', () => {
-    if (window._SFLInstall) {
-      window._SFLInstall.triggerInstall();
-    } else {
-      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      if (isIOS) {
-        toast('Tap the Share button ⬆️ in Safari, then "Add to Home Screen".');
-      } else {
-        toast('Look for "Install App" in your browser menu (⋮).');
-      }
-    }
-  });
-
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  if (isIOS) {
-    $('installRowSub').textContent = 'Tap Share ⬆️ in Safari → Add to Home Screen';
-  }
-}
-_initInstallRow();
-
-/* ── SW version ── */
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.ready.then(reg => {
-    reg.active?.postMessage({ type: 'GET_VERSION' });
-  });
-  navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data?.type === 'SW_VERSION' && $('settingsVersion')) {
-      $('settingsVersion').textContent = `Version 1.0.0 · Cache ${e.data.version}`;
-    }
-  });
-}
-
-/* ── Sign out ── */
-$('signOutBtn').addEventListener('click', async () => {
-  if(!confirm('Sign out of Shadow Fire Live?')) return;
-  try { await signOut(auth); window.location.href = 'sfl-login.html'; }
-  catch(e) { toast('Error signing out.'); }
-});
-
 /* ════════════════════════════════════════
-   Image helpers — compression & upload
+   Image helpers
    ════════════════════════════════════════ */
 const VALID_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 /**
- * Resize + compress an image file client-side using a canvas.
- * Returns a Promise<Blob> of a JPEG at the requested quality.
- *
- * @param {File}   file      - original image file
- * @param {number} maxW      - maximum output width  (px)
- * @param {number} maxH      - maximum output height (px)
- * @param {number} quality   - JPEG quality 0–1 (default 0.85)
+ * Resize + compress an image via canvas.
+ * Returns a Promise<Blob> of JPEG at the given quality.
  */
-function resizeAndCompress(file, maxW, maxH, quality = 0.85) {
+function resizeImage(file, maxW, maxH, quality = 0.85) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      // Compute scaled dimensions keeping aspect ratio
-      let w = img.naturalWidth;
-      let h = img.naturalHeight;
+      let w = img.naturalWidth, h = img.naturalHeight;
       if (w > maxW || h > maxH) {
-        const scale = Math.min(maxW / w, maxH / h);
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
+        const s = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * s); h = Math.round(h * s);
       }
       const canvas = document.createElement('canvas');
-      canvas.width  = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       canvas.toBlob(
-        blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')),
-        'image/jpeg',
-        quality
+        b => b ? resolve(b) : reject(new Error('Canvas compression failed')),
+        'image/jpeg', quality
       );
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image could not be loaded')); };
     img.src = url;
   });
 }
 
 /**
- * Upload a Blob/File to Firebase Storage with live progress.
- * Updates both the progress bar width AND a text label showing "Uploading… X%"
- * or "Upload Complete" on success.
- *
- * @param {Blob}        blob         - the data to upload
- * @param {string}      storagePath  - e.g. "profile-images/uid/avatar.jpg"
- * @param {HTMLElement} progressBar  - .upload-progress-bar element
- * @param {HTMLElement} progressWrap - .upload-progress-wrap wrapper
- * @param {HTMLElement} [label]      - optional .upload-progress-label element
- * @param {HTMLElement} [saveBtn]    - optional save button (text updated live)
- * @returns {Promise<string>} Firebase Storage download URL
+ * Convert a Blob to a base64 data URL.
+ * Used as fallback when Firebase Storage is unavailable.
  */
-function uploadWithProgress(blob, storagePath, progressBar, progressWrap, label, saveBtn) {
+function blobToDataURL(blob) {
   return new Promise((resolve, reject) => {
-    const fileRef = storageRef(storage, storagePath);
-    const task    = uploadBytesResumable(fileRef, blob, { contentType: 'image/jpeg' });
-
-    progressWrap.style.display = '';
-    progressBar.style.width    = '0%';
-    if (label)   label.textContent   = 'Uploading… 0%';
-    if (saveBtn) saveBtn.textContent = 'Uploading… 0%';
-
-    task.on(
-      'state_changed',
-      snap => {
-        const pct = snap.totalBytes
-          ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
-          : 0;
-        progressBar.style.width = pct + '%';
-        if (label)   label.textContent   = `Uploading… ${pct}%`;
-        if (saveBtn) saveBtn.textContent = `Uploading… ${pct}%`;
-      },
-      err => {
-        progressWrap.style.display = 'none';
-        reject(err);
-      },
-      async () => {
-        progressBar.style.width = '100%';
-        if (label)   label.textContent   = '✓ Upload Complete';
-        if (saveBtn) saveBtn.textContent = 'Upload Complete';
-        try {
-          const url = await getDownloadURL(task.snapshot.ref);
-          resolve(url);
-        } catch(e) {
-          reject(e);
-        } finally {
-          // Hide progress bar after a short success pause
-          setTimeout(() => { progressWrap.style.display = 'none'; }, 1200);
-        }
-      }
-    );
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('FileReader failed'));
+    reader.readAsDataURL(blob);
   });
 }
 
-function validateImageFile(file, msgId) {
-  if (!file) return false;
-  if (!VALID_TYPES.includes(file.type)) {
-    setMsg(msgId, 'error', 'Please choose a JPG, PNG, or WEBP image.');
-    return false;
-  }
-  // 50 MB raw pre-compression limit — we will compress it down before uploading
-  if (file.size > 50 * 1024 * 1024) {
-    setMsg(msgId, 'error', 'Image is too large. Maximum 50 MB before compression.');
-    return false;
-  }
-  return true;
+/**
+ * Upload an image blob to Firebase Storage.
+ * Returns the download URL.
+ * Throws with .code set to 'storage/bucket-not-found' or similar on failure.
+ */
+async function uploadToStorage(blob, path) {
+  const ref  = storageRef(storage, path);
+  const snap = await uploadBytes(ref, blob, { contentType: 'image/jpeg' });
+  return await getDownloadURL(snap.ref);
 }
 
-/* ── Storage error messages ── */
+/**
+ * Master image upload function:
+ * 1. Compress the image
+ * 2. Try Firebase Storage (uploadBytes — simpler than resumable, no XHR chunk issues)
+ * 3. If Storage fails → store the compressed image as base64 data URL in Firestore (free fallback)
+ *
+ * @param {File}         file      - original file from input
+ * @param {number}       maxW
+ * @param {number}       maxH
+ * @param {number}       quality   - JPEG quality 0-1
+ * @param {string}       storagePath - Firebase Storage path
+ * @param {object}       ui        - { progressWrap, progressBar, progressLabel, saveBtn, stages[] }
+ */
+async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
+  const { progressWrap, progressBar, progressLabel, saveBtn, stages } = ui;
+
+  // Helper: set a stage
+  function setStage(n, state) { // state: 'active' | 'done'
+    stages.forEach((s, i) => {
+      s.classList.toggle('active', i === n && state === 'active');
+      s.classList.toggle('done',   i <= n && state === 'done');
+    });
+  }
+  function setProgress(pct, label) {
+    progressBar.style.width = pct + '%';
+    progressLabel.textContent = label;
+    if (saveBtn) saveBtn.textContent = label;
+  }
+
+  // Show progress UI
+  progressWrap.style.display = '';
+  progressBar.style.width = '0%';
+  setStage(0, 'active');
+  setProgress(5, 'Preparing image…');
+
+  // ── Stage 1: Compress ────────────────────────────────────────────────────
+  let compressed;
+  try {
+    compressed = await resizeImage(file, maxW, maxH, quality);
+    setStage(0, 'done');
+    setStage(1, 'active');
+    setProgress(25, 'Uploading…');
+  } catch(e) {
+    throw Object.assign(new Error('Image compression failed'), { code: 'compress/failed', original: e });
+  }
+
+  // ── Stage 2: Try Firebase Storage ───────────────────────────────────────
+  let imageUrl = null;
+  let usedStorage = false;
+  try {
+    setProgress(35, 'Uploading…');
+    // Animate progress while we wait (uploadBytes gives no events)
+    let fakeProgress = 35;
+    const fakeTimer = setInterval(() => {
+      if (fakeProgress < 85) {
+        fakeProgress += Math.random() * 8;
+        setProgress(Math.min(fakeProgress, 85), `Uploading… ${Math.round(Math.min(fakeProgress, 85))}%`);
+      }
+    }, 250);
+    try {
+      imageUrl = await uploadToStorage(compressed, storagePath);
+    } finally {
+      clearInterval(fakeTimer);
+    }
+    usedStorage = true;
+    setStage(1, 'done');
+    setStage(2, 'active');
+    setProgress(90, 'Saving profile…');
+  } catch(storageErr) {
+    console.warn('Firebase Storage upload failed, using Firestore fallback:', storageErr.code || storageErr.message);
+
+    // ── Stage 2 fallback: encode as data URL and store in Firestore ─────
+    setStage(1, 'done');
+    setStage(2, 'active');
+    setProgress(75, 'Saving image…');
+    try {
+      imageUrl = await blobToDataURL(compressed);
+    } catch(encErr) {
+      throw Object.assign(new Error('Could not process image'), { code: 'encode/failed', original: encErr });
+    }
+    setProgress(88, 'Saving profile…');
+  }
+
+  // ── Stage 3: Return URL ──────────────────────────────────────────────────
+  setStage(2, 'done');
+  setStage(3, 'active');
+  setProgress(95, 'Saving profile…');
+  return imageUrl;
+}
+
 function storageErrorMsg(code) {
   const map = {
+    'compress/failed':  'Could not compress the image. Please try a JPG or PNG file.',
+    'encode/failed':    'Could not process the image. Please try again.',
     'storage/unauthorized':         'Permission denied. Please sign in and try again.',
     'storage/canceled':             'Upload cancelled.',
     'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
     'storage/unauthenticated':      'You must be signed in to upload images.',
     'storage/retry-limit-exceeded': 'Upload failed — check your connection and tap Retry.',
-    'storage/invalid-format':       'Invalid file format.',
-    'storage/object-not-found':     'Upload failed. Please try again.',
-    'storage/unknown':              'Upload failed — check your connection and tap Retry.',
   };
-  return map[code] || `Upload failed (${code || 'unknown'}). Tap Save Photo to retry.`;
+  return map[code] || `Upload failed. Please try again. (${code || 'unknown'})`;
 }
 
 /* ════════════════════════════════════════
    Profile Picture Upload
    ════════════════════════════════════════ */
 let _avatarFile = null;
-let _avatarUploading = false;
+let _avatarBusy = false;
 
 function openAvatarModal() {
   _avatarFile = null;
+  _avatarBusy = false;
   setMsg('avatarMsg', '');
   $('avatarSaveBtn').disabled = true;
   $('avatarSaveBtn').textContent = 'Save Photo';
   $('avatarProgressWrap').style.display = 'none';
   $('avatarProgressBar').style.width = '0%';
-  // Pre-fill preview with existing avatar if any
+  // Show existing avatar or placeholder
   const thumb = $('settingsAvatarThumb');
   if (thumb.src && thumb.style.display !== 'none') {
     $('avatarPreviewImg').src = thumb.src;
     $('avatarPreviewImg').style.display = '';
-    $('avatarPreviewPlaceholder').style.display = 'none';
+    $('avatarPlaceholderWrap').style.display = 'none';
   } else {
     $('avatarPreviewImg').style.display = 'none';
-    $('avatarPreviewPlaceholder').style.display = 'flex';
+    $('avatarPlaceholderWrap').style.display = '';
   }
-  $('avatarOverlay').style.display = 'flex';
+  openOverlay('avatarOverlay');
 }
 function closeAvatarModal() {
-  if (_avatarUploading) return; // Don't close during an active upload
-  $('avatarOverlay').style.display = 'none';
+  if (_avatarBusy) return;
+  closeOverlay('avatarOverlay');
   _avatarFile = null;
 }
-
 $('btnEditAvatar').addEventListener('click', openAvatarModal);
 $('avatarClose').addEventListener('click', closeAvatarModal);
 $('avatarCancelBtn').addEventListener('click', closeAvatarModal);
 $('avatarOverlay').addEventListener('click', e => { if (e.target === $('avatarOverlay')) closeAvatarModal(); });
-$('avatarPreviewPlaceholder').addEventListener('click', () => { if (!_avatarUploading) $('avatarFileInput').click(); });
-$('avatarPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_avatarUploading) $('avatarFileInput').click(); });
+$('avatarChooseBtn').addEventListener('click', () => { if (!_avatarBusy) $('avatarFileInput').click(); });
+$('avatarPreviewPlaceholder').addEventListener('click', () => { if (!_avatarBusy) $('avatarFileInput').click(); });
+$('avatarPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_avatarBusy) $('avatarFileInput').click(); });
 
 $('avatarFileInput').addEventListener('change', () => {
   const file = $('avatarFileInput').files[0];
   if (!file) return;
-  setMsg('avatarMsg', '');
-  if (!validateImageFile(file, 'avatarMsg')) { $('avatarFileInput').value = ''; return; }
+  if (!VALID_TYPES.includes(file.type)) { setMsg('avatarMsg', 'error', 'Please choose a JPG, PNG, or WEBP image.'); return; }
   _avatarFile = file;
-
-  // Show immediate local preview (full resolution is fine for preview)
+  // Immediate local preview
   const reader = new FileReader();
   reader.onload = ev => {
     $('avatarPreviewImg').src = ev.target.result;
     $('avatarPreviewImg').style.display = '';
-    $('avatarPreviewPlaceholder').style.display = 'none';
+    $('avatarPlaceholderWrap').style.display = 'none';
+    setMsg('avatarMsg', '');
   };
   reader.readAsDataURL(file);
   $('avatarSaveBtn').disabled = false;
-  setMsg('avatarMsg', 'success', '✓ Photo selected — tap "Save Photo" to upload.');
+  setMsg('avatarMsg', 'success', '✓ Photo selected. Tap Save Photo to upload.');
 });
 
 $('avatarSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user || !_avatarFile || _avatarUploading) return;
+  if (!user || !_avatarFile || _avatarBusy) return;
 
-  _avatarUploading = true;
+  _avatarBusy = true;
   $('avatarSaveBtn').disabled = true;
-  $('avatarSaveBtn').textContent = 'Compressing…';
   $('avatarCancelBtn').disabled = true;
   setMsg('avatarMsg', '');
 
-  try {
-    // ── 1. Compress client-side: 400×400 max, JPEG 85% ──────────────────
-    const compressed = await resizeAndCompress(_avatarFile, 400, 400, 0.85);
+  const stages = [$('avStage1'), $('avStage2'), $('avStage3'), $('avStage4')];
 
-    // ── 2. Upload to Firebase Storage (always .jpg after compression) ────
-    const path = `profile-images/${user.uid}/avatar.jpg`;
-    const url  = await uploadWithProgress(
-      compressed, path,
-      $('avatarProgressBar'), $('avatarProgressWrap'),
-      $('avatarProgressLabel'), $('avatarSaveBtn')
+  try {
+    const url = await handleImageUpload(
+      _avatarFile, 400, 400, 0.85,
+      `profile-images/${user.uid}/avatar.jpg`,
+      {
+        progressWrap:  $('avatarProgressWrap'),
+        progressBar:   $('avatarProgressBar'),
+        progressLabel: $('avatarProgressLabel'),
+        saveBtn:       $('avatarSaveBtn'),
+        stages
+      }
     );
 
-    // ── 3. Persist URL to Firestore ─────────────────────────────────────
+    // Save to Firestore
     await updateDoc(doc(db, 'users', user.uid), { avatar: url });
+    _userData.avatar = url;
 
-    // ── 4. Update settings-row thumbnail ────────────────────────────────
+    // Update thumbnail
     const thumb = $('settingsAvatarThumb');
     thumb.src = url; thumb.style.display = '';
 
-    closeAvatarModal();
-    toast('📷 Profile picture updated!', 3500);
+    // Complete
+    stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+    $('avatarProgressBar').style.width = '100%';
+    $('avatarProgressLabel').textContent = '✓ Done!';
+
+    setTimeout(() => {
+      closeAvatarModal();
+      toast('📷 Profile picture updated!', 3500);
+    }, 700);
   } catch(e) {
     console.error('Avatar upload error:', e);
-    const msg = storageErrorMsg(e.code);
-    setMsg('avatarMsg', 'error', msg);
+    setMsg('avatarMsg', 'error', storageErrorMsg(e.code));
     $('avatarSaveBtn').textContent = 'Retry Upload';
-    $('avatarSaveBtn').disabled = false; // Re-enable so user can retry
+    $('avatarSaveBtn').disabled = false;
+    $('avatarProgressWrap').style.display = 'none';
+    stages.forEach(s => { s.classList.remove('active', 'done'); });
   } finally {
-    _avatarUploading = false;
+    _avatarBusy = false;
     $('avatarCancelBtn').disabled = false;
-    // Only reset button text if not already set to Retry
-    if ($('avatarSaveBtn').textContent === 'Upload Complete') {
-      $('avatarSaveBtn').textContent = 'Save Photo';
-    }
   }
 });
 
@@ -1431,114 +1507,121 @@ $('avatarSaveBtn').addEventListener('click', async () => {
    Cover Photo Upload
    ════════════════════════════════════════ */
 let _coverFile = null;
-let _coverUploading = false;
+let _coverBusy = false;
 
 function openCoverModal() {
   _coverFile = null;
+  _coverBusy = false;
   setMsg('coverMsg', '');
   $('coverSaveBtn').disabled = true;
   $('coverSaveBtn').textContent = 'Save Photo';
   $('coverProgressWrap').style.display = 'none';
   $('coverProgressBar').style.width = '0%';
-  // Pre-fill preview with existing cover if any
+  // Existing cover or placeholder
   const thumb = $('settingsCoverThumb');
   if (thumb.src && thumb.style.display !== 'none') {
     $('coverPreviewImg').src = thumb.src;
     $('coverPreviewImg').style.display = '';
-    $('coverPreviewPlaceholder').style.display = 'none';
+    $('coverPlaceholderWrap').style.display = 'none';
   } else {
     $('coverPreviewImg').style.display = 'none';
-    $('coverPreviewPlaceholder').style.display = 'flex';
+    $('coverPlaceholderWrap').style.display = '';
   }
-  $('coverOverlay').style.display = 'flex';
+  openOverlay('coverOverlay');
 }
 function closeCoverModal() {
-  if (_coverUploading) return; // Don't close during active upload
-  $('coverOverlay').style.display = 'none';
+  if (_coverBusy) return;
+  closeOverlay('coverOverlay');
   _coverFile = null;
 }
-
 $('btnEditCover').addEventListener('click', openCoverModal);
 $('coverClose').addEventListener('click', closeCoverModal);
 $('coverCancelBtn').addEventListener('click', closeCoverModal);
 $('coverOverlay').addEventListener('click', e => { if (e.target === $('coverOverlay')) closeCoverModal(); });
-$('coverPreviewPlaceholder').addEventListener('click', () => { if (!_coverUploading) $('coverFileInput').click(); });
-$('coverPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_coverUploading) $('coverFileInput').click(); });
+$('coverChooseBtn').addEventListener('click', () => { if (!_coverBusy) $('coverFileInput').click(); });
+$('coverPreviewPlaceholder').addEventListener('click', () => { if (!_coverBusy) $('coverFileInput').click(); });
+$('coverPreviewPlaceholder').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !_coverBusy) $('coverFileInput').click(); });
 
 $('coverFileInput').addEventListener('change', () => {
   const file = $('coverFileInput').files[0];
   if (!file) return;
-  setMsg('coverMsg', '');
-  if (!validateImageFile(file, 'coverMsg')) { $('coverFileInput').value = ''; return; }
+  if (!VALID_TYPES.includes(file.type)) { setMsg('coverMsg', 'error', 'Please choose a JPG, PNG, or WEBP image.'); return; }
   _coverFile = file;
-
-  // Immediate local preview
   const reader = new FileReader();
   reader.onload = ev => {
     $('coverPreviewImg').src = ev.target.result;
     $('coverPreviewImg').style.display = '';
-    $('coverPreviewPlaceholder').style.display = 'none';
+    $('coverPlaceholderWrap').style.display = 'none';
+    setMsg('coverMsg', '');
   };
   reader.readAsDataURL(file);
   $('coverSaveBtn').disabled = false;
-  setMsg('coverMsg', 'success', '✓ Photo selected — tap "Save Photo" to upload.');
+  setMsg('coverMsg', 'success', '✓ Photo selected. Tap Save Photo to upload.');
 });
 
 $('coverSaveBtn').addEventListener('click', async () => {
   const user = auth.currentUser;
-  if (!user || !_coverFile || _coverUploading) return;
+  if (!user || !_coverFile || _coverBusy) return;
 
-  _coverUploading = true;
+  _coverBusy = true;
   $('coverSaveBtn').disabled = true;
-  $('coverSaveBtn').textContent = 'Compressing…';
   $('coverCancelBtn').disabled = true;
   setMsg('coverMsg', '');
 
-  try {
-    // ── 1. Compress client-side: 1200×400 max, JPEG 82% ─────────────────
-    const compressed = await resizeAndCompress(_coverFile, 1200, 400, 0.82);
+  const stages = [$('cvStage1'), $('cvStage2'), $('cvStage3'), $('cvStage4')];
 
-    // ── 2. Upload to Firebase Storage ───────────────────────────────────
-    const path = `covers/${user.uid}/cover.jpg`;
-    const url  = await uploadWithProgress(
-      compressed, path,
-      $('coverProgressBar'), $('coverProgressWrap'),
-      $('coverProgressLabel'), $('coverSaveBtn')
+  try {
+    const url = await handleImageUpload(
+      _coverFile, 1200, 400, 0.82,
+      `covers/${user.uid}/cover.jpg`,
+      {
+        progressWrap:  $('coverProgressWrap'),
+        progressBar:   $('coverProgressBar'),
+        progressLabel: $('coverProgressLabel'),
+        saveBtn:       $('coverSaveBtn'),
+        stages
+      }
     );
 
-    // ── 3. Persist to Firestore ─────────────────────────────────────────
+    // Save to Firestore
     await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
+    _userData.coverPhoto = url;
 
-    // ── 4. Update settings-row thumbnail ────────────────────────────────
+    // Update thumbnail
     const thumb = $('settingsCoverThumb');
     thumb.src = url; thumb.style.display = '';
 
-    closeCoverModal();
-    toast('🖼️ Cover photo updated!', 3500);
+    // Complete
+    stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+    $('coverProgressBar').style.width = '100%';
+    $('coverProgressLabel').textContent = '✓ Done!';
+
+    setTimeout(() => {
+      closeCoverModal();
+      toast('🖼️ Cover photo updated!', 3500);
+    }, 700);
   } catch(e) {
     console.error('Cover upload error:', e);
-    const msg = storageErrorMsg(e.code);
-    setMsg('coverMsg', 'error', msg);
+    setMsg('coverMsg', 'error', storageErrorMsg(e.code));
     $('coverSaveBtn').textContent = 'Retry Upload';
     $('coverSaveBtn').disabled = false;
+    $('coverProgressWrap').style.display = 'none';
+    stages.forEach(s => { s.classList.remove('active', 'done'); });
   } finally {
-    _coverUploading = false;
+    _coverBusy = false;
     $('coverCancelBtn').disabled = false;
-    if ($('coverSaveBtn').textContent === 'Upload Complete') {
-      $('coverSaveBtn').textContent = 'Save Photo';
-    }
   }
 });
 
-/* ── Escape key closes any open modal (respects upload guards) ── */
+/* ── Escape key ── */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if ($('reAuthOverlay').style.display  !== 'none') closeReAuth();
-  if ($('emailOverlay').style.display   !== 'none') closeEmailModal();
-  if ($('pwOverlay').style.display      !== 'none') closePwModal();
-  // closeAvatarModal / closeCoverModal are no-ops while uploading
-  if ($('avatarOverlay').style.display  !== 'none') closeAvatarModal();
-  if ($('coverOverlay').style.display   !== 'none') closeCoverModal();
+  if ($('reAuthOverlay').style.display      !== 'none') closeReAuth();
+  if ($('emailOverlay').style.display       !== 'none') closeOverlay('emailOverlay');
+  if ($('pwOverlay').style.display          !== 'none') closeOverlay('pwOverlay');
+  if ($('profileInfoOverlay').style.display !== 'none') closeOverlay('profileInfoOverlay');
+  if ($('avatarOverlay').style.display      !== 'none') closeAvatarModal();
+  if ($('coverOverlay').style.display       !== 'none') closeCoverModal();
 });
 </script>
 
