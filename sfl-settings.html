@@ -72,6 +72,87 @@
 @media (max-width: 768px) {
   .settings-page { padding: 16px 12px calc(58px + 16px); padding-top: calc(60px + 16px); }
 }
+
+/* ── Account modals ── */
+.acct-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(5px);
+  animation: sflFadeIn 0.18s ease;
+}
+.acct-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 24px;
+  max-width: 420px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+  animation: sflFadeUp 0.2s ease;
+  position: relative;
+}
+.acct-modal-title {
+  font-size: 16px; font-weight: 800;
+  margin-bottom: 6px; color: var(--sfl-text);
+}
+.acct-modal-sub {
+  font-size: 13px; color: var(--sfl-text-muted);
+  margin-bottom: 20px; line-height: 1.55;
+}
+.acct-modal-close {
+  position: absolute; top: 14px; right: 16px;
+  background: var(--sfl-bg-hover);
+  border: 1px solid var(--sfl-border);
+  border-radius: 50%; width: 28px; height: 28px;
+  cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sfl-text-muted); transition: background 0.15s;
+}
+.acct-modal-close:hover { background: var(--sfl-bg-card); color: var(--sfl-text); }
+.acct-field { margin-bottom: 14px; }
+.acct-field label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--sfl-text-label); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.8px;
+}
+.acct-field .sfl-input {
+  width: 100%; padding: 10px 14px;
+  background: var(--sfl-bg-input);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-sm);
+  color: var(--sfl-text); font-size: 14px;
+  transition: border-color 0.18s;
+}
+.acct-field .sfl-input:focus {
+  outline: none;
+  border-color: var(--sfl-blue);
+  box-shadow: 0 0 0 2px rgba(0,174,239,0.15);
+}
+.acct-msg {
+  font-size: 13px; border-radius: var(--sfl-r-sm);
+  padding: 9px 13px; margin-top: 14px; display: none;
+}
+.acct-msg.success { background: rgba(0,180,80,0.12); color: #4ade80; border: 1px solid rgba(0,180,80,0.25); display: block; }
+.acct-msg.error   { background: rgba(255,50,50,0.10); color: #ff7088; border: 1px solid rgba(255,50,50,0.22); display: block; }
+.acct-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 20px; }
+
+/* ── Privacy sub-panel ── */
+.privacy-panel {
+  display: none;
+  animation: sflFadeIn 0.18s ease;
+}
+.privacy-panel.active { display: block; }
+.privacy-panel-back {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--sfl-blue);
+  cursor: pointer; margin-bottom: 16px;
+  background: none; border: none; padding: 0;
+}
+.privacy-panel-back:hover { color: var(--sfl-blue-bright); }
+
+/* Hide main settings when privacy panel is open */
+.settings-main { transition: opacity 0.18s; }
 </style>
 </head>
 <body class="sfl-body">
@@ -106,6 +187,104 @@
 <div class="sfl-layout">
   <main class="sfl-main" role="main">
     <div class="settings-page">
+
+      <!-- ── Privacy sub-panel (shown instead of main settings) ── -->
+      <div class="privacy-panel" id="privacyPanel">
+        <button class="privacy-panel-back" id="privacyBack">← Back to Settings</button>
+        <div class="settings-head">🔒 Privacy</div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Content</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Default Video Visibility</div>
+                <div class="settings-row-sub">Default for new uploads</div>
+              </div>
+              <select class="sfl-input sfl-select" id="defaultVisibility2" style="width:auto;padding:6px 12px;font-size:13px;">
+                <option value="public">Public</option>
+                <option value="followers">Followers</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Comment Controls</div>
+                <div class="settings-row-sub">Who can comment on your videos</div>
+              </div>
+              <select class="sfl-input sfl-select" id="commentControl2" style="width:auto;padding:6px 12px;font-size:13px;">
+                <option value="all">Everyone</option>
+                <option value="followers">Followers</option>
+                <option value="none">No one</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Profile Visibility</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Private Profile</div>
+                <div class="settings-row-sub">Only followers can see your content</div>
+              </div>
+              <label class="sfl-toggle" aria-label="Private profile toggle">
+                <input type="checkbox" id="togglePrivateProfile">
+                <span class="sfl-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Hide Follower Count</div>
+                <div class="settings-row-sub">Others won't see how many followers you have</div>
+              </div>
+              <label class="sfl-toggle" aria-label="Hide follower count toggle">
+                <input type="checkbox" id="toggleHideFollowers">
+                <span class="sfl-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Show Activity Status</div>
+                <div class="settings-row-sub">Let others see when you're active</div>
+              </div>
+              <label class="sfl-toggle" aria-label="Activity status toggle">
+                <input type="checkbox" id="toggleActivityStatus" checked>
+                <span class="sfl-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Interactions</div>
+          <div class="settings-card">
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Allow Direct Messages</div>
+                <div class="settings-row-sub">Who can send you direct messages</div>
+              </div>
+              <select class="sfl-input sfl-select" id="privacyDMs" style="width:auto;padding:6px 12px;font-size:13px;">
+                <option value="all">Everyone</option>
+                <option value="followers">Followers only</option>
+                <option value="none">No one</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Blocked Users</div>
+                <div class="settings-row-sub">Manage who you've blocked</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /privacy-panel -->
+
+      <!-- ── Main settings (hidden when privacy panel open) ── -->
+      <div class="settings-main" id="settingsMain">
       <div class="settings-head">⚙️ Settings</div>
 
       <!-- Account -->
@@ -120,13 +299,31 @@
             <a href="sfl-profile.html" class="sfl-btn sfl-btn-ghost sfl-btn-sm">Edit Profile</a>
           </div>
           <div class="settings-row">
-            <a href="sfl-settings.html" class="settings-row-link">
+            <button class="settings-row-link" id="btnEditEmail">
               <div class="settings-row-info">
-                <div class="settings-row-label">Account Settings</div>
-                <div class="settings-row-sub">Email, password, security</div>
+                <div class="settings-row-label">Edit Email</div>
+                <div class="settings-row-sub">Change your sign-in email address</div>
               </div>
               <span class="settings-chevron">›</span>
-            </a>
+            </button>
+          </div>
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnChangePassword">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Change Password</div>
+                <div class="settings-row-sub">Update your account password</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </button>
+          </div>
+          <div class="settings-row">
+            <button class="settings-row-link" id="btnPrivacy">
+              <div class="settings-row-info">
+                <div class="settings-row-label">Privacy</div>
+                <div class="settings-row-sub">Profile visibility and interaction controls</div>
+              </div>
+              <span class="settings-chevron">›</span>
+            </button>
           </div>
         </div>
       </div>
@@ -326,6 +523,8 @@
         </div>
       </div>
 
+      </div><!-- /settings-main -->
+
     </div>
   </main>
 </div>
@@ -338,10 +537,79 @@
   <a href="sfl-profile.html" class="sfl-bn-item"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
 </nav>
 
+<!-- ── Re-auth Modal ── -->
+<div class="acct-overlay" id="reAuthOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="reAuthTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="reAuthClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="reAuthTitle">Confirm Your Password</div>
+    <div class="acct-modal-sub" id="reAuthSub">For your security, please re-enter your current password to continue.</div>
+    <div class="acct-field">
+      <label for="reAuthPassword">Current Password</label>
+      <input class="sfl-input" type="password" id="reAuthPassword" placeholder="Enter current password" autocomplete="current-password">
+    </div>
+    <div class="acct-msg" id="reAuthMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="reAuthCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="reAuthConfirmBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Email Modal ── -->
+<div class="acct-overlay" id="emailOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="emailModalTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="emailClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="emailModalTitle">✉️ Edit Email</div>
+    <div class="acct-modal-sub">Enter your new email address. You will be signed in with the new email going forward. Your profile, posts, and followers are not affected.</div>
+    <div class="acct-field">
+      <label for="emailCurrent">Current Email</label>
+      <input class="sfl-input" type="email" id="emailCurrent" readonly style="opacity:0.6;cursor:default;">
+    </div>
+    <div class="acct-field">
+      <label for="emailNew">New Email Address</label>
+      <input class="sfl-input" type="email" id="emailNew" placeholder="new@example.com" autocomplete="email">
+    </div>
+    <div class="acct-field">
+      <label for="emailConfirm">Confirm New Email</label>
+      <input class="sfl-input" type="email" id="emailConfirm" placeholder="Confirm new email" autocomplete="email">
+    </div>
+    <div class="acct-msg" id="emailMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="emailCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="emailSaveBtn">Save Email</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Change Password Modal ── -->
+<div class="acct-overlay" id="pwOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="pwModalTitle">
+  <div class="acct-modal">
+    <button class="acct-modal-close" id="pwClose" aria-label="Close">✕</button>
+    <div class="acct-modal-title" id="pwModalTitle">🔑 Change Password</div>
+    <div class="acct-modal-sub">Your new password must be at least 6 characters. You'll remain signed in after changing it.</div>
+    <div class="acct-field">
+      <label for="pwNew">New Password</label>
+      <input class="sfl-input" type="password" id="pwNew" placeholder="New password (min 6 chars)" autocomplete="new-password">
+    </div>
+    <div class="acct-field">
+      <label for="pwConfirm">Confirm New Password</label>
+      <input class="sfl-input" type="password" id="pwConfirm" placeholder="Confirm new password" autocomplete="new-password">
+    </div>
+    <div class="acct-msg" id="pwMsg"></div>
+    <div class="acct-actions">
+      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="pwCancelBtn">Cancel</button>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="pwSaveBtn">Change Password</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, signOut }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {
+  getAuth, onAuthStateChanged, signOut,
+  EmailAuthProvider, reauthenticateWithCredential,
+  updateEmail, updatePassword, verifyBeforeUpdateEmail
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, updateDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -375,14 +643,21 @@ function savePrefs(prefs) {
 
 function applyPrefs() {
   const p = loadPrefs();
-  $('toggleAutoplay').checked     = p.autoplay    !== false;
-  $('toggleLiveNotifs').checked   = p.liveNotifs  !== false;
-  $('toggleVideoNotifs').checked  = p.videoNotifs !== false;
+  $('toggleAutoplay').checked       = p.autoplay    !== false;
+  $('toggleLiveNotifs').checked     = p.liveNotifs  !== false;
+  $('toggleVideoNotifs').checked    = p.videoNotifs !== false;
   $('toggleInteractNotifs').checked = p.interactNotifs !== false;
-  $('toggleCaptions').checked     = p.captions    === true;
-  $('videoQuality').value         = p.quality     || 'auto';
-  $('defaultVisibility').value    = p.visibility  || 'public';
-  $('commentControl').value       = p.commentCtrl || 'all';
+  $('toggleCaptions').checked       = p.captions    === true;
+  $('videoQuality').value           = p.quality     || 'auto';
+  $('defaultVisibility').value      = p.visibility  || 'public';
+  $('commentControl').value         = p.commentCtrl || 'all';
+  // Privacy panel controls (mirror same keys)
+  $('defaultVisibility2').value     = p.visibility  || 'public';
+  $('commentControl2').value        = p.commentCtrl || 'all';
+  $('togglePrivateProfile').checked = p.privateProfile  === true;
+  $('toggleHideFollowers').checked  = p.hideFollowers   === true;
+  $('toggleActivityStatus').checked = p.activityStatus  !== false;
+  $('privacyDMs').value             = p.privacyDMs      || 'all';
 }
 
 function bindToggle(id, key) {
@@ -398,14 +673,29 @@ function bindSelect(id, key) {
   });
 }
 
-bindToggle('toggleAutoplay',       'autoplay');
-bindToggle('toggleLiveNotifs',     'liveNotifs');
-bindToggle('toggleVideoNotifs',    'videoNotifs');
-bindToggle('toggleInteractNotifs', 'interactNotifs');
-bindToggle('toggleCaptions',       'captions');
-bindSelect('videoQuality',         'quality');
-bindSelect('defaultVisibility',    'visibility');
-bindSelect('commentControl',       'commentCtrl');
+bindToggle('toggleAutoplay',        'autoplay');
+bindToggle('toggleLiveNotifs',      'liveNotifs');
+bindToggle('toggleVideoNotifs',     'videoNotifs');
+bindToggle('toggleInteractNotifs',  'interactNotifs');
+bindToggle('toggleCaptions',        'captions');
+bindSelect('videoQuality',          'quality');
+bindSelect('defaultVisibility',     'visibility');
+bindSelect('commentControl',        'commentCtrl');
+// Privacy panel bindings (sync to same pref keys + also keep the main Privacy section in sync)
+bindToggle('togglePrivateProfile',  'privateProfile');
+bindToggle('toggleHideFollowers',   'hideFollowers');
+bindToggle('toggleActivityStatus',  'activityStatus');
+bindSelect('privacyDMs',            'privacyDMs');
+$('defaultVisibility2').addEventListener('change', () => {
+  const p = loadPrefs(); p.visibility = $('defaultVisibility2').value; savePrefs(p);
+  $('defaultVisibility').value = p.visibility;
+  toast('Setting saved.');
+});
+$('commentControl2').addEventListener('change', () => {
+  const p = loadPrefs(); p.commentCtrl = $('commentControl2').value; savePrefs(p);
+  $('commentControl').value = p.commentCtrl;
+  toast('Setting saved.');
+});
 
 applyPrefs();
 
@@ -422,7 +712,7 @@ $('btnPushNotifs').addEventListener('click', async () => {
   }
 });
 
-/* ── Auth ── */
+/* ── Auth state ── */
 onAuthStateChanged(auth, async user => {
   if(!user) return;
   try {
@@ -436,6 +726,220 @@ onAuthStateChanged(auth, async user => {
     }
   } catch(e) {}
 });
+
+/* ── Privacy panel ── */
+$('btnPrivacy').addEventListener('click', () => {
+  $('privacyPanel').classList.add('active');
+  $('settingsMain').style.display = 'none';
+  window.scrollTo(0, 0);
+});
+$('privacyBack').addEventListener('click', () => {
+  $('privacyPanel').classList.remove('active');
+  $('settingsMain').style.display = '';
+  window.scrollTo(0, 0);
+});
+
+/* ════════════════════════════════════════
+   Re-auth helper
+   ════════════════════════════════════════ */
+// Returns a Promise that resolves when re-auth succeeds, rejects if user cancels.
+let _reAuthResolve = null, _reAuthReject = null;
+
+function requireReAuth(subtitle) {
+  return new Promise((resolve, reject) => {
+    _reAuthResolve = resolve;
+    _reAuthReject  = reject;
+    $('reAuthPassword').value = '';
+    setMsg('reAuthMsg', '');
+    if (subtitle) $('reAuthSub').textContent = subtitle;
+    $('reAuthOverlay').style.display = 'flex';
+    setTimeout(() => $('reAuthPassword').focus(), 80);
+  });
+}
+
+function closeReAuth() {
+  $('reAuthOverlay').style.display = 'none';
+  if (_reAuthReject) { _reAuthReject(new Error('cancelled')); _reAuthReject = null; }
+}
+
+$('reAuthClose').addEventListener('click', closeReAuth);
+$('reAuthCancelBtn').addEventListener('click', closeReAuth);
+$('reAuthOverlay').addEventListener('click', e => { if (e.target === $('reAuthOverlay')) closeReAuth(); });
+
+$('reAuthConfirmBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user) { closeReAuth(); return; }
+  const pw = $('reAuthPassword').value.trim();
+  if (!pw) { setMsg('reAuthMsg', 'error', 'Please enter your current password.'); return; }
+
+  $('reAuthConfirmBtn').disabled = true;
+  $('reAuthConfirmBtn').textContent = 'Verifying…';
+  setMsg('reAuthMsg', '');
+
+  try {
+    const cred = EmailAuthProvider.credential(user.email, pw);
+    await reauthenticateWithCredential(user, cred);
+    $('reAuthOverlay').style.display = 'none';
+    if (_reAuthResolve) { _reAuthResolve(); _reAuthResolve = null; }
+  } catch(e) {
+    const msg = firebaseAuthError(e.code);
+    setMsg('reAuthMsg', 'error', msg);
+  } finally {
+    $('reAuthConfirmBtn').disabled = false;
+    $('reAuthConfirmBtn').textContent = 'Confirm';
+  }
+});
+
+// Allow Enter key in re-auth password field
+$('reAuthPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('reAuthConfirmBtn').click();
+});
+
+/* ════════════════════════════════════════
+   Edit Email
+   ════════════════════════════════════════ */
+$('btnEditEmail').addEventListener('click', () => {
+  const user = auth.currentUser;
+  $('emailCurrent').value = user?.email || '';
+  $('emailNew').value = '';
+  $('emailConfirm').value = '';
+  setMsg('emailMsg', '');
+  $('emailOverlay').style.display = 'flex';
+  setTimeout(() => $('emailNew').focus(), 80);
+});
+
+function closeEmailModal() { $('emailOverlay').style.display = 'none'; }
+$('emailClose').addEventListener('click', closeEmailModal);
+$('emailCancelBtn').addEventListener('click', closeEmailModal);
+$('emailOverlay').addEventListener('click', e => { if (e.target === $('emailOverlay')) closeEmailModal(); });
+
+$('emailSaveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user) { setMsg('emailMsg', 'error', 'You must be signed in.'); return; }
+
+  const newEmail     = $('emailNew').value.trim().toLowerCase();
+  const confirmEmail = $('emailConfirm').value.trim().toLowerCase();
+
+  if (!newEmail) { setMsg('emailMsg', 'error', 'Please enter a new email address.'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    setMsg('emailMsg', 'error', 'Please enter a valid email address.'); return;
+  }
+  if (newEmail !== confirmEmail) { setMsg('emailMsg', 'error', 'Email addresses do not match.'); return; }
+  if (newEmail === user.email?.toLowerCase()) {
+    setMsg('emailMsg', 'error', 'New email is the same as your current email.'); return;
+  }
+
+  $('emailSaveBtn').disabled = true;
+  $('emailSaveBtn').textContent = 'Saving…';
+  setMsg('emailMsg', '');
+
+  try {
+    // Re-authenticate first (required for email change)
+    closeEmailModal();
+    await requireReAuth('To change your email, please confirm your current password.');
+
+    // Send verification to new email (Firebase 10.x recommended approach)
+    await verifyBeforeUpdateEmail(user, newEmail);
+
+    // Update Firestore profile email field
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { email: newEmail });
+    } catch(fe) { /* non-critical */ }
+
+    $('emailOverlay').style.display = 'none';
+    $('settingsUserEmail').textContent = `${newEmail} (verify email sent)`;
+    toast('✉️ Verification email sent! Check your inbox to confirm the new address.', 6000);
+  } catch(e) {
+    if (e.message === 'cancelled') {
+      // User closed re-auth — reopen the email modal so they can try again
+      $('emailOverlay').style.display = 'flex';
+    } else {
+      $('emailOverlay').style.display = 'flex';
+      setMsg('emailMsg', 'error', firebaseAuthError(e.code));
+    }
+  } finally {
+    $('emailSaveBtn').disabled = false;
+    $('emailSaveBtn').textContent = 'Save Email';
+  }
+});
+
+/* ════════════════════════════════════════
+   Change Password
+   ════════════════════════════════════════ */
+$('btnChangePassword').addEventListener('click', () => {
+  $('pwNew').value = '';
+  $('pwConfirm').value = '';
+  setMsg('pwMsg', '');
+  $('pwOverlay').style.display = 'flex';
+  setTimeout(() => $('pwNew').focus(), 80);
+});
+
+function closePwModal() { $('pwOverlay').style.display = 'none'; }
+$('pwClose').addEventListener('click', closePwModal);
+$('pwCancelBtn').addEventListener('click', closePwModal);
+$('pwOverlay').addEventListener('click', e => { if (e.target === $('pwOverlay')) closePwModal(); });
+
+$('pwSaveBtn').addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user) { setMsg('pwMsg', 'error', 'You must be signed in.'); return; }
+
+  const newPw  = $('pwNew').value;
+  const confPw = $('pwConfirm').value;
+
+  if (!newPw) { setMsg('pwMsg', 'error', 'Please enter a new password.'); return; }
+  if (newPw.length < 6) { setMsg('pwMsg', 'error', 'Password must be at least 6 characters.'); return; }
+  if (newPw !== confPw) { setMsg('pwMsg', 'error', 'Passwords do not match.'); return; }
+
+  $('pwSaveBtn').disabled = true;
+  $('pwSaveBtn').textContent = 'Saving…';
+  setMsg('pwMsg', '');
+
+  try {
+    // Re-authenticate first
+    closePwModal();
+    await requireReAuth('To change your password, please confirm your current password.');
+
+    await updatePassword(user, newPw);
+
+    $('pwOverlay').style.display = 'none';
+    toast('🔑 Password changed successfully!', 4000);
+  } catch(e) {
+    if (e.message === 'cancelled') {
+      $('pwOverlay').style.display = 'flex';
+    } else {
+      $('pwOverlay').style.display = 'flex';
+      setMsg('pwMsg', 'error', firebaseAuthError(e.code));
+    }
+  } finally {
+    $('pwSaveBtn').disabled = false;
+    $('pwSaveBtn').textContent = 'Change Password';
+  }
+});
+
+/* ── Utility: set modal message ── */
+function setMsg(id, type, text) {
+  const el = $(id);
+  el.className = 'acct-msg' + (type ? ' ' + type : '');
+  el.textContent = text || '';
+  if (!type) el.style.display = 'none';
+}
+
+/* ── Utility: human-readable Firebase auth errors ── */
+function firebaseAuthError(code) {
+  const map = {
+    'auth/wrong-password':        'Incorrect password. Please try again.',
+    'auth/invalid-credential':    'Incorrect password. Please try again.',
+    'auth/too-many-requests':     'Too many attempts. Please wait a few minutes and try again.',
+    'auth/user-disabled':         'This account has been disabled.',
+    'auth/requires-recent-login': 'Please re-authenticate to complete this action.',
+    'auth/email-already-in-use':  'That email address is already in use by another account.',
+    'auth/invalid-email':         'Invalid email address format.',
+    'auth/operation-not-allowed': 'This operation is not allowed. Contact support.',
+    'auth/weak-password':         'Password must be at least 6 characters.',
+    'auth/network-request-failed':'Network error. Check your connection and try again.',
+  };
+  return map[code] || 'An error occurred. Please try again.';
+}
 
 /* ── Install App button ── */
 function _initInstallRow() {
@@ -453,7 +957,6 @@ function _initInstallRow() {
     if (window._SFLInstall) {
       window._SFLInstall.triggerInstall();
     } else {
-      /* pwa-install.js not yet loaded — show basic iOS instructions */
       const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
       if (isIOS) {
         toast('Tap the Share button ⬆️ in Safari, then "Add to Home Screen".');
@@ -463,7 +966,6 @@ function _initInstallRow() {
     }
   });
 
-  /* Update label depending on platform */
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   if (isIOS) {
     $('installRowSub').textContent = 'Tap Share ⬆️ in Safari → Add to Home Screen';
@@ -488,6 +990,14 @@ $('signOutBtn').addEventListener('click', async () => {
   if(!confirm('Sign out of Shadow Fire Live?')) return;
   try { await signOut(auth); window.location.href = 'sfl-login.html'; }
   catch(e) { toast('Error signing out.'); }
+});
+
+/* ── Escape key closes any open modal ── */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('reAuthOverlay').style.display  !== 'none') closeReAuth();
+  if ($('emailOverlay').style.display   !== 'none') closeEmailModal();
+  if ($('pwOverlay').style.display      !== 'none') closePwModal();
 });
 </script>
 
