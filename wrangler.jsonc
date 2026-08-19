@@ -13,24 +13,10 @@
   ],
 
   "vars": {
-    "LIVEKIT_URL": "wss://chris-oxi8fwap.livekit.cloud"
+    "LIVEKIT_URL":             "wss://chris-oxi8fwap.livekit.cloud",
+    "PAYPAL_ENV":              "live",
+    "SNX_ORIGIN":              "https://shadownexussocial.online",
+    "ENABLE_TEST_COIN_GRANTS": "true"
   }
 
-  // ── Secrets (set via wrangler secret put, never in this file) ──
-  //
-  //   wrangler secret put CLOUDFLARE_ACCOUNT_ID   --name yellow-term-11e6
-  //   wrangler secret put CLOUDFLARE_API_TOKEN     --name yellow-term-11e6
-  //   wrangler secret put FIREBASE_WEB_API_KEY     --name yellow-term-11e6
-  //
-  // CLOUDFLARE_API_TOKEN needs: Cloudflare Stream: Edit
-  // FIREBASE_WEB_API_KEY is the Firebase project Web API key (used to verify ID tokens
-  //   via Google Identity Toolkit — never sent to the browser).
-  //
-  // These secrets are read by:
-  //   POST /stream/upload-url  — creates a Cloudflare Stream direct-upload URL
-  //   GET  /stream/status      — checks Cloudflare Stream processing status
-  //   POST /stream/delete      — deletes a Cloudflare Stream video (owner-verified)
-  //   POST /r2/delete          — deletes an R2 video object (owner-verified)
-  //
-  // Tokens are NEVER returned to the browser.
 }

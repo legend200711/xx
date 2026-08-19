@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shadow Fire Live 🔴</title>
+<title>Shadow Nexus Live 🔴</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0B1F3A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="live.css">
+<link rel="stylesheet" href="snx-gifts.css">
 <!-- Co-Host feature — remove these two lines to disable entirely -->
 <link rel="stylesheet" href="cohost.css">
 </head>
@@ -31,9 +32,9 @@
         '<div style="font-size:22px;font-weight:700;color:#d8eeff;margin-bottom:12px;">Feature Temporarily Disabled</div>' +
         '<div style="font-size:15px;color:#9bbdd8;max-width:380px;line-height:1.75;margin-bottom:28px;">' +
         'Live streaming is currently unavailable.<br>Please check back soon — it will be back!</div>' +
-        '<a href="sfl-home.html" style="display:inline-block;padding:10px 28px;background:rgba(0,174,239,0.15);' +
+        '<a href="index.html" style="display:inline-block;padding:10px 28px;background:rgba(0,174,239,0.15);' +
         'border:1px solid rgba(0,174,239,0.5);color:#00aeef;border-radius:24px;text-decoration:none;' +
-        'font-size:14px;font-weight:600;">← Back to Shadow Fire Live</a>' +
+        'font-size:14px;font-weight:600;">← Back to Shadow Nexus</a>' +
         '</div>'
       );
       document.addEventListener('DOMContentLoaded', function() { document.body.innerHTML = document.body.innerHTML; });
@@ -52,7 +53,7 @@
      ══════════════════════════════════════════════ -->
 <div id="liveLoading">
   <div class="ll-spinner"></div>
-  <div class="ll-text">Connecting to Shadow Fire Live…</div>
+  <div class="ll-text">Connecting to Shadow Nexus Live…</div>
 </div>
 
 
@@ -63,8 +64,8 @@
   <div class="setup-inner">
 
     <!-- Logo / brand -->
-    <div class="setup-logo">🔥</div>
-    <h1 class="setup-title">Shadow Fire Live</h1>
+    <div class="setup-logo">🌑</div>
+    <h1 class="setup-title">Shadow Nexus Live</h1>
     <p class="setup-sub">Preview your camera before going live</p>
 
     <!-- Camera preview -->
@@ -112,8 +113,8 @@
     </button>
 
     <!-- Back link -->
-    <a href="sfl-home.html" style="font-size:13px;color:#3a6a9a;text-decoration:none;margin-top:-8px;">
-      ← Back to Shadow Fire Live
+    <a href="index.html" style="font-size:13px;color:#3a6a9a;text-decoration:none;margin-top:-8px;">
+      ← Back to Feed
     </a>
 
   </div>
@@ -173,7 +174,7 @@
       <!-- Creator info pill -->
       <div class="live-creator-pill">
         <div id="liveCreatorAvatar" class="live-creator-avatar"></div>
-        <div id="liveCreatorName"   class="live-creator-name">Creator</div>
+        <div id="liveCreatorName"   class="live-creator-name">Shadow Nexus</div>
       </div>
 
       <!-- Viewer count -->
@@ -389,11 +390,11 @@
         Share
       </button>
 
-      <!-- Follow (shown for viewers only) -->
-      <button id="btnFollowCreator" class="live-share-btn" aria-label="Follow creator" style="display:none;">
-        <span>➕</span>
-        <span id="btnFollowCreatorLabel">Follow</span>
-      </button>
+      <!-- Gift 🎁 -->
+      <div class="live-gift-btn" id="btnSendGift" aria-label="Send a gift" onclick="snxgLiveOpenGiftTray()">
+        <span class="live-gift-btn-icon">🎁</span>
+        <span class="live-gift-btn-label">Send Gift</span>
+      </div>
 
       <!-- Profile 👤 (sits below share) -->
       <button id="btnCreatorProfile" class="live-profile-btn" aria-label="View creator profile">
@@ -453,6 +454,124 @@
 
 <!-- Co-Host add-on (ES module) — remove to disable entirely -->
 <script type="module" src="cohost.js"></script>
+
+<!-- Shadow Nexus Gifts — LIVE integration -->
+<script type="module">
+  import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import {
+    getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
+    collection, addDoc, query, orderBy, limit, onSnapshot,
+    arrayUnion, arrayRemove, runTransaction, where, getDocs,
+    increment, serverTimestamp, writeBatch
+  } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  const _CFG = {
+    apiKey: 'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+    authDomain: 'horr-a08f4.firebaseapp.com',
+    projectId: 'horr-a08f4',
+    storageBucket: 'horr-a08f4.firebasestorage.app',
+    messagingSenderId: '933810617818',
+    appId: '1:933810617818:web:efb24f123337dd987c14e3',
+  };
+  const _app  = getApps().length ? getApp() : initializeApp(_CFG);
+  const _auth = getAuth(_app);
+  const _db   = getFirestore(_app);
+
+  // Expose Firestore helpers to window for snx-gifts.js
+  window._snxFirestore = {
+    db: _db, doc, getDoc, getDocFromCache: getDoc, setDoc, updateDoc, deleteDoc,
+    collection, addDoc, query, orderBy, limit, onSnapshot,
+    arrayUnion, arrayRemove, runTransaction, where, getDocs, writeBatch,
+    increment, serverTimestamp,
+    enableNetwork: undefined, disableNetwork: undefined,
+  };
+
+  // Auth ready queue for snx-gifts.js
+  window._snxAuthReadyQueue = window._snxAuthReadyQueue || [];
+  window._snxAuthResolved   = false;
+  window._snxOnAuthReady    = function(fn) {
+    if (window._snxAuthResolved && window._snxCurrentUser) { try { fn(); } catch(e){} }
+    else { window._snxAuthReadyQueue.push(fn); }
+  };
+
+  onAuthStateChanged(_auth, user => {
+    window._snxCurrentUser = user || null;
+    window._snxAuthResolved = true;
+    if (user) {
+      window._snxAuthReadyQueue.forEach(fn => { try { fn(); } catch(e){} });
+      window._snxAuthReadyQueue = [];
+    }
+  });
+
+  // Capture room/host info from live.js snxLiveReady event
+  window.addEventListener('snxLiveReady', (e) => {
+    if (e.detail) {
+      window._liveRoomId  = e.detail.roomId  || null;
+      // Host UID: if viewer, use roomId prefix (uid part); live.js provides hostId in roomData
+      // We'll get it from the event or from watching RTDB
+      if (!e.detail.isHost) {
+        // Viewer: get host from room data — try to read from RTDB via existing live.js state
+        // live.js exposes _roomHostId; we'll read it from the event if available
+      } else {
+        // Creator: host is the current user
+        window._liveHostUid = e.detail.user?.uid || null;
+      }
+    }
+  });
+
+  // Also listen for host info from RTDB room data (viewer flow)
+  window.addEventListener('snxLiveHostReady', (e) => {
+    if (e.detail?.hostId) window._liveHostUid = e.detail.hostId;
+  });
+
+  // Wire live gift button to tray
+  window.snxgLiveOpenGiftTray = function() {
+    const roomId  = window._liveRoomId  || null;
+    const hostUid = window._liveHostUid || null;
+    if (!hostUid || !roomId) {
+      if (typeof toastNotification === 'function') toastNotification('Live stream not connected yet.');
+      return;
+    }
+    if (typeof snxgOpenGiftTray === 'function') {
+      snxgOpenGiftTray(roomId, hostUid, true);
+    }
+  };
+
+  // Gifting feature flag — live sync with siteSettings/config
+  // Keeps _snxGiftingEnabled in sync so snxgSendGift uses the real-time value.
+  onSnapshot(doc(_db, 'siteSettings', 'config'), snap => {
+    const cfg = snap.exists() ? snap.data() : {};
+    window._snxGiftingEnabled = cfg.giftingEnabled !== false;
+  });
+
+  // Watch for incoming gifts on live room and show toasts
+  let _liveGiftUnsub = null;
+  window._snxgStartLiveGiftWatch = function(roomId) {
+    if (_liveGiftUnsub) { try { _liveGiftUnsub(); } catch(_) {} }
+    if (!roomId) return;
+    let initialized = false;
+    const q = query(
+      collection(_db, 'giftTransactions'),
+      where('postId', '==', roomId),
+      where('isLive', '==', true),
+      orderBy('createdAt', 'desc'),
+      limit(1)
+    );
+    _liveGiftUnsub = onSnapshot(q, snap => {
+      if (!initialized) { initialized = true; return; }
+      snap.docChanges().forEach(change => {
+        if (change.type !== 'added') return;
+        const g = change.doc.data();
+        if (typeof window.snxgShowLiveGiftToast === 'function') {
+          window.snxgShowLiveGiftToast(g.senderName || 'Someone', g.giftId);
+        }
+      });
+    });
+  };
+</script>
+
+<script type="module" src="snx-gifts.js"></script>
 
 </body>
 </html>

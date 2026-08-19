@@ -149,9 +149,10 @@
         { "fieldPath": "mediaKind", "order": "ASCENDING" },
         { "fieldPath": "uploadedAt","order": "DESCENDING" }
       ]
-    },
+    }
+    ,
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "giftTransactions",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "creatorId",  "order": "ASCENDING"  },
@@ -159,77 +160,52 @@
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "giftTransactions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
+        { "fieldPath": "senderId",   "order": "ASCENDING"  },
         { "fieldPath": "createdAt",  "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "giftTransactions",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
-        { "fieldPath": "views",      "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "videos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "creatorId",  "order": "ASCENDING"  },
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
+        { "fieldPath": "postId",     "order": "ASCENDING"  },
+        { "fieldPath": "isLive",     "order": "ASCENDING"  },
         { "fieldPath": "createdAt",  "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "payouts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "category",   "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
-        { "fieldPath": "views",      "order": "DESCENDING" }
+        { "fieldPath": "creatorId",    "order": "ASCENDING"  },
+        { "fieldPath": "requestedAt",  "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "creatorPayouts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",      "order": "ASCENDING"  },
-        { "fieldPath": "visibility",  "order": "ASCENDING"  },
-        { "fieldPath": "titleLower",  "order": "ASCENDING"  }
+        { "fieldPath": "creatorId",    "order": "ASCENDING"  },
+        { "fieldPath": "requestedAt",  "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "financialAuditLog",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
-        { "fieldPath": "title",      "order": "ASCENDING"  }
+        { "fieldPath": "uid",          "order": "ASCENDING"  },
+        { "fieldPath": "timestamp",    "order": "DESCENDING" }
       ]
     },
     {
-      "collectionGroup": "videos",
+      "collectionGroup": "coinPurchases",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status",     "order": "ASCENDING"  },
-        { "fieldPath": "visibility", "order": "ASCENDING"  },
-        { "fieldPath": "tags",       "order": "ASCENDING"  },
-        { "fieldPath": "views",      "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "videos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "likedBy",    "order": "ASCENDING"  },
-        { "fieldPath": "createdAt",  "order": "DESCENDING" }
+        { "fieldPath": "uid",       "order": "ASCENDING"  },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     }
   ],

@@ -1,5 +1,5 @@
 /**
- * Shadow Fire Live — live.js
+ * Shadow Nexus Live — live.js
  *
  * Firebase split architecture:
  *
@@ -9,7 +9,7 @@
  *    - Live chat messages  (liveRooms/{roomId}/liveMessages)
  *    - Likes counter       (liveRooms/{roomId}.likes)
  *
- *  LIVE Firebase (Shadow Fire Live) — Realtime Database:
+ *  LIVE Firebase (Shadow Nexus Live) — Realtime Database:
  *    - Room status             (liveRooms/{roomId})
  *    - WebRTC per-viewer slots (liveConnections/{roomId}/viewers/{viewerUid})
  *      host writes offer+hostCandidates; viewer writes answer+viewerCandidates
@@ -51,7 +51,7 @@ import {
   getFirestore,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
   collection, query, orderBy, limit, onSnapshot,
-  serverTimestamp, increment, where, deleteField, arrayUnion, arrayRemove
+  serverTimestamp, increment, where, deleteField, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 /* ── Realtime Database imports (signaling + room status) ── */
@@ -556,8 +556,11 @@ async function startLive() {
   // Sanitize uid — strip any chars forbidden in RTDB keys (. # $ / [ ])
   const _safeUid = _user.uid.replace(/[.#$/\[\]]/g, '_');
   _roomId = `${_safeUid}_${Date.now().toString(36)}`;
-
   _roomHostId = _user.uid;   // creator is always their own host
+
+  // Expose for gift integration
+  window._liveRoomId  = _roomId;
+  window._liveHostUid = _roomHostId;
 
   const creatorData = {
     roomId:       _roomId,
@@ -565,7 +568,7 @@ async function startLive() {
     hostName:     _userData.displayName || _user.email?.split('@')[0] || 'Creator',
     hostUsername: _userData.username || '',
     hostAvatar:   _userData.avatar || _userData.profilePicture || '',
-    title:        titleVal || 'Shadow Fire Live',
+    title:        titleVal || 'Shadow Nexus LIVE',
     status:       'live',
     isLive:       true,
     viewers:      0,
@@ -1019,7 +1022,7 @@ async function _createLiveFeedPost(creatorData) {
       authorAvatar:  creatorData.hostAvatar   || '',
       liveRoomId:    _roomId,
       isLive:        true,
-      title:         creatorData.title        || 'Shadow Fire Live',
+      title:         creatorData.title        || 'Shadow Nexus LIVE',
       text:          (creatorData.hostName || 'Someone') + ' is Live now 🔴',
       timestamp:     Date.now(),
       createdAt:     Date.now(),
@@ -1049,7 +1052,7 @@ async function _createLiveStory(creatorData) {
       authorAvatar: creatorData.hostAvatar   || '',
       type:         'live',
       liveRoomId:   _roomId,
-      title:        creatorData.title        || 'Shadow Fire Live',
+      title:        creatorData.title        || 'Shadow Nexus LIVE',
       createdAt:    now,
       expiresAt,
     });
@@ -1081,9 +1084,9 @@ async function _notifyFollowersLive(creatorData) {
       fromName:   creatorData.hostName    || '',
       fromAvatar: creatorData.hostAvatar  || '',
       roomId:     _roomId,
-      roomTitle:  creatorData.title       || 'Shadow Fire Live',
+      roomTitle:  creatorData.title       || 'Shadow Nexus LIVE',
       title:      '🔴 ' + (creatorData.hostName || 'Someone') + ' is Live',
-      body:       `${creatorData.hostName || 'Someone'} is live: ${creatorData.title || 'Shadow Fire Live'}`,
+      body:       `${creatorData.hostName || 'Someone'} is live: ${creatorData.title || 'Shadow Nexus LIVE'}`,
       url:        'live.html#watch=' + _roomId,
       ts:         Date.now(),
       read:       false,
@@ -1139,6 +1142,9 @@ async function _startViewer() {
 
   _roomHostId = roomData.hostId || null;   // store real host uid for chat badge
 
+  // Expose host UID for gift integration
+  window.dispatchEvent(new CustomEvent('snxLiveHostReady', { detail: { hostId: _roomHostId } }));
+
   _hideLoading();
   _showStage();
   _hideConnBanner();
@@ -1152,6 +1158,11 @@ async function _startViewer() {
     user: _user, userData: _userData,
     roomId: _roomId, isHost: false,
   }}));
+
+  // ── Start watching for live gifts (gift toasts) ──
+  if (typeof window._snxgStartLiveGiftWatch === 'function') {
+    window._snxgStartLiveGiftWatch(_roomId);
+  }
 
   /* ── Subscribe to live guest presence (shows guest boxes to viewers) ── */
   _startViewerGuestGrid();
@@ -1355,71 +1366,9 @@ function _setupViewerControls(roomData) {
   if (D.profileBtn) {
     D.profileBtn.style.display = 'flex';
     D.profileBtn.onclick = () => {
-      window.location.href = 'sfl-profile.html?uid=' + roomData.hostId;
+      window.open('index.html#profile=' + roomData.hostId, '_blank');
     };
   }
-
-  // Follow button — shown to viewers who are not the host
-  const followBtn      = document.getElementById('btnFollowCreator');
-  const followLabel    = document.getElementById('btnFollowCreatorLabel');
-  const hostId         = roomData.hostId;
-  if (!followBtn || !followLabel || !hostId) return;
-  // Don't show follow button on your own stream
-  if (_user && _user.uid === hostId) return;
-
-  followBtn.style.display = 'flex';
-
-  // Check current follow state
-  let _liveFollowing = false;
-  if (_user && _userData && Array.isArray(_userData.following)) {
-    _liveFollowing = _userData.following.includes(hostId);
-  }
-  function _updateLiveFollowBtn() {
-    followLabel.textContent = _liveFollowing ? '✓ Following' : 'Follow';
-    followBtn.style.opacity = _liveFollowing ? '0.7' : '1';
-  }
-  _updateLiveFollowBtn();
-
-  followBtn.addEventListener('click', async () => {
-    if (!_user) { toast('Sign in to follow creators.'); return; }
-    if (!hostId || hostId === _user.uid) return;
-    followBtn.disabled = true;
-    try {
-      const creatorRef = doc(_db, 'users', hostId);
-      const myRef      = doc(_db, 'users', _user.uid);
-      if (_liveFollowing) {
-        await updateDoc(creatorRef, { followers: arrayRemove(_user.uid) });
-        await updateDoc(myRef,      { following: arrayRemove(hostId) });
-        _liveFollowing = false;
-        toast('Unfollowed.');
-      } else {
-        await updateDoc(creatorRef, { followers: arrayUnion(_user.uid) });
-        await updateDoc(myRef,      { following: arrayUnion(hostId) });
-        _liveFollowing = true;
-        toast('Following ' + (roomData.hostName || 'creator') + '!');
-
-        // Send follow notification
-        const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
-        const myAvatar = _userData?.avatar || _user.photoURL || '';
-        addDoc(collection(_db, 'notifications', hostId, 'items'), {
-          type:        'follow',
-          fromUid:     _user.uid,
-          fromName:    myName,
-          fromAvatar:  myAvatar,
-          fromProfile: 'sfl-profile.html?uid=' + _user.uid,
-          message:     myName + ' started following you.',
-          read:        false,
-          ts:          serverTimestamp(),
-          createdAt:   Date.now(),
-        }).catch(() => {});
-      }
-      _updateLiveFollowBtn();
-    } catch(e) {
-      toast('Error updating follow.');
-    } finally {
-      followBtn.disabled = false;
-    }
-  });
 }
 
 /* ═══════════════════════════════════════════════════
@@ -2738,7 +2687,7 @@ function _openShareModal() {
     _closeShareModal();
     if (navigator.share) {
       navigator.share({
-        title: '🔴 Watch me live on Shadow Fire Live!',
+        title: '🔴 Watch me live on Shadow Nexus!',
         text:  shareMsg,
         url,
       }).catch(() => {});
@@ -4957,11 +4906,11 @@ let _shadowBotHourReset    = null;     // hourly counter reset timer
 let _shadowBotActive       = false;    // true only when live is running
 
 const _SHADOW_BOT_MESSAGES = [
-  'Welcome to Shadow Fire Live! 🔥',
+  'Welcome to Shadow Nexus Live! 🌑',
   'Thanks for being here — keep the chat positive! ✨',
-  'Great to see everyone here on Shadow Fire Live! 🔴',
+  'Great to see everyone here on Shadow Nexus Live! 🔴',
   "You're all amazing — thanks for watching! 🙌",
-  'This live is powered by the Shadow Fire Live community. Welcome! 💙',
+  'This live is powered by the Shadow Nexus community. Welcome! 💙',
   'Enjoying the stream? Share it with a friend! 📤',
 ];
 
