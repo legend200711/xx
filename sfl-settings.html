@@ -860,10 +860,6 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, updateDoc, setDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import {
-  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
-
 const FIREBASE_CONFIG = {
   apiKey:           'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
   authDomain:       'horr-a08f4.firebaseapp.com',
@@ -873,10 +869,12 @@ const FIREBASE_CONFIG = {
   messagingSenderId:'933810617818',
   appId:            '1:933810617818:web:efb24f123337dd987c14e3'
 };
-const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const auth    = getAuth(app);
-const db      = getFirestore(app);
-const storage = getStorage(app);
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+/* ── Cloudflare R2 Worker — all media storage lives here ── */
+const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
 
 const $  = id => document.getElementById(id);
 const toast = (msg, dur = 3000) => {
@@ -1249,30 +1247,20 @@ function resizeImage(file, maxW, maxH, quality = 0.85) {
     img.onload = () => {
       URL.revokeObjectURL(url);
       let w = img.naturalWidth, h = img.naturalHeight;
-      
-      // Cap dimensions early to prevent OOM on large mobile photos
-      const MAX_CANVAS_DIM = 4096;
-      if (w > MAX_CANVAS_DIM || h > MAX_CANVAS_DIM) {
-        const safetyScale = Math.min(MAX_CANVAS_DIM / w, MAX_CANVAS_DIM / h);
-        w = Math.round(w * safetyScale);
-        h = Math.round(h * safetyScale);
+      // Cap to prevent OOM on large mobile camera photos
+      const MAX_DIM = 4096;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        const s = Math.min(MAX_DIM / w, MAX_DIM / h);
+        w = Math.round(w * s); h = Math.round(h * s);
       }
-      
-      // Now resize to target dimensions
       if (w > maxW || h > maxH) {
         const s = Math.min(maxW / w, maxH / h);
-        w = Math.round(w * s);
-        h = Math.round(h * s);
+        w = Math.round(w * s); h = Math.round(h * s);
       }
-      
       const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
+      if (!ctx) { reject(new Error('Could not get canvas context')); return; }
       ctx.drawImage(img, 0, 0, w, h);
       canvas.toBlob(
         b => b ? resolve(b) : reject(new Error('Canvas compression failed')),
@@ -1285,130 +1273,89 @@ function resizeImage(file, maxW, maxH, quality = 0.85) {
 }
 
 /**
- * Convert a Blob to a base64 data URL.
- * Used as fallback when Firebase Storage is unavailable.
+ * Upload a compressed image Blob to the Cloudflare R2 Worker.
+ *
+ * Uses XHR so xhr.upload.onprogress gives real byte-level progress.
+ * The Worker stores the file at r2Key and returns { url, key }.
+ *
+ * @param {Blob}     blob       - Compressed image blob
+ * @param {string}   r2Key      - R2 object key, e.g. "profile-images/{uid}/avatar.jpg"
+ * @param {string}   uid        - Firebase UID (sent in FormData for security scoping)
+ * @param {Function} onProgress - Called with (ratio 0–1) on each progress event
+ * @returns {Promise<string>}   - Public CDN URL
  */
-function blobToDataURL(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('FileReader failed'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * Upload an image blob to Firebase Storage using uploadBytesResumable.
- *
- * Always uses the resumable upload path so we get real byte-level progress
- * events (bytesTransferred / totalBytes).  The resumable API is also the most
- * reliable path on Android Chrome / WebView because Firebase SDK handles the
- * CORS preflight for the session initiation internally.
- *
- * onProgress(ratio 0–1) is called on every state_changed event so the caller
- * can map it to whatever UI band they need.
- *
- * Returns the download URL when the upload is fully complete.
- */
-async function uploadToStorage(blob, path, onProgress, uid) {
+function uploadToR2(blob, r2Key, uid, onProgress) {
   const DIAG = '[SFL-Upload]';
+  console.log(`${DIAG} [7] R2 upload started | key="${r2Key}" | size=${blob.size} bytes (${(blob.size/1024).toFixed(1)} KB) | uid=${uid} | worker=${R2_WORKER_URL}`);
 
-  console.log(`${DIAG} [7] Upload started | path="${path}" | size=${blob.size} bytes (${(blob.size/1024).toFixed(1)} KB) | type=${blob.type} | uid=${uid || 'unknown'} | bucket=${storage.app.options.storageBucket}`);
-  console.log(`${DIAG} [7a] Firebase config | projectId=${storage.app.options.projectId} | storageBucket=${storage.app.options.storageBucket}`);
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('file', blob, r2Key.split('/').pop()); // filename hint for MIME detection
+    fd.append('uid',  uid);
 
-  const ref = storageRef(storage, path);
+    const xhr = new XMLHttpRequest();
+    xhr.timeout = 120_000; // 2 min hard cap — the safety net, not the expected path
 
-  // Timeout: 60 s for images ≤ 2 MB, 120 s for larger (should never be needed
-  // for compressed profile photos, but acts as a hard safety net).
-  const TIMEOUT_MS = blob.size <= 2 * 1024 * 1024 ? 60_000 : 120_000;
-  let timeoutId = null;
-  let _lastProgress = 0; // track last reported progress for timeout diagnostics
+    xhr.upload.onprogress = e => {
+      if (!e.lengthComputable) return;
+      const ratio = e.loaded / e.total;
+      console.log(`${DIAG} [8] Upload progress | ${e.loaded}/${e.total} bytes | ${(ratio*100).toFixed(1)}%`);
+      if (onProgress) onProgress(ratio);
+    };
 
-  // Wrap uploadBytesResumable in a Promise that resolves with the download URL
-  // so we can race it cleanly against the timeout.
-  const uploadPromise = new Promise((resolve, reject) => {
-    const task = uploadBytesResumable(ref, blob, { contentType: blob.type || 'image/jpeg' });
-
-    task.on('state_changed',
-      // ── next: real byte progress ──────────────────────────────────────────
-      snap => {
-        const ratio = snap.totalBytes > 0 ? snap.bytesTransferred / snap.totalBytes : 0;
-        _lastProgress = ratio;
-        console.log(`${DIAG} [8] Upload progress | ${snap.bytesTransferred}/${snap.totalBytes} bytes | ${(ratio * 100).toFixed(1)}% | state=${snap.state}`);
-        if (onProgress) onProgress(ratio);
-      },
-      // ── error ─────────────────────────────────────────────────────────────
-      err => {
-        console.error(`${DIAG} [8-ERR] Upload error | code=${err.code} | message=${err.message} | path="${path}" | uid=${uid || 'unknown'} | last progress=${(_lastProgress * 100).toFixed(1)}%`, err);
-        reject(err);
-      },
-      // ── complete ──────────────────────────────────────────────────────────
-      async () => {
-        console.log(`${DIAG} [9] Upload completed — getting download URL | path="${path}"`);
-        try {
-          console.log(`${DIAG} [10] getDownloadURL started`);
-          const dlUrl = await getDownloadURL(task.snapshot.ref);
-          console.log(`${DIAG} [11] getDownloadURL completed:`, dlUrl);
-          resolve(dlUrl);
-        } catch (e) {
-          console.error(`${DIAG} [11-ERR] getDownloadURL FAILED:`, e.code, e.message, e);
-          reject(e);
-        }
+    xhr.onload = () => {
+      let resp;
+      try { resp = JSON.parse(xhr.responseText); } catch { resp = {}; }
+      console.log(`${DIAG} [9] XHR onload | status=${xhr.status} | resp=`, resp);
+      if (xhr.status >= 200 && xhr.status < 300 && resp.url) {
+        console.log(`${DIAG} [10] Upload complete — CDN URL:`, resp.url);
+        resolve(resp.url);
+      } else if (xhr.status === 401 || xhr.status === 403) {
+        reject(new Error('Permission denied — please sign in and try again.'));
+      } else if (xhr.status === 413) {
+        reject(new Error('Image is too large (max 10 MB after compression).'));
+      } else if (xhr.status === 415) {
+        reject(new Error('Image format not supported. Please use JPG, PNG, or WEBP.'));
+      } else {
+        reject(new Error(resp.error || `Upload failed (HTTP ${xhr.status}) — check your connection.`));
       }
-    );
-  });
+    };
 
-  // Race the upload against the hard timeout
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      const msg = `Upload timeout — stage: Firebase Storage upload — path: ${path} — uid: ${uid || 'unknown'} — last progress: ${(_lastProgress * 100).toFixed(1)}%`;
-      console.error(`${DIAG} ⏱ ${msg} — timeout after ${TIMEOUT_MS / 1000}s`);
-      reject(Object.assign(new Error(msg), { code: 'storage/timeout', _isTimeout: true }));
-    }, TIMEOUT_MS);
-  });
+    xhr.onerror   = () => {
+      console.error(`${DIAG} [8-ERR] XHR network error | key="${r2Key}" | uid=${uid}`);
+      reject(new Error('Network error — check your connection and try again.'));
+    };
+    xhr.ontimeout = () => {
+      console.error(`${DIAG} ⏱ XHR timeout | key="${r2Key}" | uid=${uid} — upload exceeded 120 s`);
+      reject(new Error('Upload timed out — check your connection and try again.'));
+    };
+    xhr.onabort   = () => reject(new Error('Upload cancelled.'));
 
-  try {
-    const url = await Promise.race([uploadPromise, timeoutPromise]);
-    clearTimeout(timeoutId);
-    if (onProgress) onProgress(1);
-    return url;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    console.error(`${DIAG} uploadToStorage FAILED:`, {
-      code:    err.code,
-      message: err.message,
-      name:    err.name,
-      path,
-      uid:     uid || 'unknown',
-      lastProgressPct: (_lastProgress * 100).toFixed(1),
-      stack:   err.stack
-    });
-    throw err;
-  }
+    xhr.open('POST', R2_WORKER_URL);
+    xhr.send(fd);
+  });
 }
 
 /**
  * Master image upload function.
  *
- * Stages visible in the UI:
- *   0 — Preparing image   (compression)
- *   1 — Uploading         (Firebase Storage transfer)
- *   2 — Finalizing        (getDownloadURL — handled inside uploadToStorage)
- *   3 — Saving profile    (Firestore update — handled by the caller)
+ * Stages:
+ *   0 — Preparing image  (canvas resize/compress)
+ *   1 — Uploading        (Cloudflare R2 via Worker — real XHR progress)
+ *   2 — Saving profile   (Firestore updateDoc — handled by the caller)
  *
- * Returns the download URL.  The caller is responsible for the Firestore
- * write and for showing stage 3 / 100%.
+ * Returns the public CDN URL. Caller handles Firestore write + stage 2 UI.
  */
-async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
+async function handleImageUpload(file, maxW, maxH, quality, r2Key, ui) {
   const DIAG = '[SFL-Upload]';
   const { progressWrap, progressBar, progressLabel, saveBtn, stages } = ui;
 
   console.log(`${DIAG} [1] File selected | name="${file.name}" | size=${file.size} bytes (${(file.size/1024).toFixed(1)} KB) | type=${file.type}`);
 
-  function setStage(n, state) {
+  function setStage(n, st) {
     stages.forEach((s, i) => {
-      s.classList.toggle('active', i === n && state === 'active');
-      s.classList.toggle('done',   i <= n && state === 'done');
+      s.classList.toggle('active', i === n && st === 'active');
+      s.classList.toggle('done',   i <= n && st === 'done');
     });
   }
   function setProgress(pct, label) {
@@ -1417,20 +1364,14 @@ async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
     if (saveBtn) saveBtn.textContent = label;
   }
 
-  // ── Auth check before we do any work ────────────────────────────────────
+  // ── Auth check ───────────────────────────────────────────────────────────
   const user = auth.currentUser;
-  console.log(`${DIAG} [5] Firebase Auth user:`, user ? `uid=${user.uid} | email=${user.email} | anonymous=${user.isAnonymous}` : 'NULL — NOT SIGNED IN');
+  console.log(`${DIAG} [2] Auth check | user=${user ? `uid=${user.uid} anonymous=${user.isAnonymous}` : 'NULL'}`);
   if (!user) {
-    throw Object.assign(
-      new Error('Please sign in again before uploading your profile picture.'),
-      { code: 'storage/unauthenticated' }
-    );
+    throw new Error('Your session has expired. Please sign in again.');
   }
   if (user.isAnonymous) {
-    throw Object.assign(
-      new Error('Anonymous accounts cannot upload images. Please create a full account.'),
-      { code: 'storage/unauthenticated' }
-    );
+    throw new Error('Please create a full account to upload a profile picture.');
   }
 
   // Show progress UI
@@ -1440,82 +1381,44 @@ async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
   setProgress(5, 'Preparing image…');
 
   // ── Stage 0: Compress ────────────────────────────────────────────────────
-  console.log(`${DIAG} [3] Image compression started | maxW=${maxW} maxH=${maxH} quality=${quality}`);
+  console.log(`${DIAG} [3] Compressing | maxW=${maxW} maxH=${maxH} quality=${quality}`);
   let compressed;
   try {
     compressed = await resizeImage(file, maxW, maxH, quality);
   } catch(e) {
-    console.error(`${DIAG} Image compression FAILED:`, e);
-    throw Object.assign(new Error('Image compression failed'), { code: 'compress/failed', original: e });
+    console.error(`${DIAG} Compression FAILED:`, e);
+    throw new Error('Could not compress the image. Please try a JPG or PNG file.');
   }
-  console.log(`${DIAG} [4] Image compression finished | compressed size=${compressed.size} bytes (${(compressed.size/1024).toFixed(1)} KB)`);
+  console.log(`${DIAG} [4] Compressed | ${file.size} → ${compressed.size} bytes (${(compressed.size/1024).toFixed(1)} KB)`);
 
   setStage(0, 'done');
   setStage(1, 'active');
-  setProgress(20, 'Uploading image…');
+  setProgress(20, 'Uploading…');
 
-  // ── Storage reference ────────────────────────────────────────────────────
-  console.log(`${DIAG} [6] Storage reference created | path="${storagePath}" | bucket=${storage.app.options.storageBucket} | uid=${user.uid}`);
-
-  // ── Stage 1: Firebase Storage upload (progress 20 → 88%) ────────────────
-  // Progress is real bytes: ratio = bytesTransferred / totalBytes (0–1)
-  // mapped onto the 20–88% band so the user sees actual transfer activity.
-  let imageUrl = null;
+  // ── Stage 1: Upload to Cloudflare R2 (real XHR progress 20 → 88%) ────────
+  console.log(`${DIAG} [5] R2 key="${r2Key}" | uid=${user.uid}`);
+  let imageUrl;
   try {
-    imageUrl = await uploadToStorage(compressed, storagePath, ratio => {
-      // Real byte ratio (0–1) mapped to the 20–88% UI band
+    imageUrl = await uploadToR2(compressed, r2Key, user.uid, ratio => {
       const pct = 20 + Math.round(ratio * 68);
       setProgress(pct, `Uploading… ${pct}%`);
-    }, user.uid);
-  } catch(storageErr) {
-    // Detailed error dump so the exact failure is visible in the console
-    console.error(`${DIAG} ══ STORAGE UPLOAD FAILED ══`, {
-      code:    storageErr.code,
-      message: storageErr.message,
-      name:    storageErr.name,
-      stack:   storageErr.stack,
-      full:    storageErr
     });
-
-    // Do NOT fall back to data-URL storage — that silently produces
-    // multi-megabyte Firestore documents and breaks the app.
-    // Surface the real error to the user instead.
-    throw storageErr;
+  } catch(uploadErr) {
+    console.error(`${DIAG} ══ UPLOAD FAILED ══ | key="${r2Key}" | uid=${user.uid} |`, uploadErr.message);
+    throw uploadErr;
   }
 
-  // ── Stage 2: Finalizing (URL obtained, hand off to caller) ──────────────
+  // ── Hand off to caller for Firestore write (stage 2) ─────────────────────
   setStage(1, 'done');
   setStage(2, 'active');
-  setProgress(90, 'Finalizing image…');
-
-  await new Promise(r => setTimeout(r, 200));
-
-  setStage(2, 'done');
-  setStage(3, 'active');
-  setProgress(95, 'Saving profile…');
-  console.log(`${DIAG} [12] Handing download URL to caller for Firestore update`);
+  setProgress(90, 'Saving profile…');
+  console.log(`${DIAG} [11] Upload done — handing URL to caller | url=${imageUrl}`);
 
   return imageUrl;
 }
 
-function storageErrorMsg(code, err) {
-  // For timeout errors we have a detailed message already — surface it
-  if (err && err._isTimeout) return err.message;
-  const map = {
-    'compress/failed':              'Could not compress the image. Please try a JPG or PNG file.',
-    'encode/failed':                'Could not process the image. Please try again.',
-    'storage/url-failed':           'Upload finished, but we couldn\'t finish saving the image. Please try again.',
-    'storage/unauthorized':         'Permission denied. Please sign in and try again.',
-    'storage/canceled':             'Upload cancelled.',
-    'storage/timeout':              'Upload timed out — check your connection and try again.',
-    'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
-    'storage/unauthenticated':      'You must be signed in to upload images.',
-    'storage/retry-limit-exceeded': 'Upload failed — check your connection and tap Retry.',
-    'storage/bucket-not-found':     'Storage bucket not found. Firebase Storage has not been set up for this project. Go to the Firebase Console → Storage and click Get Started.',
-    'storage/no-default-bucket':    'Storage bucket not configured. Firebase Storage has not been set up for this project.',
-    'storage/unknown':              'Upload failed — check your connection and try again.',
-  };
-  return map[code] || `Upload failed (${code || 'unknown'}) — check your connection and try again.`;
+function uploadErrorMsg(err) {
+  return err?.message || 'Upload failed — check your connection and try again.';
 }
 
 /* ════════════════════════════════════════
@@ -1627,11 +1530,8 @@ $('avatarRemoveBtn').addEventListener('click', async () => {
 $('avatarSaveBtn').addEventListener('click', async () => {
   const DIAG = '[SFL-Upload]';
   const user = auth.currentUser;
-  console.log(`${DIAG} [2] Save Photo tapped | user=${user ? user.uid : 'NULL'} | file=${_avatarFile ? _avatarFile.name : 'NONE'} | busy=${_avatarBusy}`);
-  if (!user) {
-    setMsg('avatarMsg', 'error', 'You must be signed in to upload a profile picture.');
-    return;
-  }
+  console.log(`${DIAG} [0] Save Photo tapped | user=${user ? user.uid : 'NULL'} | file=${_avatarFile ? _avatarFile.name : 'NONE'} | busy=${_avatarBusy}`);
+  if (!user) { setMsg('avatarMsg', 'error', 'You must be signed in to upload a profile picture.'); return; }
   if (!_avatarFile || _avatarBusy) return;
 
   _avatarBusy = true;
@@ -1643,9 +1543,9 @@ $('avatarSaveBtn').addEventListener('click', async () => {
   const stages = [$('avStage1'), $('avStage2'), $('avStage3'), $('avStage4')];
 
   try {
+    const r2Key = `profile-images/${user.uid}/avatar.jpg`;
     const url = await handleImageUpload(
-      _avatarFile, 400, 400, 0.85,
-      `profile-images/${user.uid}/avatar.jpg`,
+      _avatarFile, 400, 400, 0.85, r2Key,
       {
         progressWrap:  $('avatarProgressWrap'),
         progressBar:   $('avatarProgressBar'),
@@ -1655,15 +1555,13 @@ $('avatarSaveBtn').addEventListener('click', async () => {
       }
     );
 
-    // ── Stage 3: Save URL to Firestore ──────────────────────────────────────
-    console.log(`${DIAG} [12] Firestore update started | collection=users | uid=${user.uid}`);
+    // ── Stage 2: Save URL to Firestore ──────────────────────────────────────
+    console.log(`${DIAG} [12] Firestore update started | uid=${user.uid}`);
     try {
       await updateDoc(doc(db, 'users', user.uid), { avatar: url });
       console.log(`${DIAG} [13] Firestore update completed — avatar saved`);
     } catch(fsErr) {
-      // Storage succeeded — image is uploaded — but Firestore failed.
-      console.error(`${DIAG} [Firestore] avatar update FAILED:`, fsErr.code, fsErr.message, fsErr);
-      // Still update local state and thumbnail so the session reflects reality.
+      console.error(`${DIAG} [Firestore] avatar update FAILED:`, fsErr.message, fsErr);
       _userData.avatar = url;
       const thumb = $('settingsAvatarThumb');
       thumb.src = url; thumb.style.display = '';
@@ -1679,24 +1577,17 @@ $('avatarSaveBtn').addEventListener('click', async () => {
     }
     _userData.avatar = url;
 
-    // Update thumbnail
     const thumb = $('settingsAvatarThumb');
     thumb.src = url; thumb.style.display = '';
-    console.log(`${DIAG} [14] UI updated — avatar thumbnail set`);
-
-    // Complete
     stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
     $('avatarProgressBar').style.width = '100%';
     $('avatarProgressLabel').textContent = '✓ Done!';
-    console.log(`${DIAG} ✅ AVATAR UPLOAD COMPLETE — full pipeline succeeded`);
+    console.log(`${DIAG} ✅ AVATAR UPLOAD COMPLETE`);
 
-    setTimeout(() => {
-      closeAvatarModal();
-      toast('📷 Profile picture updated!', 3500);
-    }, 700);
+    setTimeout(() => { closeAvatarModal(); toast('📷 Profile picture updated!', 3500); }, 700);
   } catch(e) {
-    console.error(`${DIAG} ══ AVATAR UPLOAD PIPELINE FAILED ══`, { code: e.code, message: e.message, name: e.name, stack: e.stack });
-    setMsg('avatarMsg', 'error', storageErrorMsg(e.code, e));
+    console.error(`${DIAG} ══ AVATAR UPLOAD FAILED ══`, e.message, e);
+    setMsg('avatarMsg', 'error', uploadErrorMsg(e));
     $('avatarSaveBtn').textContent = 'Retry Upload';
     $('avatarSaveBtn').disabled = false;
     $('avatarProgressWrap').style.display = 'none';
@@ -1767,7 +1658,7 @@ $('coverFileInput').addEventListener('change', () => {
 $('coverSaveBtn').addEventListener('click', async () => {
   const DIAG = '[SFL-Upload]';
   const user = auth.currentUser;
-  console.log(`${DIAG} [2] Save Cover tapped | user=${user ? user.uid : 'NULL'} | file=${_coverFile ? _coverFile.name : 'NONE'} | busy=${_coverBusy}`);
+  console.log(`${DIAG} [0] Save Cover tapped | user=${user ? user.uid : 'NULL'} | file=${_coverFile ? _coverFile.name : 'NONE'} | busy=${_coverBusy}`);
   if (!user || !_coverFile || _coverBusy) return;
 
   _coverBusy = true;
@@ -1778,9 +1669,9 @@ $('coverSaveBtn').addEventListener('click', async () => {
   const stages = [$('cvStage1'), $('cvStage2'), $('cvStage3'), $('cvStage4')];
 
   try {
+    const r2Key = `covers/${user.uid}/cover.jpg`;
     const url = await handleImageUpload(
-      _coverFile, 1200, 400, 0.82,
-      `covers/${user.uid}/cover.jpg`,
+      _coverFile, 1200, 400, 0.82, r2Key,
       {
         progressWrap:  $('coverProgressWrap'),
         progressBar:   $('coverProgressBar'),
@@ -1790,14 +1681,13 @@ $('coverSaveBtn').addEventListener('click', async () => {
       }
     );
 
-    // ── Stage 3: Save URL to Firestore ──────────────────────────────────────
-    console.log(`${DIAG} [12] Firestore update started | collection=users | uid=${user.uid}`);
+    // ── Stage 2: Save URL to Firestore ──────────────────────────────────────
+    console.log(`${DIAG} [12] Firestore update started | uid=${user.uid}`);
     try {
       await updateDoc(doc(db, 'users', user.uid), { coverPhoto: url });
       console.log(`${DIAG} [13] Firestore update completed — coverPhoto saved`);
     } catch(fsErr) {
-      // Storage succeeded — cover is uploaded — but Firestore failed.
-      console.error(`${DIAG} [Firestore] cover update FAILED:`, fsErr.code, fsErr.message, fsErr);
+      console.error(`${DIAG} [Firestore] cover update FAILED:`, fsErr.message, fsErr);
       _userData.coverPhoto = url;
       const thumb = $('settingsCoverThumb');
       thumb.src = url; thumb.style.display = '';
@@ -1813,24 +1703,17 @@ $('coverSaveBtn').addEventListener('click', async () => {
     }
     _userData.coverPhoto = url;
 
-    // Update thumbnail
     const thumb = $('settingsCoverThumb');
     thumb.src = url; thumb.style.display = '';
-    console.log(`${DIAG} [14] UI updated — cover thumbnail set`);
-
-    // Complete
     stages.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
     $('coverProgressBar').style.width = '100%';
     $('coverProgressLabel').textContent = '✓ Done!';
-    console.log(`${DIAG} ✅ COVER UPLOAD COMPLETE — full pipeline succeeded`);
+    console.log(`${DIAG} ✅ COVER UPLOAD COMPLETE`);
 
-    setTimeout(() => {
-      closeCoverModal();
-      toast('🖼️ Cover photo updated!', 3500);
-    }, 700);
+    setTimeout(() => { closeCoverModal(); toast('🖼️ Cover photo updated!', 3500); }, 700);
   } catch(e) {
-    console.error(`${DIAG} ══ COVER UPLOAD PIPELINE FAILED ══`, { code: e.code, message: e.message, name: e.name, stack: e.stack });
-    setMsg('coverMsg', 'error', storageErrorMsg(e.code, e));
+    console.error(`${DIAG} ══ COVER UPLOAD FAILED ══`, e.message, e);
+    setMsg('coverMsg', 'error', uploadErrorMsg(e));
     $('coverSaveBtn').textContent = 'Retry Upload';
     $('coverSaveBtn').disabled = false;
     $('coverProgressWrap').style.display = 'none';
