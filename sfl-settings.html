@@ -861,7 +861,7 @@ import {
 import { getFirestore, doc, getDoc, updateDoc, setDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import {
-  getStorage, ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
@@ -1298,113 +1298,90 @@ function blobToDataURL(blob) {
 }
 
 /**
- * Upload an image blob to Firebase Storage.
+ * Upload an image blob to Firebase Storage using uploadBytesResumable.
  *
- * Strategy: use uploadBytes (single-shot XHR PUT) for blobs ≤ 5 MB.
- * uploadBytesResumable initiates a multipart resumable-upload session which
- * requires an extra CORS preflight on the session URL — this is what causes
- * the upload to silently stall at 0 bytes transferred (shown as 20% in the UI)
- * on many mobile browsers and on networks that block the Google Upload API
- * preflight.  For already-compressed profile/cover images the blob will always
- * be well under 5 MB, so the simpler single-shot path is both faster and more
- * reliable.
+ * Always uses the resumable upload path so we get real byte-level progress
+ * events (bytesTransferred / totalBytes).  The resumable API is also the most
+ * reliable path on Android Chrome / WebView because Firebase SDK handles the
+ * CORS preflight for the session initiation internally.
  *
- * Progress simulation: because uploadBytes is all-or-nothing we cannot get
- * real byte-level progress.  We drive the progress bar from 20% → 88% with a
- * smooth animation while the upload is in-flight so the user sees activity.
+ * onProgress(ratio 0–1) is called on every state_changed event so the caller
+ * can map it to whatever UI band they need.
  *
  * Returns the download URL when the upload is fully complete.
  */
-async function uploadToStorage(blob, path, onProgress) {
+async function uploadToStorage(blob, path, onProgress, uid) {
   const DIAG = '[SFL-Upload]';
-  const SMALL_BLOB_LIMIT = 5 * 1024 * 1024; // 5 MB
 
-  console.log(`${DIAG} [7] Upload started | path="${path}" | size=${blob.size} bytes (${(blob.size/1024).toFixed(1)} KB) | type=${blob.type}`);
+  console.log(`${DIAG} [7] Upload started | path="${path}" | size=${blob.size} bytes (${(blob.size/1024).toFixed(1)} KB) | type=${blob.type} | uid=${uid || 'unknown'} | bucket=${storage.app.options.storageBucket}`);
+  console.log(`${DIAG} [7a] Firebase config | projectId=${storage.app.options.projectId} | storageBucket=${storage.app.options.storageBucket}`);
 
   const ref = storageRef(storage, path);
 
-  // Kick off a smooth progress animation (20 → 88%) so the bar isn't frozen
-  let animRatio = 0;
-  let animFrame = null;
-  function driveProgress() {
-    // Ease towards 0.95 asymptotically so it never reaches 1 before upload ends
-    animRatio += (0.95 - animRatio) * 0.04;
-    if (onProgress) onProgress(animRatio);
-    animFrame = requestAnimationFrame(driveProgress);
-  }
-  animFrame = requestAnimationFrame(driveProgress);
-
-  const cancelAnim = () => {
-    if (animFrame !== null) { cancelAnimationFrame(animFrame); animFrame = null; }
-  };
-
-  // Timeout: 30 s for small images, 90 s for anything larger
-  const TIMEOUT_MS = blob.size < SMALL_BLOB_LIMIT ? 30_000 : 90_000;
+  // Timeout: 60 s for images ≤ 2 MB, 120 s for larger (should never be needed
+  // for compressed profile photos, but acts as a hard safety net).
+  const TIMEOUT_MS = blob.size <= 2 * 1024 * 1024 ? 60_000 : 120_000;
   let timeoutId = null;
+  let _lastProgress = 0; // track last reported progress for timeout diagnostics
+
+  // Wrap uploadBytesResumable in a Promise that resolves with the download URL
+  // so we can race it cleanly against the timeout.
+  const uploadPromise = new Promise((resolve, reject) => {
+    const task = uploadBytesResumable(ref, blob, { contentType: blob.type || 'image/jpeg' });
+
+    task.on('state_changed',
+      // ── next: real byte progress ──────────────────────────────────────────
+      snap => {
+        const ratio = snap.totalBytes > 0 ? snap.bytesTransferred / snap.totalBytes : 0;
+        _lastProgress = ratio;
+        console.log(`${DIAG} [8] Upload progress | ${snap.bytesTransferred}/${snap.totalBytes} bytes | ${(ratio * 100).toFixed(1)}% | state=${snap.state}`);
+        if (onProgress) onProgress(ratio);
+      },
+      // ── error ─────────────────────────────────────────────────────────────
+      err => {
+        console.error(`${DIAG} [8-ERR] Upload error | code=${err.code} | message=${err.message} | path="${path}" | uid=${uid || 'unknown'} | last progress=${(_lastProgress * 100).toFixed(1)}%`, err);
+        reject(err);
+      },
+      // ── complete ──────────────────────────────────────────────────────────
+      async () => {
+        console.log(`${DIAG} [9] Upload completed — getting download URL | path="${path}"`);
+        try {
+          console.log(`${DIAG} [10] getDownloadURL started`);
+          const dlUrl = await getDownloadURL(task.snapshot.ref);
+          console.log(`${DIAG} [11] getDownloadURL completed:`, dlUrl);
+          resolve(dlUrl);
+        } catch (e) {
+          console.error(`${DIAG} [11-ERR] getDownloadURL FAILED:`, e.code, e.message, e);
+          reject(e);
+        }
+      }
+    );
+  });
+
+  // Race the upload against the hard timeout
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const msg = `Upload timeout — stage: Firebase Storage upload — path: ${path} — uid: ${uid || 'unknown'} — last progress: ${(_lastProgress * 100).toFixed(1)}%`;
+      console.error(`${DIAG} ⏱ ${msg} — timeout after ${TIMEOUT_MS / 1000}s`);
+      reject(Object.assign(new Error(msg), { code: 'storage/timeout', _isTimeout: true }));
+    }, TIMEOUT_MS);
+  });
 
   try {
-    const uploadPromise = blob.size < SMALL_BLOB_LIMIT
-      ? uploadBytes(ref, blob, { contentType: 'image/jpeg' })
-      : (() => {
-          // Large blob — use resumable but wrap it in a promise that rejects on error
-          return new Promise((res, rej) => {
-            const task = uploadBytesResumable(ref, blob, { contentType: 'image/jpeg' });
-            task.on('state_changed',
-              snap => {
-                console.log(`${DIAG} [8] Upload progress (resumable): ${snap.bytesTransferred}/${snap.totalBytes} bytes`);
-              },
-              err => {
-                console.error(`${DIAG} Upload error (resumable):`, err.code, err.message, err);
-                rej(err);
-              },
-              async () => {
-                try {
-                  const dlUrl = await getDownloadURL(task.snapshot.ref);
-                  res({ ref: task.snapshot.ref, _resolvedUrl: dlUrl });
-                } catch (e) { rej(e); }
-              }
-            );
-          });
-        })();
-
-    // Race the upload against the timeout
-    let snapshot;
-    const timeoutPromise = new Promise((_, rej) => {
-      timeoutId = setTimeout(() => {
-        console.error(`${DIAG} Upload timeout after ${TIMEOUT_MS / 1000}s`);
-        rej(Object.assign(new Error('Upload timed out'), { code: 'storage/timeout' }));
-      }, TIMEOUT_MS);
-    });
-
-    snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+    const url = await Promise.race([uploadPromise, timeoutPromise]);
     clearTimeout(timeoutId);
-    cancelAnim();
-    if (onProgress) onProgress(1); // hit 100% of the upload band
-
-    console.log(`${DIAG} [9] Upload completed | snapshot:`, snapshot);
-
-    // If the resumable path already resolved the URL, return it directly
-    if (snapshot && snapshot._resolvedUrl) {
-      console.log(`${DIAG} [10] getDownloadURL (from resumable) started`);
-      console.log(`${DIAG} [11] getDownloadURL completed:`, snapshot._resolvedUrl);
-      return snapshot._resolvedUrl;
-    }
-
-    // Single-shot path — need to call getDownloadURL now
-    console.log(`${DIAG} [10] getDownloadURL started`);
-    const url = await getDownloadURL(snapshot.ref);
-    console.log(`${DIAG} [11] getDownloadURL completed:`, url);
+    if (onProgress) onProgress(1);
     return url;
-
   } catch (err) {
     clearTimeout(timeoutId);
-    cancelAnim();
     console.error(`${DIAG} uploadToStorage FAILED:`, {
-      code: err.code,
+      code:    err.code,
       message: err.message,
-      name: err.name,
-      stack: err.stack,
-      full: err
+      name:    err.name,
+      path,
+      uid:     uid || 'unknown',
+      lastProgressPct: (_lastProgress * 100).toFixed(1),
+      stack:   err.stack
     });
     throw err;
   }
@@ -1478,17 +1455,18 @@ async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
   setProgress(20, 'Uploading image…');
 
   // ── Storage reference ────────────────────────────────────────────────────
-  console.log(`${DIAG} [6] Storage reference created | path="${storagePath}" | bucket=${storage.app.options.storageBucket}`);
+  console.log(`${DIAG} [6] Storage reference created | path="${storagePath}" | bucket=${storage.app.options.storageBucket} | uid=${user.uid}`);
 
   // ── Stage 1: Firebase Storage upload (progress 20 → 88%) ────────────────
+  // Progress is real bytes: ratio = bytesTransferred / totalBytes (0–1)
+  // mapped onto the 20–88% band so the user sees actual transfer activity.
   let imageUrl = null;
   try {
     imageUrl = await uploadToStorage(compressed, storagePath, ratio => {
-      // Map the upload animation ratio (0–1) onto the 20–88% band
+      // Real byte ratio (0–1) mapped to the 20–88% UI band
       const pct = 20 + Math.round(ratio * 68);
       setProgress(pct, `Uploading… ${pct}%`);
-      console.log(`${DIAG} [8] Upload progress: ${pct}% (ratio=${ratio.toFixed(3)})`);
-    });
+    }, user.uid);
   } catch(storageErr) {
     // Detailed error dump so the exact failure is visible in the console
     console.error(`${DIAG} ══ STORAGE UPLOAD FAILED ══`, {
@@ -1520,21 +1498,24 @@ async function handleImageUpload(file, maxW, maxH, quality, storagePath, ui) {
   return imageUrl;
 }
 
-function storageErrorMsg(code, customMsg) {
-  if (customMsg) return customMsg;
+function storageErrorMsg(code, err) {
+  // For timeout errors we have a detailed message already — surface it
+  if (err && err._isTimeout) return err.message;
   const map = {
     'compress/failed':              'Could not compress the image. Please try a JPG or PNG file.',
     'encode/failed':                'Could not process the image. Please try again.',
     'storage/url-failed':           'Upload finished, but we couldn\'t finish saving the image. Please try again.',
     'storage/unauthorized':         'Permission denied. Please sign in and try again.',
     'storage/canceled':             'Upload cancelled.',
-    'storage/timeout':              'Upload took too long. Check your connection and try again.',
+    'storage/timeout':              'Upload timed out — check your connection and try again.',
     'storage/quota-exceeded':       'Storage quota exceeded. Contact support.',
     'storage/unauthenticated':      'You must be signed in to upload images.',
     'storage/retry-limit-exceeded': 'Upload failed — check your connection and tap Retry.',
-    'storage/unknown':              'Upload failed. Check your connection and try again.',
+    'storage/bucket-not-found':     'Storage bucket not found. Firebase Storage has not been set up for this project. Go to the Firebase Console → Storage and click Get Started.',
+    'storage/no-default-bucket':    'Storage bucket not configured. Firebase Storage has not been set up for this project.',
+    'storage/unknown':              'Upload failed — check your connection and try again.',
   };
-  return map[code] || `Upload failed. Please try again. (${code || 'unknown'})`;
+  return map[code] || `Upload failed (${code || 'unknown'}) — check your connection and try again.`;
 }
 
 /* ════════════════════════════════════════
@@ -1715,8 +1696,7 @@ $('avatarSaveBtn').addEventListener('click', async () => {
     }, 700);
   } catch(e) {
     console.error(`${DIAG} ══ AVATAR UPLOAD PIPELINE FAILED ══`, { code: e.code, message: e.message, name: e.name, stack: e.stack });
-    const errorMsg = e.message || storageErrorMsg(e.code);
-    setMsg('avatarMsg', 'error', errorMsg);
+    setMsg('avatarMsg', 'error', storageErrorMsg(e.code, e));
     $('avatarSaveBtn').textContent = 'Retry Upload';
     $('avatarSaveBtn').disabled = false;
     $('avatarProgressWrap').style.display = 'none';
@@ -1850,7 +1830,7 @@ $('coverSaveBtn').addEventListener('click', async () => {
     }, 700);
   } catch(e) {
     console.error(`${DIAG} ══ COVER UPLOAD PIPELINE FAILED ══`, { code: e.code, message: e.message, name: e.name, stack: e.stack });
-    setMsg('coverMsg', 'error', storageErrorMsg(e.code));
+    setMsg('coverMsg', 'error', storageErrorMsg(e.code, e));
     $('coverSaveBtn').textContent = 'Retry Upload';
     $('coverSaveBtn').disabled = false;
     $('coverProgressWrap').style.display = 'none';
