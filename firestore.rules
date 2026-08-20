@@ -770,5 +770,39 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  Shadow Nexus Wave — Test Lab collections
+    //  ISOLATED from production data — never queried by real feeds
+    //
+    //  /testUsers/{accountId}   — test account profiles
+    //  /testPosts/{postId}      — test posts
+    //
+    //  All documents carry  testMode: true  to prevent accidental
+    //  cross-collection joins.
+    //  Only signed-in users may read/write; no public access.
+    // ══════════════════════════════════════════════════════════
+
+    match /testUsers/{accountId} {
+      // Any signed-in user can read test profiles (needed for follow modal lookups)
+      allow read:   if isSignedIn();
+      // Any signed-in user can create/update test accounts (init + follow writes)
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      // Only Founder can delete test account docs
+      allow delete: if isFounder();
+    }
+
+    match /testPosts/{postId} {
+      // Any signed-in user can read test posts (visible to all test accounts)
+      allow read:   if isSignedIn();
+      // Any signed-in user can create a test post
+      allow create: if isSignedIn();
+      // Only the post author (or Founder) can delete a test post
+      allow delete: if isSignedIn()
+        && (resource.data.authorId != null || isFounder());
+      // No updates allowed on test posts
+      allow update: if false;
+    }
+
   }
 }
