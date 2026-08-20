@@ -129,6 +129,168 @@
   color: #ff4466;
 }
 
+/* ── Message button ── */
+#btnMessage {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  color: var(--sfl-text);
+  font-size: 13px; font-weight: 700;
+  padding: 7px 16px;
+  border-radius: var(--sfl-r-sm);
+  cursor: pointer;
+  transition: background var(--sfl-t), border-color var(--sfl-t);
+  display: none;
+}
+#btnMessage:hover {
+  background: var(--sfl-bg-hover);
+  border-color: var(--sfl-blue);
+  color: var(--sfl-blue);
+}
+
+/* ── Block / More options button ── */
+#btnMore {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  color: var(--sfl-text-muted);
+  font-size: 16px; font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--sfl-r-sm);
+  cursor: pointer;
+  transition: background var(--sfl-t);
+  display: none;
+  position: relative;
+}
+#btnMore:hover { background: var(--sfl-bg-hover); }
+.profile-more-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 200;
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.profile-more-menu-item {
+  display: block; width: 100%;
+  padding: 11px 16px;
+  background: none; border: none;
+  color: var(--sfl-text); font-size: 13px; font-weight: 600;
+  text-align: left; cursor: pointer;
+  transition: background 0.12s;
+}
+.profile-more-menu-item:hover { background: var(--sfl-bg-hover); }
+.profile-more-menu-item.danger { color: #ff4466; }
+
+/* ── Wave DM panel ── */
+.wave-dm-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(0,0,0,0.72);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0;
+  animation: sflFadeIn 0.18s ease;
+}
+@media (min-width: 600px) {
+  .wave-dm-overlay { align-items: center; padding: 16px; }
+}
+.wave-dm-panel {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-xl) var(--sfl-r-xl) 0 0;
+  width: 100%; max-width: 480px;
+  height: 70vh; max-height: 600px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -8px 48px rgba(0,0,0,0.6);
+  animation: sflFadeUp 0.22s ease;
+  overflow: hidden;
+}
+@media (min-width: 600px) {
+  .wave-dm-panel { border-radius: var(--sfl-r-xl); }
+}
+.wave-dm-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--sfl-border);
+  flex-shrink: 0;
+}
+.wave-dm-head-name { font-size: 14px; font-weight: 800; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wave-dm-close {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--sfl-bg-hover); border: 1px solid var(--sfl-border);
+  cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sfl-text-muted); flex-shrink: 0;
+}
+.wave-dm-close:hover { background: var(--sfl-bg-card); color: var(--sfl-text); }
+.wave-dm-messages {
+  flex: 1; overflow-y: auto; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.wave-dm-msg {
+  max-width: 75%; padding: 9px 13px;
+  border-radius: 14px; font-size: 13px; line-height: 1.5;
+  word-break: break-word;
+}
+.wave-dm-msg.mine {
+  align-self: flex-end;
+  background: var(--sfl-blue);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.wave-dm-msg.theirs {
+  align-self: flex-start;
+  background: var(--sfl-bg-card);
+  color: var(--sfl-text);
+  border: 1px solid var(--sfl-border);
+  border-bottom-left-radius: 4px;
+}
+.wave-dm-msg-time { font-size: 10px; opacity: 0.6; margin-top: 3px; text-align: right; }
+.wave-dm-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--sfl-text-muted); font-size: 13px; }
+.wave-dm-footer {
+  display: flex; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--sfl-border);
+  flex-shrink: 0;
+}
+.wave-dm-input {
+  flex: 1; background: var(--sfl-bg-input, var(--sfl-bg-card));
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-full);
+  color: var(--sfl-text); font-size: 13px;
+  padding: 9px 14px; outline: none;
+  font-family: inherit;
+}
+.wave-dm-input:focus { border-color: var(--sfl-blue); }
+.wave-dm-send {
+  background: var(--sfl-blue); color: #fff;
+  border: none; border-radius: var(--sfl-r-full);
+  font-size: 13px; font-weight: 700;
+  padding: 9px 18px; cursor: pointer;
+  flex-shrink: 0;
+}
+.wave-dm-send:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Block confirmation modal ── */
+.wave-block-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+  animation: sflFadeIn 0.18s ease;
+}
+.wave-block-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+  animation: sflFadeUp 0.2s ease;
+}
+.wave-block-modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.wave-block-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; }
+.wave-block-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
+.wave-block-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
 /* Follower/Following modal */
 .follow-modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
@@ -312,6 +474,14 @@
           </a>
           <!-- Follow shown on other users' profiles -->
           <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnFollow" style="display:none;" aria-label="Follow this creator">Follow</button>
+          <!-- Message button — shown on other users' profiles -->
+          <button id="btnMessage" aria-label="Send a direct message">💬 Message</button>
+          <!-- More options (Block) — shown on other users' profiles -->
+          <button id="btnMore" aria-label="More options">⋯
+            <div class="profile-more-menu sfl-hidden" id="moreMenu">
+              <button class="profile-more-menu-item danger" id="menuBlockUser">🚫 Block User</button>
+            </div>
+          </button>
           <!-- Own profile buttons -->
           <a href="sfl-upload.html" class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnUpload" style="display:none;">📤 Upload</a>
           <a href="sfl-settings.html" class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnEditProfile" style="display:none;">✏️ Edit Profile</a>
@@ -401,6 +571,39 @@
   </div>
 </div>
 
+<!-- Wave DM Panel -->
+<div id="waveDmOverlay" class="wave-dm-overlay" style="display:none;" role="dialog" aria-modal="true" aria-label="Direct Message">
+  <div class="wave-dm-panel">
+    <div class="wave-dm-head">
+      <span style="font-size:18px;">💬</span>
+      <div class="wave-dm-head-name" id="waveDmHeadName">Message</div>
+      <button class="wave-dm-close" id="waveDmClose" aria-label="Close">✕</button>
+    </div>
+    <div class="wave-dm-messages" id="waveDmMessages">
+      <div class="wave-dm-empty" id="waveDmEmpty">No messages yet. Say hello! 👋</div>
+    </div>
+    <div class="wave-dm-footer">
+      <input class="wave-dm-input" id="waveDmInput" type="text" placeholder="Type a message…" maxlength="500" autocomplete="off">
+      <button class="wave-dm-send" id="waveDmSend">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- Wave Block Confirmation Modal -->
+<div id="waveBlockOverlay" class="wave-block-overlay" style="display:none;" role="dialog" aria-modal="true">
+  <div class="wave-block-modal">
+    <div class="wave-block-modal-icon" id="waveBlockIcon">🚫</div>
+    <div class="wave-block-modal-title" id="waveBlockTitle">Block this user?</div>
+    <div class="wave-block-modal-body" id="waveBlockBody">
+      They won't be able to message you, and you won't see each other's content. You can unblock them later in Settings.
+    </div>
+    <div class="wave-block-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="waveBlockCancel">Cancel</button>
+      <button class="sfl-btn" id="waveBlockConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">Block</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signOut }
@@ -409,6 +612,9 @@ import {
   getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
   onSnapshot, setDoc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+// Wave-specific DM collection: waveDMs/{convId} — isolated from Shadow Nexus Social
+// convId = [uid1, uid2].sort().join('_')
+// Wave-specific block collection: waveBlocks/{blockerId_blockedId}
 
 const FIREBASE_CONFIG = {
   apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
@@ -436,6 +642,8 @@ let _following = false, _activeTab = 'videos';
 let _pendingDeleteId = null, _pendingDeleteData = null;
 let _profileUnsub = null;   // real-time listener on the target user doc
 let _videosUnsub  = null;   // real-time listener for profile video grid
+let _dmUnsub      = null;   // real-time listener for Wave DM messages
+let _isBlocked    = false;  // true if current user has blocked the target
 
 /* ─────────────────────────────────────────────────────────────
    Utility
@@ -567,12 +775,14 @@ function renderProfile(data) {
   const isOwnProfile = _user && _user.uid === _targetUid;
 
   if (isOwnProfile) {
-    // Own profile — show Upload + Edit Profile, never Follow
+    // Own profile — show Upload + Edit Profile, never Follow/Message/More
     $('btnUpload').style.display = '';
     $('btnEditProfile').style.display = '';
     $('btnFollow').style.display = 'none';
+    $('btnMessage').style.display = 'none';
+    $('btnMore').style.display = 'none';
   } else {
-    // Another user's profile — show Follow
+    // Another user's profile — show Follow, Message, More(Block)
     $('btnUpload').style.display = 'none';
     $('btnEditProfile').style.display = 'none';
     $('btnFollow').style.display = '';
@@ -583,8 +793,252 @@ function renderProfile(data) {
       data.followers.includes(_user.uid)
     );
     updateFollowBtn();
+
+    // Show Message + More buttons only when user is signed in
+    if (_user) {
+      $('btnMessage').style.display = '';
+      $('btnMore').style.display = '';
+      // Check block state and update button labels
+      checkBlockState();
+    }
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Block state check
+───────────────────────────────────────────────────────────── */
+async function checkBlockState() {
+  if (!_user || !_targetUid || _user.uid === _targetUid) return;
+  try {
+    const blockId = `${_user.uid}_${_targetUid}`;
+    const snap = await getDoc(doc(db, 'waveBlocks', blockId));
+    _isBlocked = snap.exists();
+    updateBlockMenuItem();
+    // Hide Message button if blocked
+    $('btnMessage').style.display = _isBlocked ? 'none' : '';
+  } catch(e) {
+    // Non-critical — leave defaults
+  }
+}
+
+function updateBlockMenuItem() {
+  const item = $('menuBlockUser');
+  if (!item) return;
+  if (_isBlocked) {
+    item.textContent = '✓ Unblock User';
+    item.classList.remove('danger');
+  } else {
+    item.textContent = '🚫 Block User';
+    item.classList.add('danger');
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   More menu toggle
+───────────────────────────────────────────────────────────── */
+$('btnMore').addEventListener('click', e => {
+  e.stopPropagation();
+  $('moreMenu').classList.toggle('sfl-hidden');
+});
+// Close on outside click
+document.addEventListener('click', e => {
+  if (!$('btnMore').contains(e.target)) {
+    $('moreMenu').classList.add('sfl-hidden');
+  }
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Block / Unblock
+───────────────────────────────────────────────────────────── */
+$('menuBlockUser').addEventListener('click', e => {
+  e.stopPropagation();
+  $('moreMenu').classList.add('sfl-hidden');
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Sign in to block users.'); return; }
+  if (liveUser.uid === _targetUid) { toast("You can't block yourself."); return; }
+
+  if (_isBlocked) {
+    // Unblock — skip confirmation
+    doUnblock(liveUser);
+  } else {
+    // Show block confirmation modal
+    const name = _targetData?.displayName || _targetData?.username || 'this user';
+    $('waveBlockTitle').textContent = `Block ${name}?`;
+    $('waveBlockBody').textContent = `They won't be able to message you. You can unblock them later.`;
+    $('waveBlockIcon').textContent = '🚫';
+    $('waveBlockConfirm').textContent = 'Block';
+    $('waveBlockConfirm').style.background = '#c0392b';
+    $('waveBlockOverlay').style.display = 'flex';
+  }
+});
+
+$('waveBlockCancel').addEventListener('click', () => {
+  $('waveBlockOverlay').style.display = 'none';
+});
+$('waveBlockOverlay').addEventListener('click', e => {
+  if (e.target === $('waveBlockOverlay')) $('waveBlockOverlay').style.display = 'none';
+});
+
+$('waveBlockConfirm').addEventListener('click', async () => {
+  const liveUser = auth.currentUser;
+  if (!liveUser || !_targetUid) return;
+  if (liveUser.uid === _targetUid) return;
+
+  const btn = $('waveBlockConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Blocking…';
+
+  try {
+    const blockId = `${liveUser.uid}_${_targetUid}`;
+    await setDoc(doc(db, 'waveBlocks', blockId), {
+      blockerId:   liveUser.uid,
+      blockedId:   _targetUid,
+      createdAt:   serverTimestamp(),
+    });
+    _isBlocked = true;
+    updateBlockMenuItem();
+    // Hide Message button after blocking
+    $('btnMessage').style.display = 'none';
+    $('waveBlockOverlay').style.display = 'none';
+    toast('User blocked.');
+  } catch(e) {
+    console.error('block error:', e.code, e.message);
+    toast('Unable to block. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Block';
+  }
+});
+
+async function doUnblock(liveUser) {
+  if (!liveUser || !_targetUid) return;
+  try {
+    const blockId = `${liveUser.uid}_${_targetUid}`;
+    await deleteDoc(doc(db, 'waveBlocks', blockId));
+    _isBlocked = false;
+    updateBlockMenuItem();
+    $('btnMessage').style.display = '';
+    toast('User unblocked.');
+  } catch(e) {
+    console.error('unblock error:', e.code, e.message);
+    toast('Unable to unblock. Please try again.');
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Wave Direct Message
+───────────────────────────────────────────────────────────── */
+function waveConvId(uid1, uid2) {
+  return [uid1, uid2].sort().join('_');
+}
+
+$('btnMessage').addEventListener('click', () => {
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Sign in to send messages.'); return; }
+  if (!_targetUid) return;
+  if (_isBlocked) { toast('You have blocked this user.'); return; }
+
+  const name = _targetData?.displayName || _targetData?.username || 'User';
+  $('waveDmHeadName').textContent = name;
+  $('waveDmOverlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  loadDmMessages(liveUser.uid, _targetUid);
+  setTimeout(() => $('waveDmInput').focus(), 80);
+});
+
+$('waveDmClose').addEventListener('click', closeDmPanel);
+$('waveDmOverlay').addEventListener('click', e => {
+  if (e.target === $('waveDmOverlay')) closeDmPanel();
+});
+
+function closeDmPanel() {
+  $('waveDmOverlay').style.display = 'none';
+  document.body.style.overflow = '';
+  if (_dmUnsub) { _dmUnsub(); _dmUnsub = null; }
+}
+
+function loadDmMessages(myUid, theirUid) {
+  if (_dmUnsub) { _dmUnsub(); _dmUnsub = null; }
+
+  const convId  = waveConvId(myUid, theirUid);
+  const msgsRef = collection(db, 'waveDMs', convId, 'msgs');
+  const q       = query(msgsRef, orderBy('createdAt', 'asc'), limit(80));
+
+  const msgContainer = $('waveDmMessages');
+  const emptyEl      = $('waveDmEmpty');
+
+  _dmUnsub = onSnapshot(q, snap => {
+    msgContainer.querySelectorAll('.wave-dm-msg').forEach(el => el.remove());
+    if (snap.empty) {
+      emptyEl.style.display = 'flex';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    snap.docs.forEach(d => {
+      const data  = d.data();
+      const isMine = data.senderUid === myUid;
+      const div  = document.createElement('div');
+      div.className = `wave-dm-msg ${isMine ? 'mine' : 'theirs'}`;
+      const ts = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+      div.innerHTML = `${escapeHtml(data.text)}<div class="wave-dm-msg-time">${fmtMsgTime(ts)}</div>`;
+      msgContainer.appendChild(div);
+    });
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  }, err => {
+    console.error('waveDM listener:', err);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtMsgTime(d) {
+  const h = d.getHours(), m = d.getMinutes();
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+async function sendDmMessage() {
+  const liveUser = auth.currentUser;
+  if (!liveUser || !_targetUid) return;
+  if (_isBlocked) { toast('You have blocked this user.'); return; }
+  const input = $('waveDmInput');
+  const text  = input.value.trim();
+  if (!text) return;
+  const sendBtn = $('waveDmSend');
+  sendBtn.disabled = true;
+  input.disabled   = true;
+  try {
+    const convId  = waveConvId(liveUser.uid, _targetUid);
+    const convRef = doc(db, 'waveDMs', convId);
+    await setDoc(convRef, {
+      participants: [liveUser.uid, _targetUid],
+      lastMsgTs:    serverTimestamp(),
+      updatedAt:    serverTimestamp(),
+    }, { merge: true });
+    await addDoc(collection(db, 'waveDMs', convId, 'msgs'), {
+      senderUid:   liveUser.uid,
+      receiverUid: _targetUid,
+      text,
+      createdAt:   serverTimestamp(),
+      read:        false,
+      deleted:     false,
+    });
+    input.value = '';
+  } catch(e) {
+    console.error('sendDmMessage error:', e.code, e.message);
+    toast('Message failed. Please try again.');
+  } finally {
+    sendBtn.disabled = false;
+    input.disabled   = false;
+    input.focus();
+  }
+}
+
+$('waveDmSend').addEventListener('click', sendDmMessage);
+$('waveDmInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDmMessage(); }
+});
+
 
 /* ─────────────────────────────────────────────────────────────
    Follow button
@@ -793,17 +1247,19 @@ async function openFollowModal(type) {
     body.querySelectorAll('.modal-follow-btn').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
-        if (!_user) { toast('Sign in to follow.'); return; }
+        // Always use auth.currentUser for live token — never the cached _user snapshot
+        const liveModalUser = auth.currentUser;
+        if (!liveModalUser) { toast('Sign in to follow.'); return; }
         const targetUid    = btn.dataset.uid;
         const wasFollowing = btn.dataset.following === 'true';
         btn.disabled = true;
         try {
           const tRef = doc(db, 'users', targetUid);
-          const mRef = doc(db, 'users', _user.uid);
+          const mRef = doc(db, 'users', liveModalUser.uid);
           if (wasFollowing) {
             // UNFOLLOW
             await updateDoc(tRef, {
-              followers:     arrayRemove(_user.uid),
+              followers:     arrayRemove(liveModalUser.uid),
               followerCount: increment(-1)
             });
             // Own doc — setDoc+merge handles case where user doc was not fully created
@@ -822,7 +1278,7 @@ async function openFollowModal(type) {
           } else {
             // FOLLOW
             await updateDoc(tRef, {
-              followers:     arrayUnion(_user.uid),
+              followers:     arrayUnion(liveModalUser.uid),
               followerCount: increment(1)
             });
             // Own doc — setDoc+merge handles case where user doc was not fully created
@@ -840,12 +1296,12 @@ async function openFollowModal(type) {
               if (!_userData.following.includes(targetUid)) _userData.following.push(targetUid);
             }
             // Notify the followed user (non-critical)
-            if (_user && targetUid !== _user.uid) {
-              const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
-              const myAvatar = _userData?.avatar || _user.photoURL || '';
+            if (liveModalUser && targetUid !== liveModalUser.uid) {
+              const myName   = _userData?.displayName || _userData?.username || liveModalUser.displayName || 'Someone';
+              const myAvatar = _userData?.avatar || liveModalUser.photoURL || '';
               addDoc(collection(db, 'notifications', targetUid, 'items'), {
-                type: 'follow', fromUid: _user.uid, fromName: myName, fromAvatar: myAvatar,
-                fromProfile: `sfl-profile.html?uid=${_user.uid}`,
+                type: 'follow', fromUid: liveModalUser.uid, fromName: myName, fromAvatar: myAvatar,
+                fromProfile: `sfl-profile.html?uid=${liveModalUser.uid}`,
                 message: `${myName} started following you.`,
                 read: false, ts: serverTimestamp(), createdAt: Date.now(),
               }).catch(() => {});
@@ -1118,6 +1574,7 @@ onAuthStateChanged(auth, async user => {
 window.addEventListener('pagehide', () => {
   if (_profileUnsub) { _profileUnsub(); _profileUnsub = null; }
   if (_videosUnsub)  { _videosUnsub();  _videosUnsub  = null; }
+  if (_dmUnsub)      { _dmUnsub();      _dmUnsub      = null; }
 });
 
 /* ─────────────────────────────────────────────────────────────

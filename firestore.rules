@@ -836,5 +836,76 @@ service cloud.firestore {
       allow write: if isFounder();
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  Shadow Nexus Wave — User-created relationship collections
+    //  ISOLATED from Shadow Nexus Social chats/messages/blocks
+    // ══════════════════════════════════════════════════════════
+
+    // ── Wave Blocks ──────────────────────────────────────────────────────────────
+    //
+    //   /waveBlocks/{docId}
+    //     docId = "{blockerId}_{blockedId}"
+    //     blockerId, blockedId, createdAt
+    //
+    //   Only the blocker can create/delete their own block record.
+    //   Only the blocker can read their own block records (for UI state check).
+    //   Backend enforces ownership: blockerId must match auth.uid.
+
+    match /waveBlocks/{blockId} {
+      // Only the blocker reads their own block doc (for block-state check on profile load)
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.blockerId || isFounder());
+      // Only the blocker can create a block — and the blockerId must equal their uid
+      allow create: if isSignedIn()
+        && request.resource.data.blockerId == request.auth.uid
+        && request.resource.data.blockedId != request.auth.uid;
+      // Updates not allowed — block is either present or deleted
+      allow update: if false;
+      // Only the blocker (or Founder) can delete
+      allow delete: if isSignedIn()
+        && (resource.data.blockerId == request.auth.uid || isFounder());
+    }
+
+    // ── Wave Direct Messages ─────────────────────────────────────────────────────
+    //
+    //   /waveDMs/{convId}
+    //     convId = sorted([uid1, uid2]).join('_')
+    //     participants: [uid1, uid2], lastMsgTs, updatedAt
+    //
+    //   /waveDMs/{convId}/msgs/{msgId}
+    //     senderUid, receiverUid, text, createdAt, read, deleted
+    //
+    //   Only participants (or Founder) may access conversation and messages.
+    //   Any signed-in user may create a conversation document (setDoc+merge).
+    //   Only participants may update conversation metadata.
+
+    match /waveDMs/{convId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isFounder());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isModerator());
+      allow delete: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isFounder());
+
+      match /msgs/{msgId} {
+        // Only participants may read messages
+        allow read: if isSignedIn()
+          && (request.auth.uid in get(/databases/$(database)/documents/waveDMs/$(convId)).data.participants
+              || isFounder());
+        // Any signed-in user can create — senderUid must match auth.uid
+        allow create: if isSignedIn()
+          && request.resource.data.senderUid == request.auth.uid;
+        // Sender can soft-delete; recipient can mark as read
+        allow update: if isSignedIn()
+          && (request.auth.uid == resource.data.senderUid
+              || request.auth.uid == resource.data.receiverUid
+              || isModerator());
+        // Only sender or Founder can hard-delete
+        allow delete: if isSignedIn()
+          && (request.auth.uid == resource.data.senderUid || isFounder());
+      }
+    }
+
   }
 }
