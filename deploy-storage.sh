@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shadow Fire Live — deploy Firebase Storage rules + CORS
+# Shadow Nexus Wave — deploy Firebase Storage rules + CORS
 # Run this AFTER Firebase Storage has been initialized at:
 # https://console.firebase.google.com/project/horr-a08f4/storage
 #
@@ -16,7 +16,7 @@ set -e
 PROJECT_ID="horr-a08f4"
 BUCKET="horr-a08f4.firebasestorage.app"
 
-echo "=== Shadow Fire Live — Storage Deploy ==="
+echo "=== Shadow Nexus Wave — Storage Deploy ==="
 echo "Project : $PROJECT_ID"
 echo "Bucket  : $BUCKET"
 echo ""

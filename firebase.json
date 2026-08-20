@@ -9,6 +9,9 @@
   "database": {
     "rules": "database.rules.json"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "public": ".",
     "ignore": [
@@ -34,7 +37,7 @@
     "trailingSlash": false,
     "headers": [
       {
-        "source": "**/*.@(js|mjs|html)",
+        "source": "**/*.@(js|mjs|html|css|png|jpg|webp|svg|ico|json|woff2)",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
         ]

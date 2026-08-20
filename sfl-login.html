@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Sign In — Shadow Fire Live</title>
+<title>Sign In — Shadow Nexus Wave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="sfl-theme.css">
@@ -114,8 +114,8 @@
   <div class="login-card">
 
     <div class="login-logo">
-      <div style="font-size:36px;margin-bottom:10px;">🔥</div>
-      <div class="login-logo-title">Shadow Fire Live</div>
+      <div style="font-size:36px;margin-bottom:10px;">🌑⚡🌊</div>
+      <div class="login-logo-title">Shadow Nexus Wave</div>
       <div class="login-logo-sub">Video · Live · Connect</div>
     </div>
 
@@ -211,7 +211,7 @@
     </button>
 
     <div style="text-align:center;margin-top:20px;font-size:11px;color:var(--sfl-text-faint);">
-      By signing in you agree to the Shadow Fire Live terms of service.
+      By signing in you agree to the Shadow Nexus Wave terms of service.
     </div>
 
   </div>
@@ -226,8 +226,6 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
   apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
@@ -238,10 +236,12 @@ const FIREBASE_CONFIG = {
   messagingSenderId:'933810617818',
   appId:'1:933810617818:web:efb24f123337dd987c14e3'
 };
-const app     = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-const auth    = getAuth(app);
-const db      = getFirestore(app);
-const storage = getStorage(app);
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// R2 Worker endpoint — same as used by sfl-settings.html
+const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
 
 const $ = id => document.getElementById(id);
 const params   = new URLSearchParams(location.search);
@@ -319,17 +319,27 @@ $('avatarFileInput').addEventListener('change', e => {
   reader.readAsDataURL(file);
 });
 
-/* Upload avatar to Firebase Storage and return download URL */
+/* Upload avatar to Cloudflare R2 Worker — mirrors sfl-settings.html pattern */
 async function uploadAvatar(uid, file) {
-  try {
-    const ext  = file.name.split('.').pop() || 'jpg';
-    const path = `avatars/${uid}/profile.${ext}`;
-    const ref  = storageRef(storage, path);
-    await uploadBytes(ref, file);
-    return await getDownloadURL(ref);
-  } catch(e) {
-    return '';
-  }
+  return new Promise(resolve => {
+    const fd = new FormData();
+    fd.append('file', file, file.name || 'avatar.jpg');
+    fd.append('uid', uid);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', R2_WORKER_URL);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data.url || '');
+        } catch(_) { resolve(''); }
+      } else { resolve(''); }
+    };
+    xhr.onerror = () => resolve('');
+    xhr.ontimeout = () => resolve('');
+    xhr.timeout = 30000;
+    xhr.send(fd);
+  });
 }
 
 /* Validate username format */
@@ -393,7 +403,7 @@ $('formRegister').addEventListener('submit', async e => {
       photoURL: avatarUrl || null,
     });
 
-    // Create user document in Firestore (Shadow Fire Live profile structure)
+    // Create user document in Firestore (Shadow Nexus Wave profile structure)
     const userRef  = doc(db, 'users', uid);
     const existing = await getDoc(userRef);
     if(!existing.exists()) {

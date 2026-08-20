@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Upload Video — Shadow Fire Live</title>
+<title>Upload Video — Shadow Nexus Wave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="sfl-theme.css">
@@ -208,7 +208,7 @@
       <div style="font-size:40px;margin-bottom:14px;">🔐</div>
       <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Sign In Required</div>
       <p style="font-size:13px;color:var(--sfl-text-label);margin-bottom:20px;line-height:1.6;">
-        You need a Shadow Fire Live account to upload videos.
+        You need a Shadow Nexus Wave account to upload videos.
       </p>
       <div style="display:flex;gap:10px;justify-content:center;">
         <a href="sfl-login.html" class="sfl-btn sfl-btn-primary">Sign In</a>
@@ -1135,7 +1135,7 @@ async function startUpload() {
     console.groupEnd();
     setStage('prepare', 'error');
     $('failPanel').classList.remove('sfl-hidden');
-    let healthMsg = 'Shadow Fire Live cannot connect to the video upload service.';
+    let healthMsg = 'Shadow Nexus Wave cannot connect to the video upload service.';
     if (health.status === 0) {
       healthMsg = 'Cannot reach the upload service. Check your internet connection and tap Retry.';
     } else if (health.status === 401 || health.status === 403) {
@@ -1311,7 +1311,7 @@ async function startUpload() {
 
       // ── A6. Publish to Firestore ──
       setStage('save', 'active');
-      $('progressLabel').textContent = 'Publishing to Shadow Fire Live…';
+      $('progressLabel').textContent = 'Publishing to Shadow Nexus Wave…';
 
       const streamFinalMeta = {
         title, description: $('videoDesc').value.trim(),
@@ -1541,7 +1541,7 @@ async function startUpload() {
 
     // ── B6. Publish to Firestore ──
     setStage('save', 'active');
-    $('progressLabel').textContent = 'Publishing to Shadow Fire Live…';
+    $('progressLabel').textContent = 'Publishing to Shadow Nexus Wave…';
 
     const r2FinalMeta = {
       title, description: $('videoDesc').value.trim(),
@@ -1652,7 +1652,7 @@ async function startUpload() {
       $('retryBtn').textContent = '↺ Retry';
       let userMsg = rawMsgStr;
       if (/Failed to fetch|NetworkError|network error|Load failed/i.test(rawMsgStr)) {
-        userMsg = 'Shadow Fire Live cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
+        userMsg = 'Shadow Nexus Wave cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
       } else if (rawMsgStr.includes('503') || rawMsgStr.includes('not configured')) {
         userMsg = 'Upload service is temporarily unavailable. Please try again later.';
       } else if (rawMsgStr.includes('401') || rawMsgStr.includes('403')) {

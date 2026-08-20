@@ -1,63 +1,91 @@
 {
-  "name": "Shadow Nexus Social",
-  "short_name": "Shadow Nexus Social",
-  "version": "1.15.0",
-  "description": "Shadow Nexus Social is a social media platform for connecting with friends, posting updates, messaging, and sharing content.",
-  "start_url": "/",
-  "scope": "/",
+  "id": "/xx/sfl-home.html",
+  "name": "Shadow Nexus Wave",
+  "short_name": "SNW",
+  "description": "Shadow Nexus Wave — Video and live streaming platform. Watch, stream, and connect with creators.",
+  "start_url": "/xx/sfl-splash.html?utm_source=pwa",
+  "scope": "/xx/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "any",
   "lang": "en-US",
-  "theme_color": "#0066FF",
-  "background_color": "#000000",
-  "categories": ["social", "communication"],
+  "dir": "ltr",
+  "theme_color": "#060d18",
+  "background_color": "#060d18",
+  "categories": ["social", "entertainment", "video"],
   "icons": [
     {
-      "src": "favicon-16x16.png",
+      "src": "/xx/favicon-16x16.png",
       "sizes": "16x16",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "favicon-32x32.png",
+      "src": "/xx/favicon-32x32.png",
       "sizes": "32x32",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "apple-touch-icon.png",
+      "src": "/xx/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-192.png",
+      "src": "/xx/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "/xx/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/xx/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/xx/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "screenshots": [],
   "shortcuts": [
     {
       "name": "Home Feed",
-      "short_name": "Feed",
-      "description": "Open the Eclipse Feed",
-      "url": "/#feed",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "short_name": "Home",
+      "description": "Watch videos and live streams",
+      "url": "/xx/sfl-home.html?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/xx/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Messages",
-      "short_name": "DMs",
-      "description": "Open your Nexus DMs",
-      "url": "/#messages",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "name": "Upload Video",
+      "short_name": "Upload",
+      "description": "Upload a video to Shadow Nexus Wave",
+      "url": "/xx/sfl-upload.html?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/xx/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Go Live",
+      "short_name": "Live",
+      "description": "Start a live stream on Shadow Nexus Wave",
+      "url": "/xx/live.html?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/xx/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Profile",
+      "short_name": "Profile",
+      "description": "View your Shadow Nexus Wave profile",
+      "url": "/xx/sfl-profile.html?utm_source=pwa_shortcut",
+      "icons": [{ "src": "/xx/icon-192.png", "sizes": "192x192" }]
     }
   ],
   "prefer_related_applications": false

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shadow Fire Live</title>
+<title>Shadow Nexus Wave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -48,18 +48,19 @@ body::before {
   to   { opacity: 1; transform: scale(1)    translateY(0);   }
 }
 
-/* Logo flame */
+/* Logo mark */
 .splash-flame {
   font-size: 64px;
   display: block;
   margin: 0 auto 20px;
   filter: drop-shadow(0 0 24px rgba(0,174,239,0.7));
   animation: flamePulse 2s ease-in-out infinite;
+  letter-spacing: 2px;
 }
 
 @keyframes flamePulse {
   0%,100% { filter: drop-shadow(0 0 20px rgba(0,174,239,0.6)); transform: scale(1);    }
-  50%     { filter: drop-shadow(0 0 36px rgba(0,174,239,0.9)); transform: scale(1.05); }
+  50%     { filter: drop-shadow(0 0 36px rgba(0,174,239,0.9)); transform: scale(1.06); }
 }
 
 /* App name */
@@ -129,8 +130,8 @@ body::before {
 <div class="particle" style="width:2px;height:2px;background:rgba(0,174,239,0.5);left:55%;animation-duration:16s;animation-delay:-4s;"></div>
 
 <div class="splash">
-  <span class="splash-flame" aria-hidden="true">🔥</span>
-  <div class="splash-title">Shadow Fire Live</div>
+  <span class="splash-flame" aria-hidden="true">🌑⚡🌊</span>
+  <div class="splash-title">Shadow Nexus Wave</div>
   <div class="splash-sub">Video &middot; Live &middot; Connect</div>
   <div class="splash-bar-wrap" role="progressbar" aria-label="Loading">
     <div class="splash-bar"></div>

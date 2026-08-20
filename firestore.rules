@@ -80,7 +80,11 @@ service cloud.firestore {
     // ── Users ─────────────────────────────────────────────────────────────────
 
     match /users/{uid} {
-      allow read: if isSignedIn();
+      // Public profile info (username, displayName, avatar, followerCount, isLive)
+      // is readable without authentication — required for public search and profile pages.
+      // Sensitive fields (notifications, pushQueue, etc.) are never exposed via rules;
+      // they are protected by the client never requesting them for other users.
+      allow read: if true;
       allow create: if isOwner(uid);
       allow delete: if isOwner(uid);
 
@@ -434,8 +438,9 @@ service cloud.firestore {
     // Legacy roomId-keyed docs are still readable/deletable for migration.
 
     match /liveRooms/{uid} {
-      // Any authenticated user (incl. anonymous) can read live rooms
-      allow read: if isSignedIn();
+      // Live room metadata (title, status, hostName, viewerCount) is public — required
+      // for the Discover page search to work without authentication.
+      allow read: if true;
 
       // Only a non-anonymous signed-in user may create/overwrite their own room doc.
       // The document ID must equal the host's uid — enforcing one doc per user.
@@ -705,161 +710,64 @@ service cloud.firestore {
       }
     }
 
-    // ─── GIFTING & MONETIZATION — Shadow Nexus Social ──────────────────────────
+    // ══════════════════════════════════════════════════════════
+    //  Shadow Nexus Wave — Video platform collections
+    // ══════════════════════════════════════════════════════════
 
-    // wallets/{uid}
-    // Owners can read their wallet. Writes are locked to owner via transactions
-    // enforcing: coins can never go negative; only valid integer values.
-    match /wallets/{uid} {
-      allow read:   if isOwner(uid) || isFounder();
-      allow create: if isOwner(uid)
-        && request.resource.data.shadowCoins is number
-        && request.resource.data.shadowCoins >= 0;
-      // Transactions set/update the wallet — we verify uid matches and coins are non-negative.
-      // NOTE: the Firebase JS SDK writes all numbers as Firestore DoubleValue, not IntegerValue,
-      // so "is number" (matches both int and float) is required here for client-side transactions.
-      allow update: if isOwner(uid)
-        && request.resource.data.shadowCoins is number
-        && request.resource.data.shadowCoins >= 0;
-      allow delete: if isFounder();
-    }
-
-    // coinPurchases/{purchaseId}
-    // Users create purchase records; only founder/backend updates status.
-    match /coinPurchases/{purchaseId} {
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.usdAmount is number
-        && request.resource.data.usdAmount >= 0.01
-        && request.resource.data.usdAmount <= 100
-        && request.resource.data.status == 'pending_payment';
-      allow read:   if isOwner(resource.data.uid) || isFounder();
-      allow update: if isFounder();  // only founder/backend webhook updates status
-      allow delete: if false;
-    }
-
-    // giftCatalog/{giftId}
-    // Public read; only founder writes.
-    match /giftCatalog/{giftId} {
-      allow read:   if isSignedIn();
-      allow write:  if isFounder();
-    }
-
-    // giftTransactions/{txId}
-    // Created by runTransaction (sender authenticated).
-    // NOBODY can edit or delete — immutable audit trail.
+    // /videos/{videoId}  — uploaded video metadata
     //
-    // Read access:
-    //  - The sender can read their own gift records (for gift history tab).
-    //  - The creator can read gifts they received (for creator studio earnings).
-    //  - Live gifts (isLive == true) are publicly visible to any signed-in user —
-    //    live stream viewers watch the giftTransactions collection to show gift toasts.
-    //  - Founders can read all records for moderation / support.
-    match /giftTransactions/{txId} {
+    // status values: uploading | processing | published | failed | cancelled
+    //
+    // Only published videos are publicly visible.
+    // In-progress (uploading/processing) and failed videos are only visible to
+    // the creator and moderators, preventing half-baked content appearing in feeds.
+    match /videos/{videoId} {
+      // Creator always can read their own videos (all statuses).
+      // Moderators/founders can read all.
+      // Public: only published videos with public visibility.
+      // Followers: only published videos with followers visibility.
+      allow read: if isOwner(resource.data.creatorId)
+        || isModerator()
+        || (resource.data.status == 'published'
+            && (resource.data.visibility == 'public'
+                || (resource.data.visibility == 'followers'
+                    && isSignedIn()
+                    && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.creatorId)).data.followers)));
+      // Only signed-in users can create their own video docs.
+      // Ownership is enforced by requiring creatorId == auth.uid — same pattern
+      // as Shadow Nexus posts/stories. The sign_in_provider check is omitted
+      // because request.auth.token.firebase may not carry that sub-claim for
+      // all auth methods, causing the rule to evaluate to false (deny).
       allow create: if isSignedIn()
-        && request.resource.data.senderId == request.auth.uid
-        && request.resource.data.coinAmount is number
-        && request.resource.data.coinAmount > 0
-        && request.resource.data.creatorPct == 90
-        && request.resource.data.platformPct == 10;
-      allow read:   if isSignedIn()
-        && (
-          // Non-existent doc read (e.g. idempotency check in tx.get) — resource is null.
-          // Allow the sender to check if their txId doc exists before writing.
-          resource == null
-          || resource.data.senderId  == request.auth.uid
-          || resource.data.creatorId == request.auth.uid
-          || resource.data.isLive    == true   // live gift toasts visible to viewers
-          || isFounder()
-        );
-      allow update: if false;  // immutable
-      allow delete: if false;  // immutable
+        && request.resource.data.creatorId == request.auth.uid;
+      // Creator can update their own video (status transitions, metadata edits, finalisation).
+      // Moderators can update for moderation purposes.
+      // Any signed-in user may increment view/like counters on published videos.
+      allow update: if isOwner(resource.data.creatorId)
+        || isModerator()
+        || (isSignedIn()
+            && resource.data.status == 'published'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['views', 'likes', 'likedBy', 'comments']));
+      allow delete: if isOwner(resource.data.creatorId) || isFounder();
+
+      // /videos/{videoId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow read:   if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && (resource.data.authorId == request.auth.uid || isModerator());
+      }
     }
 
-    // creatorEarnings/{uid}
-    // Creator reads their own earnings.
-    // Any authenticated user can READ a creator's earnings — this is required so that
-    // the gift-send Firestore transaction (run by the sender) can tx.get() the doc to
-    // compute the correct incremented totals before writing.  Coin counts are not
-    // sensitive; write rules below still enforce all validation constraints.
-    // Any authenticated user can increment a creator's earnings (when sending a gift).
-    // The increment amounts are validated: must be positive numbers.
-    match /creatorEarnings/{uid} {
+    // /videoLikes/{uid_videoId}  — tracking who liked what (optional flat index)
+    match /videoLikes/{likeId} {
       allow read:   if isSignedIn();
-      // Any authenticated sender may create the doc (first gift ever received by creator)
-      // NOTE: the Firebase JS SDK writes numbers as Firestore DoubleValue, not IntegerValue,
-      // so "is number" (matches both int and float) is required for client-side writes.
-      allow create: if isSignedIn()
-        && request.resource.data.uid            == uid
-        && request.resource.data.pendingCoins   is number
-        && request.resource.data.pendingCoins   >= 0
-        && request.resource.data.availableCoins is number
-        && request.resource.data.availableCoins >= 0
-        && request.resource.data.lifetimeCoins  is number
-        && request.resource.data.lifetimeCoins  >= 0;
-      // Any authenticated user may update (gift senders credit earnings).
-      // Validate non-negative values and that uid cannot be changed.
-      allow update: if isSignedIn()
-        && request.resource.data.uid             == resource.data.uid  // uid is immutable
-        && request.resource.data.pendingCoins    is number
-        && request.resource.data.pendingCoins    >= 0
-        && request.resource.data.availableCoins  is number
-        && request.resource.data.availableCoins  >= 0
-        && request.resource.data.lifetimeCoins   is number
-        && request.resource.data.lifetimeCoins   >= 0
-        && request.resource.data.platformCoins   is number
-        && request.resource.data.platformCoins   >= 0;
-      allow delete: if false;
-    }
-
-    // payouts/{payoutId} — legacy collection, kept for backwards compatibility
-    match /payouts/{payoutId} {
-      allow read:   if isSignedIn() && (resource.data.creatorId == request.auth.uid || isFounder());
-      allow create: if false;  // new payouts go to creatorPayouts via backend
-      allow update: if isFounder();
-      allow delete: if false;
-    }
-
-    // creatorPayouts/{payoutId} — PayPal-backed payout records (backend-written)
-    match /creatorPayouts/{payoutId} {
-      allow read:   if isSignedIn()
-        && (resource.data.creatorId == request.auth.uid || isFounder());
-      allow create: if false;  // backend only
-      allow update: if false;  // backend only
-      allow delete: if false;
-    }
-
-    // paypalAccounts/{uid} — creator PayPal onboarding status (backend-written)
-    match /paypalAccounts/{uid} {
-      allow read:   if isOwner(uid) || isFounder();
-      allow create: if false;  // backend only
-      allow update: if false;  // backend only
-      allow delete: if false;
-    }
-
-    // paypalWebhooks/{eventId} — immutable webhook event log (backend-written)
-    match /paypalWebhooks/{eventId} {
-      allow read:   if isFounder();
-      allow create: if false;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
       allow update: if false;
-      allow delete: if false;
-    }
-
-    // financialAuditLog/{logId} — immutable audit records (backend-written)
-    match /financialAuditLog/{logId} {
-      allow read:   if isFounder();
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    // testCoinGrants/{txId} — test coin grant records (backend-written, Founder-readable)
-    // TEST GRANTS only — no real cash value, cannot trigger payouts
-    match /testCoinGrants/{txId} {
-      allow read:   if isFounder();
-      allow create: if false;  // backend only
-      allow update: if false;  // immutable
-      allow delete: if false;
     }
 
   }

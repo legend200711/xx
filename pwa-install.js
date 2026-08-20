@@ -1,5 +1,5 @@
 /**
- * Shadow Fire Live — PWA Install Manager  (pwa-install.js)
+ * Shadow Nexus Wave — PWA Install Manager  (pwa-install.js)
  *
  * Handles:
  *  - Capturing the `beforeinstallprompt` event
@@ -82,7 +82,7 @@
   function _showUpdateToast() {
     const toast = document.getElementById('sfl-toast') || document.getElementById('liveToast');
     if (!toast) return;
-    toast.textContent = '🔥 Shadow Fire Live updated. Refreshing…';
+    toast.textContent = '🌑⚡ Shadow Nexus Wave updated. Refreshing…';
     toast.classList.add('visible');
     setTimeout(() => toast.classList.remove('visible'), 3000);
   }
@@ -108,7 +108,7 @@
     });
     const toast = document.getElementById('sfl-toast') || document.getElementById('liveToast');
     if (toast) {
-      toast.textContent = '🎉 Shadow Fire Live installed!';
+      toast.textContent = '🎉 Shadow Nexus Wave installed!';
       toast.classList.add('visible');
       setTimeout(() => toast.classList.remove('visible'), 3500);
     }
@@ -163,8 +163,8 @@
 
     if (isIOS) {
       card.innerHTML = `
-        <div style="font-size:38px;margin-bottom:12px;">🔥</div>
-        <div style="font-size:18px;font-weight:800;margin-bottom:8px;letter-spacing:0.5px;">Install Shadow Fire Live</div>
+        <div style="font-size:38px;margin-bottom:12px;">🌑⚡🌊</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px;letter-spacing:0.5px;">Install Shadow Nexus Wave</div>
         <div style="font-size:14px;color:#7aaabf;line-height:1.65;margin-bottom:20px;">
           To install on your iPhone or iPad, tap the
           <strong style="color:#00aeef;">Share</strong> button
@@ -188,8 +188,8 @@
       `;
     } else {
       card.innerHTML = `
-        <div style="font-size:38px;margin-bottom:12px;">🔥</div>
-        <div style="font-size:18px;font-weight:800;margin-bottom:8px;letter-spacing:0.5px;">Install Shadow Fire Live</div>
+        <div style="font-size:38px;margin-bottom:12px;">🌑⚡🌊</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px;letter-spacing:0.5px;">Install Shadow Nexus Wave</div>
         <div style="font-size:14px;color:#7aaabf;line-height:1.65;margin-bottom:20px;">
           To install from your browser, look for
           <strong style="color:#00aeef;">Install App</strong> or
@@ -227,7 +227,7 @@
     const banner = document.createElement('div');
     banner.id = '_sflInstallBanner';
     banner.setAttribute('role', 'banner');
-    banner.setAttribute('aria-label', 'Install Shadow Fire Live app');
+    banner.setAttribute('aria-label', 'Install Shadow Nexus Wave app');
     banner.style.cssText = [
       'position:fixed', 'bottom:calc(58px + 12px)', 'left:50%',
       'transform:translateX(-50%)',
@@ -244,9 +244,9 @@
     ].join(';');
 
     banner.innerHTML = `
-      <span style="font-size:26px;flex-shrink:0;">🔥</span>
+      <span style="font-size:26px;flex-shrink:0;">🌑⚡🌊</span>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:700;color:#d8eeff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Shadow Fire Live is ready to install</div>
+        <div style="font-size:13px;font-weight:700;color:#d8eeff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Shadow Nexus Wave is ready to install</div>
         <div style="font-size:11px;color:#5a8aaa;margin-top:2px;">Quick access to videos and live streams</div>
       </div>
       <button id="_sflBannerInstall" style="

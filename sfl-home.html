@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Shadow Fire Live — Watch. Stream. Connect.</title>
+<title>Shadow Nexus Wave — Watch. Stream. Connect.</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
-<meta name="description" content="Shadow Fire Live — Watch live streams, upload videos, and connect with creators.">
+<meta name="description" content="Shadow Nexus Wave — Watch live streams, upload videos, and connect with creators.">
 
 <!-- Open Graph -->
-<meta property="og:title" content="Shadow Fire Live">
+<meta property="og:title" content="Shadow Nexus Wave">
 <meta property="og:description" content="Watch live streams and videos. Connect with creators.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://shadownexussocial.online/icon-512.png">
@@ -236,7 +236,7 @@
      ═══════════════════════════════════════════ -->
 <aside class="sfl-sidebar" id="sflSidebar" aria-label="Main navigation">
   <div class="sfl-logo">
-    <div class="sfl-logo-text">🔥 SHADOW FIRE LIVE</div>
+    <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
     <div class="sfl-logo-sub">Video · Live · Connect</div>
   </div>
   <nav class="sfl-sidebar-nav">
@@ -289,7 +289,7 @@
      MOBILE TOP BAR
      ═══════════════════════════════════════════ -->
 <header class="sfl-topbar" aria-label="Top navigation">
-  <div class="sfl-topbar-title">🔥 SHADOW FIRE LIVE</div>
+  <div class="sfl-topbar-title">🌑⚡ SHADOW NEXUS WAVE</div>
   <div class="sfl-topbar-actions">
     <a href="sfl-search.html" class="sfl-notif-bell" aria-label="Search" style="font-size:16px;">🔍</a>
     <a href="sfl-notifications.html" class="sfl-notif-bell" id="topbarNotifBtn" aria-label="Notifications">
@@ -308,9 +308,9 @@
 
       <!-- Hero banner (shown when not logged in) -->
       <div class="sfl-auth-wall sfl-hidden" id="authWall">
-        <h2>🔥 Welcome to Shadow Fire Live</h2>
+        <h2>🌑⚡ Welcome to Shadow Nexus Wave</h2>
         <p>Watch live streams, upload videos, and connect with creators.<br>
-           Sign in to your Shadow Fire Live account to get started.</p>
+           Sign in to your Shadow Nexus Wave account to get started.</p>
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
           <a href="sfl-login.html" class="sfl-btn sfl-btn-primary sfl-btn-lg">Sign In</a>
           <a href="sfl-login.html?mode=register" class="sfl-btn sfl-btn-outline sfl-btn-lg">Create Account</a>
@@ -566,7 +566,7 @@ function buildLiveCard(roomId, room) {
   const avatar = room.hostAvatar
     ? `<img src="${room.hostAvatar}" class="sfl-live-avatar" alt="" loading="lazy">`
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
-  const viewers = room.viewerCount != null ? fmtNum(room.viewerCount) : '0';
+  const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
   const a = document.createElement('a');
   a.href = `live.html?room=${encodeURIComponent(roomId)}`;
   a.className = 'sfl-live-card';
@@ -635,7 +635,7 @@ async function loadVideos(tab, category) {
         empty.classList.remove('sfl-hidden');
         $('videoGridEmptyIcon').textContent = '👥';
         $('videoGridEmptyTitle').textContent = 'Follow creators to see their videos and live streams here.';
-        $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Fire Live.';
+        $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Nexus Wave.';
         $('videoGridEmptyActions').innerHTML = '<a href="sfl-search.html" class="sfl-btn sfl-btn-primary">Discover Creators</a>';
         return;
       }
@@ -696,7 +696,7 @@ function loadLiveRooms() {
   const q = query(
     collection(db,'liveRooms'),
     where('status','==','live'),
-    orderBy('viewerCount','desc'),
+    orderBy('viewers','desc'),
     limit(20)
   );
 

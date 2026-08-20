@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Settings — Shadow Fire Live</title>
+<title>Settings — Shadow Nexus Wave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="sfl-theme.css">
@@ -321,7 +321,7 @@
 <aside class="sfl-sidebar" aria-label="Main navigation">
   <div class="sfl-logo">
     <a href="sfl-home.html" style="text-decoration:none;">
-      <div class="sfl-logo-text">🔥 SHADOW FIRE LIVE</div>
+      <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
       <div class="sfl-logo-sub">Video · Live · Connect</div>
     </a>
   </div>
@@ -617,7 +617,7 @@
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-row-info">
-              <div class="settings-row-label" id="installRowLabel">🔥 Install Shadow Fire Live</div>
+              <div class="settings-row-label" id="installRowLabel">🌑⚡ Install Shadow Nexus Wave</div>
               <div class="settings-row-sub" id="installRowSub">Add to your home screen for quick access</div>
             </div>
             <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnInstallApp">Install</button>
@@ -625,7 +625,7 @@
           <div class="settings-row" id="installInstalledRow" style="display:none;">
             <div class="settings-row-info">
               <div class="settings-row-label">✓ App Installed</div>
-              <div class="settings-row-sub">Shadow Fire Live is installed on this device</div>
+              <div class="settings-row-sub">Shadow Nexus Wave is installed on this device</div>
             </div>
           </div>
         </div>
@@ -637,8 +637,8 @@
         <div class="settings-card">
           <div class="settings-row">
             <div class="settings-row-info">
-              <div class="settings-row-label">Shadow Fire Live</div>
-              <div class="settings-row-sub" id="settingsVersion">Version 1.0.0 · Shadow Fire Live</div>
+              <div class="settings-row-label">Shadow Nexus Wave</div>
+              <div class="settings-row-sub" id="settingsVersion">Version 1.0.0 · Shadow Nexus Wave</div>
             </div>
           </div>
         </div>
@@ -1016,7 +1016,7 @@ if ('serviceWorker' in navigator) {
 
 /* ── Sign out ── */
 $('signOutBtn').addEventListener('click', async () => {
-  if (!confirm('Sign out of Shadow Fire Live?')) return;
+  if (!confirm('Sign out of Shadow Nexus Wave?')) return;
   try { await signOut(auth); window.location.href = 'sfl-login.html'; }
   catch { toast('Error signing out.'); }
 });

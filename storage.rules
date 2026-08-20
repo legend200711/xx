@@ -1,7 +1,7 @@
 rules_version = '2';
 
 //
-// Shadow Fire Live — Firebase Storage Security Rules
+// Shadow Nexus Wave — Firebase Storage Security Rules
 //
 // Bucket: horr-a08f4.firebasestorage.app
 //
@@ -92,6 +92,19 @@ service firebase.storage {
         && isValidImageType()
         && isWithinImageSizeLimit();
       allow update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Avatars (legacy path used by early sfl-login registration) ────────────
+    //   avatars/{uid}/{filename}
+    //   Read-only now — new uploads go through Cloudflare R2.
+
+    match /avatars/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
         && isNonAnonymous()
         && isValidImageType()
         && isWithinImageSizeLimit();

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shadow Fire Live — Deploy Firestore rules fix
+# Shadow Nexus Wave — Deploy Firestore rules fix
 # Run this once to apply the publishing permission fix.
 #
 # Usage:
@@ -8,7 +8,7 @@
 
 set -e
 
-echo "=== Shadow Fire Live — Deploying Firestore rules + indexes ==="
+echo "=== Shadow Nexus Wave — Deploying Firestore rules + indexes ==="
 echo ""
 
 # Check firebase CLI

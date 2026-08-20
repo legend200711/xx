@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Watch — Shadow Fire Live</title>
+<title>Watch — Shadow Nexus Wave</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#060d18">
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Shadow Fire Live">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="stylesheet" href="sfl-theme.css">
@@ -272,7 +272,7 @@
 <!-- Mobile top bar -->
 <header class="sfl-topbar" aria-label="Top navigation">
   <a href="sfl-home.html" style="font-size:18px;text-decoration:none;color:var(--sfl-text);">←</a>
-  <div class="sfl-topbar-title">🔥 SHADOW FIRE LIVE</div>
+  <div class="sfl-topbar-title">🌑⚡ SHADOW NEXUS WAVE</div>
   <div></div>
 </header>
 
@@ -280,7 +280,7 @@
 <aside class="sfl-sidebar" aria-label="Main navigation">
   <div class="sfl-logo">
     <a href="sfl-home.html" style="text-decoration:none;">
-      <div class="sfl-logo-text">🔥 SHADOW FIRE LIVE</div>
+      <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
       <div class="sfl-logo-sub">Video · Live · Connect</div>
     </a>
   </div>
@@ -620,7 +620,7 @@ function renderVideo(data) {
   $('playerGrid').classList.remove('sfl-hidden');
 
   // Title & meta
-  document.title = `${data.title || 'Video'} — Shadow Fire Live`;
+  document.title = `${data.title || 'Video'} — Shadow Nexus Wave`;
   $('videoTitle').textContent = data.title || 'Untitled';
   $('videoViews').textContent = `${fmtNum(data.views||0)} views`;
   $('videoDate').textContent  = data.createdAt ? timeAgo(data.createdAt) : '';
