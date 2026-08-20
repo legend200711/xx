@@ -407,7 +407,7 @@ import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
-  setDoc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
+  onSnapshot, setDoc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -434,6 +434,8 @@ let _targetUid = params.get('uid');
 let _user = null, _userData = null, _targetData = null;
 let _following = false, _activeTab = 'videos';
 let _pendingDeleteId = null, _pendingDeleteData = null;
+let _profileUnsub = null;   // real-time listener on the target user doc
+let _videosUnsub  = null;   // real-time listener for profile video grid
 
 /* ─────────────────────────────────────────────────────────────
    Utility
@@ -460,19 +462,55 @@ function fmtTime(s) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Load profile
+   Load profile — subscribes to real-time user doc updates
 ───────────────────────────────────────────────────────────── */
-async function loadProfile() {
+function loadProfile() {
   if (!_targetUid) { showNotFound(); return; }
-  try {
-    const snap = await getDoc(doc(db, 'users', _targetUid));
+
+  // Cancel previous listener if any
+  if (_profileUnsub) { _profileUnsub(); _profileUnsub = null; }
+
+  let firstCall = true;
+  _profileUnsub = onSnapshot(doc(db, 'users', _targetUid), snap => {
     if (!snap.exists()) { showNotFound(); return; }
     _targetData = snap.data();
-    renderProfile(_targetData);
-    await loadVideos('videos');
-  } catch(e) {
-    console.error('loadProfile:', e);
+
+    if (firstCall) {
+      firstCall = false;
+      renderProfile(_targetData);
+      loadVideos('videos');
+    } else {
+      // Subsequent real-time updates — refresh counts + button only
+      refreshProfileStats(_targetData);
+    }
+  }, err => {
+    console.error('loadProfile onSnapshot:', err);
     showNotFound();
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Refresh only the stats + follow button after a real-time update
+───────────────────────────────────────────────────────────── */
+function refreshProfileStats(data) {
+  const followers = Array.isArray(data.followers)
+    ? data.followers.length
+    : (typeof data.followerCount === 'number' ? data.followerCount : 0);
+  const following = Array.isArray(data.following)
+    ? data.following.length
+    : (typeof data.followingCount === 'number' ? data.followingCount : 0);
+
+  $('statFollowersNum').textContent = fmtNum(Math.max(0, followers));
+  $('statFollowingNum').textContent = fmtNum(Math.max(0, following));
+
+  // Update follow state if we are viewing another user's profile
+  const isOwnProfile = _user && _user.uid === _targetUid;
+  if (!isOwnProfile && _user) {
+    const nowFollowing = Array.isArray(data.followers) && data.followers.includes(_user.uid);
+    if (nowFollowing !== _following) {
+      _following = nowFollowing;
+      updateFollowBtn();
+    }
   }
 }
 
@@ -567,9 +605,11 @@ function updateFollowBtn() {
 }
 
 $('btnFollow').addEventListener('click', async () => {
-  if (!_user) { toast('Sign in to follow creators.'); return; }
+  // Use auth.currentUser for a live auth check — not the cached _user snapshot
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Sign in to follow creators.'); return; }
   // Prevent self-follow (belt-and-suspenders)
-  if (_user.uid === _targetUid) return;
+  if (liveUser.uid === _targetUid) return;
 
   const btn = $('btnFollow');
   // Guard: ignore rapid double-taps while a follow op is in progress
@@ -581,13 +621,13 @@ $('btnFollow').addEventListener('click', async () => {
 
   try {
     const targetRef = doc(db, 'users', _targetUid);
-    const myRef     = doc(db, 'users', _user.uid);
+    const myRef     = doc(db, 'users', liveUser.uid);
 
     if (wasFollowing) {
       /* ── UNFOLLOW ── */
       // Target doc (profile page loaded → always exists) — use updateDoc
       await updateDoc(targetRef, {
-        followers:     arrayRemove(_user.uid),
+        followers:     arrayRemove(liveUser.uid),
         followerCount: increment(-1)
       });
       // Own doc — use setDoc+merge in case the user doc was never fully created
@@ -603,7 +643,7 @@ $('btnFollow').addEventListener('click', async () => {
     } else {
       /* ── FOLLOW ── */
       await updateDoc(targetRef, {
-        followers:     arrayUnion(_user.uid),
+        followers:     arrayUnion(liveUser.uid),
         followerCount: increment(1)
       });
       // Own doc — use setDoc+merge in case the user doc was never fully created
@@ -639,10 +679,7 @@ $('btnFollow').addEventListener('click', async () => {
     // Revert state — button must reflect actual DB state, not optimistic guess
     _following = wasFollowing;
     updateFollowBtn();
-    const reason = e.code === 'permission-denied'
-      ? 'Permission denied. Please sign out and sign back in.'
-      : 'Unable to follow this account. Please try again.';
-    toast(reason);
+    toast('Unable to follow this account. Please try again.');
   } finally {
     btn.disabled = false;
   }
@@ -902,79 +939,134 @@ function buildCard(id, data, showDelete = false) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Load videos for tab
+   Load videos for tab — real-time listener
 ───────────────────────────────────────────────────────────── */
-async function loadVideos(tab) {
+function loadVideos(tab) {
   _activeTab = tab;
   const grid   = $('profileVideoGrid');
   const loader = $('profileGridLoader');
   const empty  = $('profileGridEmpty');
+
+  // Cancel previous listener
+  if (_videosUnsub) { _videosUnsub(); _videosUnsub = null; }
+
   grid.innerHTML = '';
   empty.classList.add('sfl-hidden');
   loader.classList.remove('sfl-hidden');
   grid.appendChild(loader);
 
-  try {
-    let docs = [];
+  // Non-live tabs that don't use a live query
+  if (tab === 'live') {
+    loader.classList.add('sfl-hidden');
+    empty.classList.remove('sfl-hidden');
+    $('profileEmptyTitle').textContent = 'No past streams yet';
+    $('profileEmptySub').textContent   = 'Live stream history coming soon.';
+    return;
+  }
 
-    if (tab === 'videos') {
-      const isOwnProfile = _user && _user.uid === _targetUid;
-      const constraints  = [
-        where('creatorId', '==', _targetUid),
-        ...(!isOwnProfile ? [where('status', '==', 'published')] : []),
-        ...(!isOwnProfile ? [where('visibility', '==', 'public')] : []),
-        orderBy('createdAt', 'desc'),
-        limit(40),
-      ];
-      const snap = await getDocs(query(collection(db, 'videos'), ...constraints));
-      docs = snap.docs;
-      // Tally total views
-      let totalViews = 0;
-      docs.forEach(d => { totalViews += (d.data().views || 0); });
-      $('statViews').textContent   = fmtNum(totalViews);
-      $('statVideosNum').textContent = fmtNum(docs.length);
-
-    } else if (tab === 'liked') {
-      if (!_user || _user.uid !== _targetUid) {
-        loader.classList.add('sfl-hidden');
-        empty.classList.remove('sfl-hidden');
-        $('profileEmptyTitle').textContent = 'Liked videos are private.';
-        $('profileEmptySub').textContent   = '';
-        return;
-      }
-      const snap = await getDocs(query(
-        collection(db, 'videos'),
-        where('likedBy', 'array-contains', _user.uid),
-        orderBy('createdAt', 'desc'),
-        limit(40)
-      ));
-      docs = snap.docs;
-
-    } else if (tab === 'live') {
+  if (tab === 'liked') {
+    if (!_user || _user.uid !== _targetUid) {
       loader.classList.add('sfl-hidden');
       empty.classList.remove('sfl-hidden');
-      $('profileEmptyTitle').textContent = 'No past streams yet';
-      $('profileEmptySub').textContent   = 'Live stream history coming soon.';
+      $('profileEmptyTitle').textContent = 'Liked videos are private.';
+      $('profileEmptySub').textContent   = '';
       return;
     }
-
-    loader.classList.add('sfl-hidden');
-    grid.innerHTML = '';
-    if (!docs.length) {
+    const likedQ = query(
+      collection(db, 'videos'),
+      where('likedBy', 'array-contains', _user.uid),
+      orderBy('createdAt', 'desc'),
+      limit(40)
+    );
+    _videosUnsub = onSnapshot(likedQ, snap => {
+      _applyProfileVideoSnap(snap.docs, tab);
+    }, err => {
+      console.error('loadVideos liked onSnapshot:', err);
+      loader.classList.add('sfl-hidden');
       empty.classList.remove('sfl-hidden');
-      $('profileEmptyTitle').textContent = tab === 'videos' ? 'No videos yet' : 'Nothing here yet';
-      $('profileEmptySub').textContent   = (_user && _user.uid === _targetUid) ? 'Upload your first video!' : '';
-      return;
-    }
-    const isOwnVideosTab = tab === 'videos' && _user && _user.uid === _targetUid;
-    docs.forEach(d => grid.appendChild(buildCard(d.id, d.data(), isOwnVideosTab)));
-  } catch(e) {
-    loader.classList.add('sfl-hidden');
-    console.error('loadVideos:', e);
-    empty.classList.remove('sfl-hidden');
-    $('profileEmptyTitle').textContent = 'Could not load videos.';
-    $('profileEmptySub').textContent   = '';
+      $('profileEmptyTitle').textContent = 'Could not load videos.';
+      $('profileEmptySub').textContent   = '';
+    });
+    return;
   }
+
+  // tab === 'videos'
+  const isOwnProfile = _user && _user.uid === _targetUid;
+  const constraints  = [
+    where('creatorId', '==', _targetUid),
+    ...(!isOwnProfile ? [where('status', '==', 'published')] : []),
+    ...(!isOwnProfile ? [where('visibility', '==', 'public')] : []),
+    orderBy('createdAt', 'desc'),
+    limit(40),
+  ];
+
+  _videosUnsub = onSnapshot(
+    query(collection(db, 'videos'), ...constraints),
+    snap => {
+      // Update view/video count stats on each snapshot
+      let totalViews = 0;
+      snap.docs.forEach(d => { totalViews += (d.data().views || 0); });
+      $('statViews').textContent    = fmtNum(totalViews);
+      $('statVideosNum').textContent = fmtNum(snap.docs.length);
+      _applyProfileVideoSnap(snap.docs, tab);
+    },
+    err => {
+      console.error('loadVideos videos onSnapshot:', err);
+      loader.classList.add('sfl-hidden');
+      empty.classList.remove('sfl-hidden');
+      $('profileEmptyTitle').textContent = 'Could not load videos.';
+      $('profileEmptySub').textContent   = '';
+    }
+  );
+}
+
+function _applyProfileVideoSnap(docs, tab) {
+  const grid   = $('profileVideoGrid');
+  const loader = $('profileGridLoader');
+  const empty  = $('profileGridEmpty');
+  const isOwnVideosTab = tab === 'videos' && _user && _user.uid === _targetUid;
+
+  loader.classList.add('sfl-hidden');
+
+  if (!docs.length) {
+    grid.querySelectorAll('[data-video-id]').forEach(el => el.remove());
+    empty.classList.remove('sfl-hidden');
+    $('profileEmptyTitle').textContent = tab === 'videos' ? 'No videos yet' : 'Nothing here yet';
+    $('profileEmptySub').textContent   = (isOwnVideosTab) ? 'Upload your first video!' : '';
+    return;
+  }
+  empty.classList.add('sfl-hidden');
+
+  // Determine which video IDs are currently rendered
+  const rendered = new Set();
+  grid.querySelectorAll('[data-video-id]').forEach(el => rendered.add(el.dataset.videoId));
+
+  const incoming = new Set(docs.map(d => d.id));
+
+  // Remove stale cards
+  grid.querySelectorAll('[data-video-id]').forEach(el => {
+    if (!incoming.has(el.dataset.videoId)) el.remove();
+  });
+
+  // Add new cards (deduplication guard)
+  docs.forEach(d => {
+    if (!rendered.has(d.id)) {
+      const card = buildCard(d.id, d.data(), isOwnVideosTab);
+      card.dataset.videoId = d.id;
+      grid.appendChild(card);
+    }
+  });
+
+  // Re-order to match query order (only card nodes, skip loader)
+  const cardEls = Array.from(grid.querySelectorAll('[data-video-id]'));
+  docs.forEach((d, i) => {
+    const el = cardEls.find(c => c.dataset.videoId === d.id);
+    if (el && cardEls[i] !== el) {
+      grid.insertBefore(el, cardEls[i] || null);
+      cardEls.splice(cardEls.indexOf(el), 1);
+      cardEls.splice(i, 0, el);
+    }
+  });
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1020,6 +1112,12 @@ onAuthStateChanged(auth, async user => {
     _targetUid = user.uid;
   }
   loadProfile();
+});
+
+// Clean up real-time listeners on page leave
+window.addEventListener('pagehide', () => {
+  if (_profileUnsub) { _profileUnsub(); _profileUnsub = null; }
+  if (_videosUnsub)  { _videosUnsub();  _videosUnsub  = null; }
 });
 
 /* ─────────────────────────────────────────────────────────────

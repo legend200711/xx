@@ -457,17 +457,23 @@ function buildPersonCard(uid, data) {
 
 /* ── Follow / Unfollow from search results ── */
 async function handleFollowToggle(btn) {
-  if(!_user) { toast('Sign in to follow creators.'); return; }
+  // Use auth.currentUser for a live auth check — not the cached _user snapshot
+  const liveUser = auth.currentUser;
+  if(!liveUser) { toast('Sign in to follow creators.'); return; }
   const uid = btn.dataset.uid;
-  if(!uid || uid === _user.uid) return;
+  if(!uid || uid === liveUser.uid) return;
   btn.disabled = true;
   const wasFollowing = btn.classList.contains('is-following');
+  // Capture visual state so we can revert on failure
+  const prevText      = btn.textContent;
+  const prevClassName = btn.className;
+  const prevAriaLabel = btn.getAttribute('aria-label');
   try {
     const targetRef = doc(db, 'users', uid);
-    const myRef     = doc(db, 'users', _user.uid);
+    const myRef     = doc(db, 'users', liveUser.uid);
     if(wasFollowing) {
       await updateDoc(targetRef, {
-        followers:     arrayRemove(_user.uid),
+        followers:     arrayRemove(liveUser.uid),
         followerCount: increment(-1)
       });
       await updateDoc(myRef, {
@@ -480,7 +486,7 @@ async function handleFollowToggle(btn) {
       btn.setAttribute('aria-label', 'Follow');
     } else {
       await updateDoc(targetRef, {
-        followers:     arrayUnion(_user.uid),
+        followers:     arrayUnion(liveUser.uid),
         followerCount: increment(1)
       });
       await updateDoc(myRef, {
@@ -494,10 +500,11 @@ async function handleFollowToggle(btn) {
     }
   } catch(e) {
     console.error('Follow toggle error:', e.code, e.message);
-    const reason = e.code === 'permission-denied'
-      ? 'Permission denied. Please sign out and sign back in.'
-      : 'Unable to follow this account. Please try again.';
-    toast(reason);
+    // Revert button to its pre-click visual state
+    btn.textContent = prevText;
+    btn.className   = prevClassName;
+    btn.setAttribute('aria-label', prevAriaLabel);
+    toast('Unable to follow this account. Please try again.');
   } finally {
     btn.disabled = false;
   }

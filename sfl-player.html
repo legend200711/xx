@@ -731,17 +731,19 @@ function updateFollowBtn() {
 }
 
 document.getElementById('btnFollow').addEventListener('click', async () => {
-  if (!_user) { toast('Sign in to follow creators.'); return; }
+  // Use auth.currentUser for a live auth check — not the cached _user snapshot
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Sign in to follow creators.'); return; }
   const creatorId = _creatorUid || _videoData?.creatorId;
   if (!creatorId) return;
   // Prevent self-follow
-  if (creatorId === _user.uid) return;
+  if (creatorId === liveUser.uid) return;
 
   const btn = document.getElementById('btnFollow');
   btn.disabled = true;
 
   const creatorRef = doc(db, 'users', creatorId);
-  const myRef      = doc(db, 'users', _user.uid);
+  const myRef      = doc(db, 'users', liveUser.uid);
 
   // Capture current state before any writes so we can revert on failure
   const wasFollowing = _following;
@@ -750,7 +752,7 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
     if (wasFollowing) {
       // UNFOLLOW: remove from target's followers array + decrement count
       await updateDoc(creatorRef, {
-        followers:     arrayRemove(_user.uid),
+        followers:     arrayRemove(liveUser.uid),
         followerCount: increment(-1)
       });
       // Remove target from current user's following array + decrement count
@@ -762,7 +764,7 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
     } else {
       // FOLLOW: add to target's followers array + increment count
       await updateDoc(creatorRef, {
-        followers:     arrayUnion(_user.uid),
+        followers:     arrayUnion(liveUser.uid),
         followerCount: increment(1)
       });
       // Add target to current user's following array + increment count
@@ -773,14 +775,14 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
       _following = true;
 
       // Send follow notification (non-critical — never block the follow on this)
-      const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
-      const myAvatar = _userData?.avatar || _user.photoURL || '';
+      const myName   = _userData?.displayName || _userData?.username || liveUser.displayName || 'Someone';
+      const myAvatar = _userData?.avatar || liveUser.photoURL || '';
       addDoc(collection(db, 'notifications', creatorId, 'items'), {
         type:        'follow',
-        fromUid:     _user.uid,
+        fromUid:     liveUser.uid,
         fromName:    myName,
         fromAvatar:  myAvatar,
-        fromProfile: `sfl-profile.html?uid=${_user.uid}`,
+        fromProfile: `sfl-profile.html?uid=${liveUser.uid}`,
         message:     `${myName} started following you.`,
         read:        false,
         ts:          serverTimestamp(),
@@ -793,10 +795,7 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
     // Revert state — button must reflect actual DB state
     _following = wasFollowing;
     updateFollowBtn();
-    const reason = e.code === 'permission-denied'
-      ? 'Permission denied. Please sign out and sign back in.'
-      : 'Unable to follow this account. Please try again.';
-    toast(reason);
+    toast('Unable to follow this account. Please try again.');
   } finally {
     btn.disabled = false;
   }

@@ -615,81 +615,121 @@ function renderVideos(docs) {
 }
 
 /* ══════════════════════════════
-   Load videos by tab
+   Load videos by tab — real-time listener
    ══════════════════════════════ */
-async function loadVideos(tab, category) {
+function loadVideos(tab, category) {
   const grid   = $('videoGrid');
   const loader = $('videoGridLoader');
   const empty  = $('videoGridEmpty');
+
+  // Cancel any existing video listener before starting a new one
+  if (_videoUnsub) { _videoUnsub(); _videoUnsub = null; }
+
   grid.innerHTML = '';
   empty.classList.add('sfl-hidden');
   loader.classList.remove('sfl-hidden');
   grid.appendChild(loader);
 
-  try {
-    let q;
-    const videosRef = collection(db, 'videos');
+  // Following tab with no followees — show empty state without Firestore query
+  if (tab === 'following' && _user) {
+    const following = _userData?.following || [];
+    if (!following.length) {
+      loader.classList.add('sfl-hidden');
+      grid.innerHTML = '';
+      empty.classList.remove('sfl-hidden');
+      $('videoGridEmptyIcon').textContent = '👥';
+      $('videoGridEmptyTitle').textContent = 'Follow creators to see their videos and live streams here.';
+      $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Nexus Wave.';
+      $('videoGridEmptyActions').innerHTML = '<a href="sfl-search.html" class="sfl-btn sfl-btn-primary">Discover Creators</a>';
+      return;
+    }
+  }
 
+  const READY_STATUSES = new Set(['published', 'ready', undefined, null, '']);
+  const videosRef = collection(db, 'videos');
+  let q;
+
+  try {
     if (tab === 'following' && _user) {
-      // Get followed users' videos
-      const following = _userData?.following || [];
-      if (!following.length) {
-        // Show helpful empty state
-        const grid   = $('videoGrid');
-        const loader = $('videoGridLoader');
-        const empty  = $('videoGridEmpty');
-        loader.classList.add('sfl-hidden');
-        grid.innerHTML = '';
-        empty.classList.remove('sfl-hidden');
-        $('videoGridEmptyIcon').textContent = '👥';
-        $('videoGridEmptyTitle').textContent = 'Follow creators to see their videos and live streams here.';
-        $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Nexus Wave.';
-        $('videoGridEmptyActions').innerHTML = '<a href="sfl-search.html" class="sfl-btn sfl-btn-primary">Discover Creators</a>';
-        return;
-      }
-      // Firestore 'in' max 30 items
-      const batch = following.slice(0,30);
+      const batch = (_userData?.following || []).slice(0, 30);
       q = query(videosRef,
-        where('creatorId','in', batch),
-        where('status','==','published'),
-        where('visibility','==','public'),
-        orderBy('createdAt','desc'), limit(30));
+        where('creatorId', 'in', batch),
+        where('status', '==', 'published'),
+        where('visibility', '==', 'public'),
+        orderBy('createdAt', 'desc'), limit(30));
     } else if (tab === 'trending') {
       q = query(videosRef,
-        where('status','==','published'),
-        where('visibility','==','public'),
-        orderBy('views','desc'), limit(40));
+        where('status', '==', 'published'),
+        where('visibility', '==', 'public'),
+        orderBy('views', 'desc'), limit(40));
     } else {
-      // Recommended (newest public)
       q = query(videosRef,
-        where('status','==','published'),
-        where('visibility','==','public'),
-        orderBy('createdAt','desc'), limit(40));
+        where('status', '==', 'published'),
+        where('visibility', '==', 'public'),
+        orderBy('createdAt', 'desc'), limit(40));
     }
+  } catch(e) {
+    loader.classList.add('sfl-hidden');
+    console.error('loadVideos query build:', e);
+    renderVideos([]);
+    return;
+  }
 
-    let snap = await getDocs(q);
-    let docs = snap.docs;
+  _videoUnsub = onSnapshot(q, snap => {
+    let docs = snap.docs.filter(d => READY_STATUSES.has(d.data().status));
 
-    // Only show videos that are ready to play (published or legacy 'ready' status)
-    // Filter out uploading / processing / failed docs so the feed stays clean
-    const READY_STATUSES = new Set(['published', 'ready', undefined, null, '']);
-    docs = docs.filter(d => {
-      const s = d.data().status;
-      return READY_STATUSES.has(s);
-    });
-
-    // Filter by category if not 'all'
+    // Apply category filter client-side (avoids needing an extra composite index)
     if (category !== 'all') {
       docs = docs.filter(d => d.data().category === category);
     }
 
-    renderVideos(docs);
-  } catch(e) {
+    // Rebuild the grid, preserving existing DOM nodes to avoid flicker
     loader.classList.add('sfl-hidden');
-    console.error('loadVideos:', e);
-    // Show graceful empty state instead of crashing
+
+    if (!docs.length) {
+      // Remove any cards that may be present, leave loader (which is hidden)
+      grid.querySelectorAll('[data-video-id]').forEach(el => el.remove());
+      empty.classList.remove('sfl-hidden');
+      return;
+    }
+    empty.classList.add('sfl-hidden');
+
+    // Determine which video IDs are currently rendered
+    const rendered = new Set();
+    grid.querySelectorAll('[data-video-id]').forEach(el => rendered.add(el.dataset.videoId));
+
+    const incoming = new Set(docs.map(d => d.id));
+
+    // Remove cards that are no longer in the result set
+    grid.querySelectorAll('[data-video-id]').forEach(el => {
+      if (!incoming.has(el.dataset.videoId)) el.remove();
+    });
+
+    // Add new cards (only if not already present)
+    docs.forEach(d => {
+      if (!rendered.has(d.id)) {
+        const card = buildVideoCard(d.id, d.data());
+        card.dataset.videoId = d.id;
+        grid.appendChild(card);
+      }
+    });
+
+    // Re-order DOM nodes that have data-video-id to match query order (skip non-card nodes like loader)
+    const cardEls = Array.from(grid.querySelectorAll('[data-video-id]'));
+    docs.forEach((d, i) => {
+      const el = cardEls.find(c => c.dataset.videoId === d.id);
+      if (el && cardEls[i] !== el) {
+        grid.insertBefore(el, cardEls[i] || null);
+        // Update the local array to reflect the new order
+        cardEls.splice(cardEls.indexOf(el), 1);
+        cardEls.splice(i, 0, el);
+      }
+    });
+  }, err => {
+    loader.classList.add('sfl-hidden');
+    console.error('loadVideos onSnapshot:', err);
     renderVideos([]);
-  }
+  });
 }
 
 /* ══════════════════════════════
@@ -878,6 +918,12 @@ $('sidebarLogout')?.addEventListener('click', async () => {
    Particles + init
    ══════════════════════════════ */
 spawnParticles();
+
+// Clean up real-time listeners when navigating away
+window.addEventListener('pagehide', () => {
+  if (_videoUnsub) { _videoUnsub(); _videoUnsub = null; }
+  if (_liveUnsub)  { _liveUnsub();  _liveUnsub  = null; }
+});
 
 // SW registration + install prompt handled by pwa-install.js (loaded below)
 
