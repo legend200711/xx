@@ -572,8 +572,11 @@ function buildLiveCard(roomId, room) {
     ? `<img src="${room.hostAvatar}" class="sfl-live-avatar" alt="" loading="lazy">`
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
   const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
+  // Prefer the roomId field stored in the document (RTDB key) over the Firestore doc ID.
+  // The Firestore doc is keyed by uid but the RTDB room is keyed by uid_timestamp.
+  const linkRoomId = room.roomId || roomId;
   const a = document.createElement('a');
-  a.href = `live.html?room=${encodeURIComponent(roomId)}`;
+  a.href = `live.html?room=${encodeURIComponent(linkRoomId)}`;
   a.className = 'sfl-live-card';
   a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
   a.innerHTML = `
@@ -698,15 +701,7 @@ function loadLiveRooms() {
 
   if (_liveUnsub) { _liveUnsub(); _liveUnsub = null; }
 
-  const q = query(
-    collection(db,'liveRooms'),
-    where('status','==','live'),
-    orderBy('viewers','desc'),
-    limit(20)
-  );
-
-  _liveUnsub = onSnapshot(q, snap => {
-    // Remove old cards but keep empty placeholder
+  function _applySnap(snap) {
     row.querySelectorAll('.sfl-live-card').forEach(c => c.remove());
     if (snap.empty) {
       empty.classList.remove('sfl-hidden');
@@ -714,8 +709,28 @@ function loadLiveRooms() {
     }
     empty.classList.add('sfl-hidden');
     snap.docs.forEach(d => row.insertBefore(buildLiveCard(d.id, d.data()), empty));
-  }, () => {
-    empty.classList.remove('sfl-hidden');
+  }
+
+  // Primary query: status==live + ordered by viewers descending (requires composite index).
+  // Falls back to status-only query if the index is missing.
+  const qPrimary = query(
+    collection(db,'liveRooms'),
+    where('status','==','live'),
+    orderBy('viewers','desc'),
+    limit(20)
+  );
+
+  _liveUnsub = onSnapshot(qPrimary, _applySnap, () => {
+    // Composite index missing — fall back to status-only query (no ordering)
+    if (_liveUnsub) { try { _liveUnsub(); } catch(_e) {} }
+    const qFallback = query(
+      collection(db,'liveRooms'),
+      where('status','==','live'),
+      limit(20)
+    );
+    _liveUnsub = onSnapshot(qFallback, _applySnap, () => {
+      empty.classList.remove('sfl-hidden');
+    });
   });
 }
 

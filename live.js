@@ -386,11 +386,17 @@ async function _loadUserData() {
 
 /* ── Decide mode from URL hash ── */
 async function _resolveMode() {
-  const hash = location.hash;
+  const hash   = location.hash;
+  const params = new URLSearchParams(location.search);
   localStorage.removeItem('snx_live_intent');
 
-  if (hash.startsWith('#watch=')) {
-    _roomId = hash.slice(7);   // roomId is plain [a-zA-Z0-9_] — no decoding needed
+  // Accept both ?room=<roomId> (SNS card links) and #watch=<roomId> (native links)
+  const roomFromParam = params.get('room');
+  const roomFromHash  = hash.startsWith('#watch=') ? decodeURIComponent(hash.slice(7)) : null;
+  const roomId        = roomFromParam || roomFromHash;
+
+  if (roomId) {
+    _roomId = roomId;
     _mode   = 'viewer';
     document.body.classList.add('is-viewer');
     await _startViewer();

@@ -224,6 +224,14 @@
 .comment-author { font-size: 13px; font-weight: 700; }
 .comment-text { font-size: 13px; color: var(--sfl-text-label); margin-top: 3px; line-height: 1.5; word-break: break-word; }
 .comment-meta { font-size: 11px; color: var(--sfl-text-faint); margin-top: 4px; }
+.comment-delete-btn {
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
+  color: var(--sfl-text-faint); font-size: 12px; line-height: 1;
+  border-radius: 4px; transition: color 0.15s, background 0.15s;
+  flex-shrink: 0; align-self: flex-start; margin-top: 2px;
+}
+.comment-delete-btn:hover { color: #ff4455; background: rgba(255,68,85,0.1); }
+.comment-delete-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* Sidebar: Related videos */
 .related-section { position: sticky; top: 20px; }
@@ -698,9 +706,11 @@ async function loadCreatorProfile(uid) {
     const followers = Array.isArray(u.followers) ? u.followers.length : (u.followerCount || 0);
     $('creatorSubs').textContent = `${fmtNum(followers)} followers`;
 
-    // Check if current user follows this creator
-    if (_user && Array.isArray(u.followers)) {
-      _following = u.followers.includes(_user.uid);
+    // Check if current user follows this creator.
+    // arrayUnion writes guarantee the field is always an array once any follow exists,
+    // but new accounts may not have the field yet — treat missing as empty array.
+    if (_user) {
+      _following = Array.isArray(u.followers) && u.followers.includes(_user.uid);
       updateFollowBtn();
     }
 
@@ -732,17 +742,37 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
 
   const creatorRef = doc(db, 'users', creatorId);
   const myRef      = doc(db, 'users', _user.uid);
+
+  // Capture current state before any writes so we can revert on failure
+  const wasFollowing = _following;
+
   try {
-    if (_following) {
-      await updateDoc(creatorRef, { followers: arrayRemove(_user.uid) });
-      await updateDoc(myRef,      { following: arrayRemove(creatorId) });
+    if (wasFollowing) {
+      // UNFOLLOW: remove from target's followers array + decrement count
+      await updateDoc(creatorRef, {
+        followers:     arrayRemove(_user.uid),
+        followerCount: increment(-1)
+      });
+      // Remove target from current user's following array + decrement count
+      await updateDoc(myRef, {
+        following:      arrayRemove(creatorId),
+        followingCount: increment(-1)
+      });
       _following = false;
     } else {
-      await updateDoc(creatorRef, { followers: arrayUnion(_user.uid) });
-      await updateDoc(myRef,      { following: arrayUnion(creatorId) });
+      // FOLLOW: add to target's followers array + increment count
+      await updateDoc(creatorRef, {
+        followers:     arrayUnion(_user.uid),
+        followerCount: increment(1)
+      });
+      // Add target to current user's following array + increment count
+      await updateDoc(myRef, {
+        following:      arrayUnion(creatorId),
+        followingCount: increment(1)
+      });
       _following = true;
 
-      // Send follow notification
+      // Send follow notification (non-critical — never block the follow on this)
       const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
       const myAvatar = _userData?.avatar || _user.photoURL || '';
       addDoc(collection(db, 'notifications', creatorId, 'items'), {
@@ -759,7 +789,14 @@ document.getElementById('btnFollow').addEventListener('click', async () => {
     }
     updateFollowBtn();
   } catch(e) {
-    toast('Error updating follow.');
+    console.error('follow error:', e.code, e.message);
+    // Revert state — button must reflect actual DB state
+    _following = wasFollowing;
+    updateFollowBtn();
+    const reason = e.code === 'permission-denied'
+      ? 'Permission denied. Please sign out and sign back in.'
+      : 'Unable to follow this account. Please try again.';
+    toast(reason);
   } finally {
     btn.disabled = false;
   }
@@ -828,6 +865,36 @@ function buildComment(id, data) {
       <div class="comment-meta">${timeAgo(data.createdAt)}</div>
     </div>
   `;
+  // Show delete button only to the comment's own author (checked against live auth state)
+  if (_user && _user.uid === data.authorId) {
+    const btn = document.createElement('button');
+    btn.className = 'comment-delete-btn';
+    btn.title = 'Delete comment';
+    btn.setAttribute('aria-label', 'Delete your comment');
+    btn.textContent = '🗑';
+
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;        // prevent duplicate requests
+      btn.disabled = true;
+      try {
+        // Delete the subcollection document — Firestore rules enforce authorId == auth.uid
+        await deleteDoc(doc(db, 'videos', videoId, 'comments', id));
+        // Decrement the video's comment counter (best-effort)
+        updateDoc(doc(db, 'videos', videoId), { comments: increment(-1) }).catch(() => {});
+        // onSnapshot in loadComments() removes the element automatically;
+        // no manual DOM removal needed.
+      } catch(e) {
+        console.error('comment delete error:', e.code, e.message);
+        btn.disabled = false;   // reset so the user can retry
+        const reason = e.code === 'permission-denied'
+          ? 'You can only delete your own comments.'
+          : 'Could not delete comment. Please try again.';
+        toast(reason);
+      }
+    });
+
+    div.appendChild(btn);
+  }
   return div;
 }
 

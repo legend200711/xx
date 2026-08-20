@@ -407,7 +407,7 @@ import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
-  updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
+  setDoc, updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -572,24 +572,31 @@ $('btnFollow').addEventListener('click', async () => {
   if (_user.uid === _targetUid) return;
 
   const btn = $('btnFollow');
+  // Guard: ignore rapid double-taps while a follow op is in progress
+  if (btn.disabled) return;
   btn.disabled = true;
+
+  // Capture current state BEFORE any writes so we can revert on failure
+  const wasFollowing = _following;
 
   try {
     const targetRef = doc(db, 'users', _targetUid);
     const myRef     = doc(db, 'users', _user.uid);
 
-    if (_following) {
+    if (wasFollowing) {
       /* ── UNFOLLOW ── */
+      // Target doc (profile page loaded → always exists) — use updateDoc
       await updateDoc(targetRef, {
         followers:     arrayRemove(_user.uid),
         followerCount: increment(-1)
       });
-      await updateDoc(myRef, {
+      // Own doc — use setDoc+merge in case the user doc was never fully created
+      await setDoc(myRef, {
         following:      arrayRemove(_targetUid),
         followingCount: increment(-1)
-      });
+      }, { merge: true });
+      // Both writes succeeded — now update local state
       _following = false;
-      // Update local cache
       if (_userData && Array.isArray(_userData.following)) {
         _userData.following = _userData.following.filter(u => u !== _targetUid);
       }
@@ -599,24 +606,25 @@ $('btnFollow').addEventListener('click', async () => {
         followers:     arrayUnion(_user.uid),
         followerCount: increment(1)
       });
-      await updateDoc(myRef, {
+      // Own doc — use setDoc+merge in case the user doc was never fully created
+      await setDoc(myRef, {
         following:      arrayUnion(_targetUid),
         followingCount: increment(1)
-      });
+      }, { merge: true });
+      // Both writes succeeded — now update local state
       _following = true;
-      // Update local cache
       if (_userData) {
         if (!Array.isArray(_userData.following)) _userData.following = [];
         if (!_userData.following.includes(_targetUid)) _userData.following.push(_targetUid);
       }
 
-      // Send follow notification to the followed user
-      await sendFollowNotification();
+      // Send follow notification (non-critical — never block the follow on this)
+      sendFollowNotification().catch(() => {});
     }
 
     updateFollowBtn();
 
-    // Refresh follower count display
+    // Refresh follower count display from DB to stay accurate
     const fresh = await getDoc(targetRef);
     if (fresh.exists()) {
       const d = fresh.data();
@@ -628,11 +636,13 @@ $('btnFollow').addEventListener('click', async () => {
     }
   } catch(e) {
     console.error('follow error:', e.code, e.message);
+    // Revert state — button must reflect actual DB state, not optimistic guess
+    _following = wasFollowing;
+    updateFollowBtn();
     const reason = e.code === 'permission-denied'
       ? 'Permission denied. Please sign out and sign back in.'
       : 'Unable to follow this account. Please try again.';
     toast(reason);
-    // Revert optimistic state if needed — button will re-enable via finally
   } finally {
     btn.disabled = false;
   }
@@ -747,21 +757,24 @@ async function openFollowModal(type) {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
         if (!_user) { toast('Sign in to follow.'); return; }
-        const targetUid   = btn.dataset.uid;
+        const targetUid    = btn.dataset.uid;
         const wasFollowing = btn.dataset.following === 'true';
         btn.disabled = true;
         try {
           const tRef = doc(db, 'users', targetUid);
           const mRef = doc(db, 'users', _user.uid);
           if (wasFollowing) {
+            // UNFOLLOW
             await updateDoc(tRef, {
               followers:     arrayRemove(_user.uid),
               followerCount: increment(-1)
             });
-            await updateDoc(mRef, {
+            // Own doc — setDoc+merge handles case where user doc was not fully created
+            await setDoc(mRef, {
               following:      arrayRemove(targetUid),
               followingCount: increment(-1)
-            });
+            }, { merge: true });
+            // Both writes succeeded — update UI
             btn.textContent = 'Follow';
             btn.className = 'sfl-btn sfl-btn-sm sfl-btn-primary modal-follow-btn';
             btn.dataset.following = 'false';
@@ -770,14 +783,17 @@ async function openFollowModal(type) {
               _userData.following = _userData.following.filter(u => u !== targetUid);
             }
           } else {
+            // FOLLOW
             await updateDoc(tRef, {
               followers:     arrayUnion(_user.uid),
               followerCount: increment(1)
             });
-            await updateDoc(mRef, {
+            // Own doc — setDoc+merge handles case where user doc was not fully created
+            await setDoc(mRef, {
               following:      arrayUnion(targetUid),
               followingCount: increment(1)
-            });
+            }, { merge: true });
+            // Both writes succeeded — update UI
             btn.textContent = '✓ Following';
             btn.className = 'sfl-btn sfl-btn-sm is-following sfl-btn-outline modal-follow-btn';
             btn.dataset.following = 'true';
@@ -786,7 +802,7 @@ async function openFollowModal(type) {
               if (!Array.isArray(_userData.following)) _userData.following = [];
               if (!_userData.following.includes(targetUid)) _userData.following.push(targetUid);
             }
-            // Notify the followed user
+            // Notify the followed user (non-critical)
             if (_user && targetUid !== _user.uid) {
               const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
               const myAvatar = _userData?.avatar || _user.photoURL || '';
@@ -798,13 +814,14 @@ async function openFollowModal(type) {
               }).catch(() => {});
             }
           }
-          // Also refresh main page follow button if this is the profile we're viewing
+          // Also sync the main profile-page follow button if this is the viewed profile
           if (targetUid === _targetUid) {
             _following = !wasFollowing;
             updateFollowBtn();
           }
         } catch(err) {
           console.error('modal follow error:', err.code, err.message);
+          // Do NOT update btn state — it still reflects the correct DB state
           const reason = err.code === 'permission-denied'
             ? 'Permission denied. Please sign out and sign back in.'
             : 'Unable to follow this account. Please try again.';
