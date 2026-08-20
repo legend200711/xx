@@ -850,11 +850,20 @@ service cloud.firestore {
     //   Only the blocker can create/delete their own block record.
     //   Only the blocker can read their own block records (for UI state check).
     //   Backend enforces ownership: blockerId must match auth.uid.
+    //
+    //   NOTE: resource == null is explicitly allowed on reads so that checking
+    //   whether a block document exists (i.e. is the user blocked?) does not
+    //   produce a permission-denied error when no block record exists yet.
+    //   Without this, resource.data is null for absent docs and the rule throws.
 
     match /waveBlocks/{blockId} {
-      // Only the blocker reads their own block doc (for block-state check on profile load)
+      // Blocker can read their own block doc.
+      // resource == null covers the case where the doc does not yet exist —
+      // the client receives snap.exists()=false rather than permission-denied.
       allow read: if isSignedIn()
-        && (request.auth.uid == resource.data.blockerId || isFounder());
+        && (resource == null
+            || request.auth.uid == resource.data.blockerId
+            || isFounder());
       // Only the blocker can create a block — and the blockerId must equal their uid
       allow create: if isSignedIn()
         && request.resource.data.blockerId == request.auth.uid

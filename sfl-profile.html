@@ -806,18 +806,24 @@ function renderProfile(data) {
 
 /* ─────────────────────────────────────────────────────────────
    Block state check
+   — reads waveBlocks/{myUid}_{targetUid}
+   — The rule allows read when resource==null (doc doesn't exist),
+     so snap.exists()=false is returned for unblocked users without
+     a permission-denied error.
 ───────────────────────────────────────────────────────────── */
 async function checkBlockState() {
   if (!_user || !_targetUid || _user.uid === _targetUid) return;
+  const blockId = `${_user.uid}_${_targetUid}`;
+  const path = `waveBlocks/${blockId}`;
   try {
-    const blockId = `${_user.uid}_${_targetUid}`;
     const snap = await getDoc(doc(db, 'waveBlocks', blockId));
     _isBlocked = snap.exists();
     updateBlockMenuItem();
-    // Hide Message button if blocked
     $('btnMessage').style.display = _isBlocked ? 'none' : '';
   } catch(e) {
-    // Non-critical — leave defaults
+    // Unexpected error (network, token expired, etc.) — log it with the exact path
+    // and leave defaults (_isBlocked=false, message button visible)
+    console.error(`[Wave Block] checkBlockState failed — path: ${path}`, e.code, e.message);
   }
 }
 
@@ -888,8 +894,10 @@ $('waveBlockConfirm').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Blocking…';
 
+  const blockId = `${liveUser.uid}_${_targetUid}`;
+  const path = `waveBlocks/${blockId}`;
+
   try {
-    const blockId = `${liveUser.uid}_${_targetUid}`;
     await setDoc(doc(db, 'waveBlocks', blockId), {
       blockerId:   liveUser.uid,
       blockedId:   _targetUid,
@@ -902,8 +910,12 @@ $('waveBlockConfirm').addEventListener('click', async () => {
     $('waveBlockOverlay').style.display = 'none';
     toast('User blocked.');
   } catch(e) {
-    console.error('block error:', e.code, e.message);
-    toast('Unable to block. Please try again.');
+    console.error(`[Wave Block] block failed — path: ${path}`, e.code, e.message);
+    if (e.code === 'permission-denied') {
+      toast('Block failed: permission denied. You must be signed in as yourself to block users.');
+    } else {
+      toast('Unable to block. Please try again.');
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = 'Block';
@@ -912,16 +924,21 @@ $('waveBlockConfirm').addEventListener('click', async () => {
 
 async function doUnblock(liveUser) {
   if (!liveUser || !_targetUid) return;
+  const blockId = `${liveUser.uid}_${_targetUid}`;
+  const path = `waveBlocks/${blockId}`;
   try {
-    const blockId = `${liveUser.uid}_${_targetUid}`;
     await deleteDoc(doc(db, 'waveBlocks', blockId));
     _isBlocked = false;
     updateBlockMenuItem();
     $('btnMessage').style.display = '';
     toast('User unblocked.');
   } catch(e) {
-    console.error('unblock error:', e.code, e.message);
-    toast('Unable to unblock. Please try again.');
+    console.error(`[Wave Block] unblock failed — path: ${path}`, e.code, e.message);
+    if (e.code === 'permission-denied') {
+      toast('Unblock failed: permission denied. You can only remove your own blocks.');
+    } else {
+      toast('Unable to unblock. Please try again.');
+    }
   }
 }
 
@@ -1073,18 +1090,20 @@ $('btnFollow').addEventListener('click', async () => {
   // Capture current state BEFORE any writes so we can revert on failure
   const wasFollowing = _following;
 
-  try {
-    const targetRef = doc(db, 'users', _targetUid);
-    const myRef     = doc(db, 'users', liveUser.uid);
+  const targetRef = doc(db, 'users', _targetUid);
+  const myRef     = doc(db, 'users', liveUser.uid);
 
+  try {
     if (wasFollowing) {
       /* ── UNFOLLOW ── */
       // Target doc (profile page loaded → always exists) — use updateDoc
+      // Path: users/{_targetUid} — delivery update (followers/followerCount allowed by isDeliveryUpdate)
       await updateDoc(targetRef, {
         followers:     arrayRemove(liveUser.uid),
         followerCount: increment(-1)
       });
-      // Own doc — use setDoc+merge in case the user doc was never fully created
+      // Own doc — use setDoc+merge
+      // Path: users/{liveUser.uid} — owner update (following/followingCount, no role fields)
       await setDoc(myRef, {
         following:      arrayRemove(_targetUid),
         followingCount: increment(-1)
@@ -1096,11 +1115,12 @@ $('btnFollow').addEventListener('click', async () => {
       }
     } else {
       /* ── FOLLOW ── */
+      // Path: users/{_targetUid} — delivery update
       await updateDoc(targetRef, {
         followers:     arrayUnion(liveUser.uid),
         followerCount: increment(1)
       });
-      // Own doc — use setDoc+merge in case the user doc was never fully created
+      // Path: users/{liveUser.uid} — owner update
       await setDoc(myRef, {
         following:      arrayUnion(_targetUid),
         followingCount: increment(1)
@@ -1116,26 +1136,38 @@ $('btnFollow').addEventListener('click', async () => {
       sendFollowNotification().catch(() => {});
     }
 
+    // Writes succeeded — update the button immediately
     updateFollowBtn();
 
-    // Refresh follower count display from DB to stay accurate
-    const fresh = await getDoc(targetRef);
-    if (fresh.exists()) {
+  } catch(e) {
+    // Log the exact paths and error code so permission issues are diagnosable
+    console.error(
+      `[Wave Follow] ${wasFollowing ? 'unfollow' : 'follow'} failed`,
+      `target=users/${_targetUid}`, `self=users/${liveUser.uid}`,
+      e.code, e.message
+    );
+    // Revert state — button must reflect actual DB state, not optimistic guess
+    _following = wasFollowing;
+    updateFollowBtn();
+    if (e.code === 'permission-denied') {
+      toast('Follow failed: permission denied. Make sure you are signed in.');
+    } else {
+      toast('Unable to follow this account. Please try again.');
+    }
+  } finally {
+    // Always re-enable — no matter what happened above
+    btn.disabled = false;
+
+    // Refresh the follower count from DB in the background (non-critical — never
+    // reverts a successful follow even if this getDoc fails)
+    getDoc(targetRef).then(fresh => {
+      if (!fresh.exists()) return;
       const d = fresh.data();
-      // Prefer atomic counter; fall back to array length
       const cnt = typeof d.followerCount === 'number'
         ? d.followerCount
         : (Array.isArray(d.followers) ? d.followers.length : 0);
       $('statFollowersNum').textContent = fmtNum(Math.max(0, cnt));
-    }
-  } catch(e) {
-    console.error('follow error:', e.code, e.message);
-    // Revert state — button must reflect actual DB state, not optimistic guess
-    _following = wasFollowing;
-    updateFollowBtn();
-    toast('Unable to follow this account. Please try again.');
-  } finally {
-    btn.disabled = false;
+    }).catch(() => {/* count refresh is non-critical */});
   }
 });
 
@@ -1313,12 +1345,17 @@ async function openFollowModal(type) {
             updateFollowBtn();
           }
         } catch(err) {
-          console.error('modal follow error:', err.code, err.message);
+          console.error(
+            `[Wave Follow Modal] ${wasFollowing ? 'unfollow' : 'follow'} failed`,
+            `target=users/${targetUid}`, `self=users/${liveModalUser.uid}`,
+            err.code, err.message
+          );
           // Do NOT update btn state — it still reflects the correct DB state
-          const reason = err.code === 'permission-denied'
-            ? 'Permission denied. Please sign out and sign back in.'
-            : 'Unable to follow this account. Please try again.';
-          toast(reason);
+          if (err.code === 'permission-denied') {
+            toast('Follow failed: permission denied. Make sure you are signed in.');
+          } else {
+            toast('Unable to follow this account. Please try again.');
+          }
         } finally {
           btn.disabled = false;
         }
