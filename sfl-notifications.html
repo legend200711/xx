@@ -81,6 +81,11 @@
   </nav>
   <div class="sfl-sidebar-footer">
     <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+    <!-- Founder Panel link — shown by JS only if role === 'founder' -->
+    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
+       style="color:#00AEEF;border:1px solid rgba(0,174,239,0.2);border-radius:8px;margin-top:4px;">
+      <span class="sfl-nav-icon">🌑</span> Founder Panel
+    </a>
   </div>
 </aside>
 
@@ -126,7 +131,7 @@ import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, collection, query, orderBy, limit, onSnapshot,
-  doc, updateDoc, writeBatch, getDocs, where
+  doc, getDoc, updateDoc, writeBatch, getDocs, where
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -237,7 +242,7 @@ async function markAllRead() {
 $('markAllReadDesktop').addEventListener('click', markAllRead);
 $('markAllRead').addEventListener('click', markAllRead);
 
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   _user = user;
   $('notifLoader').classList.remove('sfl-hidden');
   $('notifAuthWall').classList.add('sfl-hidden');
@@ -246,6 +251,13 @@ onAuthStateChanged(auth, user => {
     $('notifAuthWall').classList.remove('sfl-hidden');
     return;
   }
+  // Check founder role to reveal Founder Panel link
+  try {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if (snap.exists() && snap.data().role === 'founder') {
+      $('sidebarFounderLink')?.classList.remove('sfl-hidden');
+    }
+  } catch(e) {}
   const q = query(
     collection(db,'notifications',user.uid,'items'),
     orderBy('createdAt','desc'), limit(60)

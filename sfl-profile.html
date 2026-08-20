@@ -274,6 +274,11 @@
   </nav>
   <div class="sfl-sidebar-footer">
     <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+    <!-- Founder Panel link — injected by JS only if role === 'founder' -->
+    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
+       style="color:#00AEEF;border:1px solid rgba(0,174,239,0.2);border-radius:8px;margin-top:4px;">
+      <span class="sfl-nav-icon">🌑</span> Founder Panel
+    </a>
     <button class="sfl-nav-item" id="sidebarLogout"><span class="sfl-nav-icon">🚪</span> Sign Out</button>
   </div>
 </aside>
@@ -402,7 +407,7 @@ import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
-  updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, deleteDoc
+  updateDoc, arrayUnion, arrayRemove, increment, addDoc, serverTimestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -575,14 +580,35 @@ $('btnFollow').addEventListener('click', async () => {
 
     if (_following) {
       /* ── UNFOLLOW ── */
-      await updateDoc(targetRef, { followers: arrayRemove(_user.uid) });
-      await updateDoc(myRef,     { following: arrayRemove(_targetUid) });
+      await updateDoc(targetRef, {
+        followers:     arrayRemove(_user.uid),
+        followerCount: increment(-1)
+      });
+      await updateDoc(myRef, {
+        following:      arrayRemove(_targetUid),
+        followingCount: increment(-1)
+      });
       _following = false;
+      // Update local cache
+      if (_userData && Array.isArray(_userData.following)) {
+        _userData.following = _userData.following.filter(u => u !== _targetUid);
+      }
     } else {
       /* ── FOLLOW ── */
-      await updateDoc(targetRef, { followers: arrayUnion(_user.uid) });
-      await updateDoc(myRef,     { following: arrayUnion(_targetUid) });
+      await updateDoc(targetRef, {
+        followers:     arrayUnion(_user.uid),
+        followerCount: increment(1)
+      });
+      await updateDoc(myRef, {
+        following:      arrayUnion(_targetUid),
+        followingCount: increment(1)
+      });
       _following = true;
+      // Update local cache
+      if (_userData) {
+        if (!Array.isArray(_userData.following)) _userData.following = [];
+        if (!_userData.following.includes(_targetUid)) _userData.following.push(_targetUid);
+      }
 
       // Send follow notification to the followed user
       await sendFollowNotification();
@@ -590,16 +616,23 @@ $('btnFollow').addEventListener('click', async () => {
 
     updateFollowBtn();
 
-    // Refresh follower count from live data
+    // Refresh follower count display
     const fresh = await getDoc(targetRef);
     if (fresh.exists()) {
-      const d   = fresh.data();
-      const cnt = Array.isArray(d.followers) ? d.followers.length : 0;
-      $('statFollowersNum').textContent = fmtNum(cnt);
+      const d = fresh.data();
+      // Prefer atomic counter; fall back to array length
+      const cnt = typeof d.followerCount === 'number'
+        ? d.followerCount
+        : (Array.isArray(d.followers) ? d.followers.length : 0);
+      $('statFollowersNum').textContent = fmtNum(Math.max(0, cnt));
     }
   } catch(e) {
-    console.error('follow error:', e);
-    toast('Error updating follow.');
+    console.error('follow error:', e.code, e.message);
+    const reason = e.code === 'permission-denied'
+      ? 'Permission denied. Please sign out and sign back in.'
+      : 'Unable to follow this account. Please try again.';
+    toast(reason);
+    // Revert optimistic state if needed — button will re-enable via finally
   } finally {
     btn.disabled = false;
   }
@@ -651,18 +684,15 @@ async function openFollowModal(type) {
       return;
     }
 
-    // Fetch user docs in batches of 30 (Firestore 'in' limit)
-    const batches = [];
-    for (let i = 0; i < uidList.length; i += 30) {
-      batches.push(uidList.slice(i, i + 30));
-    }
-
+    // Fetch user docs by ID (direct lookups are reliable — no 'uid' field dependency)
     const userMap = {};
-    for (const batch of batches) {
-      const q    = query(collection(db, 'users'), where('uid', 'in', batch));
-      const docs = await getDocs(q);
-      docs.forEach(d => { userMap[d.id] = d.data(); });
-    }
+    await Promise.all(
+      uidList.map(uid =>
+        getDoc(doc(db, 'users', uid))
+          .then(d => { if (d.exists()) userMap[d.id] = d.data(); })
+          .catch(() => {}) // skip unreachable docs gracefully
+      )
+    );
 
     // Build rows
     const body = $('followModalBody');
@@ -724,19 +754,38 @@ async function openFollowModal(type) {
           const tRef = doc(db, 'users', targetUid);
           const mRef = doc(db, 'users', _user.uid);
           if (wasFollowing) {
-            await updateDoc(tRef, { followers: arrayRemove(_user.uid) });
-            await updateDoc(mRef, { following: arrayRemove(targetUid) });
+            await updateDoc(tRef, {
+              followers:     arrayRemove(_user.uid),
+              followerCount: increment(-1)
+            });
+            await updateDoc(mRef, {
+              following:      arrayRemove(targetUid),
+              followingCount: increment(-1)
+            });
             btn.textContent = 'Follow';
             btn.className = 'sfl-btn sfl-btn-sm sfl-btn-primary modal-follow-btn';
             btn.dataset.following = 'false';
             myFollowingSet.delete(targetUid);
+            if (_userData && Array.isArray(_userData.following)) {
+              _userData.following = _userData.following.filter(u => u !== targetUid);
+            }
           } else {
-            await updateDoc(tRef, { followers: arrayUnion(_user.uid) });
-            await updateDoc(mRef, { following: arrayUnion(targetUid) });
+            await updateDoc(tRef, {
+              followers:     arrayUnion(_user.uid),
+              followerCount: increment(1)
+            });
+            await updateDoc(mRef, {
+              following:      arrayUnion(targetUid),
+              followingCount: increment(1)
+            });
             btn.textContent = '✓ Following';
             btn.className = 'sfl-btn sfl-btn-sm is-following sfl-btn-outline modal-follow-btn';
             btn.dataset.following = 'true';
             myFollowingSet.add(targetUid);
+            if (_userData) {
+              if (!Array.isArray(_userData.following)) _userData.following = [];
+              if (!_userData.following.includes(targetUid)) _userData.following.push(targetUid);
+            }
             // Notify the followed user
             if (_user && targetUid !== _user.uid) {
               const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
@@ -755,7 +804,11 @@ async function openFollowModal(type) {
             updateFollowBtn();
           }
         } catch(err) {
-          toast('Error updating follow.');
+          console.error('modal follow error:', err.code, err.message);
+          const reason = err.code === 'permission-denied'
+            ? 'Permission denied. Please sign out and sign back in.'
+            : 'Unable to follow this account. Please try again.';
+          toast(reason);
         } finally {
           btn.disabled = false;
         }
@@ -935,7 +988,13 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid));
-      if (snap.exists()) _userData = snap.data();
+      if (snap.exists()) {
+        _userData = snap.data();
+        // Show Founder Panel link only for the verified founder account
+        if (_userData.role === 'founder') {
+          $('sidebarFounderLink')?.classList.remove('sfl-hidden');
+        }
+      }
     } catch(e) {}
   }
   // If no uid param, show current user's profile

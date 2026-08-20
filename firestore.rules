@@ -50,6 +50,7 @@ service cloud.firestore {
     }
 
     // Fields a signed-in user is allowed to deliver into ANOTHER user's document.
+    // Includes follow-relationship fields so any authenticated user can follow/unfollow.
     function isDeliveryUpdate() {
       let allowed = [
         'notifications',
@@ -59,7 +60,11 @@ service cloud.firestore {
         'familyInvitesReceived',
         'familyInvitesSent',
         'family',
-        'friends'
+        'friends',
+        'followers',
+        'followerCount',
+        'following',
+        'followingCount'
       ];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
@@ -77,6 +82,12 @@ service cloud.firestore {
                .hasAny(themeFields);
     }
 
+    // Returns true if the update attempts to change the 'role' field.
+    // Only a Founder may elevate or change any user's role — never via self-service.
+    function touchesRoleField() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+    }
+
     // ── Users ─────────────────────────────────────────────────────────────────
 
     match /users/{uid} {
@@ -89,7 +100,7 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
 
       allow update: if
-        isOwner(uid)
+        (isOwner(uid) && !touchesRoleField())
         || (isSignedIn() && isDeliveryUpdate() && !touchesThemeFields())
         || isModerator();
 
@@ -802,6 +813,27 @@ service cloud.firestore {
         && (resource.data.authorId != null || isFounder());
       // No updates allowed on test posts
       allow update: if false;
+    }
+
+    // ── Founder Panel — platform stats cache ──────────────────────────────────
+    //
+    //   /founderStats/{docId}
+    //     Platform-wide aggregate stats written and read by the Founder only.
+    //     Prevents platform data from leaking to regular users.
+
+    match /founderStats/{docId} {
+      allow read, write: if isFounder();
+    }
+
+    // ── Founder Panel — feature flags ─────────────────────────────────────────
+    //
+    //   /featureFlags/{docId}
+    //     Platform feature toggles written by Founder; readable by any signed-in
+    //     user so features can be gated on the client.
+
+    match /featureFlags/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isFounder();
     }
 
   }

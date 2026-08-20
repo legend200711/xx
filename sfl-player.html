@@ -291,6 +291,11 @@
     <a href="sfl-upload.html" class="sfl-nav-item"><span class="sfl-nav-icon">📤</span> Upload</a>
     <a href="sfl-notifications.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔔</span> Notifications</a>
     <a href="sfl-profile.html" class="sfl-nav-item"><span class="sfl-nav-icon">👤</span> Profile</a>
+    <!-- Founder Panel link — shown by JS only if role === 'founder' -->
+    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
+       style="color:#00AEEF;" aria-label="Founder Control Center">
+      <span class="sfl-nav-icon">🌑</span> Founder Panel
+    </a>
   </nav>
   <div class="sfl-sidebar-footer">
     <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
@@ -907,7 +912,13 @@ onAuthStateChanged(auth, async user => {
   if(user) {
     try {
       const snap = await getDoc(doc(db,'users',user.uid));
-      if(snap.exists()) _userData = snap.data();
+      if(snap.exists()) {
+        _userData = snap.data();
+        // Show Founder Panel link only for the verified founder account
+        if (_userData.role === 'founder') {
+          $('sidebarFounderLink')?.classList.remove('sfl-hidden');
+        }
+      }
     } catch(e) {}
     $('myAvatar').src = _userData?.avatar || user.photoURL || '';
     $('myAvatar').style.display = (_userData?.avatar || user.photoURL) ? '' : 'none';

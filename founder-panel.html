@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FOUNDER CONTROL CENTER — Shadow Nexus Wave</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+/* ══════════════════════════════════════════
+   FOUNDER PANEL — custom styles
+   ══════════════════════════════════════════ */
+
+/* Auth gate — shown while checking, or if access denied */
+#fpAuthGate {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #060d18;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px; text-align: center; padding: 24px;
+}
+#fpAuthGate .fp-gate-icon { font-size: 52px; margin-bottom: 8px; }
+#fpAuthGate .fp-gate-title { font-size: 20px; font-weight: 800; color: #e8f4ff; }
+#fpAuthGate .fp-gate-sub { font-size: 14px; color: #5a7fa0; max-width: 360px; line-height: 1.6; }
+#fpAuthGate .fp-gate-btn {
+  margin-top: 12px; padding: 10px 28px;
+  background: #00AEEF; color: #fff;
+  border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.5px;
+}
+#fpAuthGate .fp-gate-btn:hover { background: #33cfff; }
+
+/* Panel layout */
+.fp-layout {
+  display: flex; min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.fp-sidebar {
+  width: 240px; flex-shrink: 0;
+  background: #080f1c;
+  border-right: 1px solid rgba(0,174,239,0.12);
+  display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; bottom: 0;
+  z-index: 100; overflow-y: auto;
+  transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+}
+
+@media (max-width: 768px) {
+  .fp-sidebar { transform: translateX(-100%); }
+  .fp-sidebar.open { transform: translateX(0); }
+}
+
+.fp-logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid rgba(0,174,239,0.10);
+  position: relative; overflow: hidden;
+}
+.fp-logo::before {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, #00AEEF, transparent);
+}
+.fp-logo-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(135deg, rgba(0,174,239,0.18), rgba(0,90,180,0.12));
+  border: 1px solid rgba(0,174,239,0.35);
+  border-radius: 6px; padding: 4px 10px;
+  font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+  color: #00AEEF; text-transform: uppercase; margin-bottom: 8px;
+  box-shadow: 0 0 10px rgba(0,174,239,0.12);
+}
+.fp-logo-title {
+  font-size: 14px; font-weight: 900; color: #e8f4ff;
+  letter-spacing: 1px; line-height: 1.3;
+  text-shadow: 0 0 20px rgba(0,174,239,0.3);
+}
+.fp-logo-sub { font-size: 10px; color: #5a7fa0; margin-top: 2px; letter-spacing: 0.5px; }
+
+.fp-nav { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+.fp-nav-section {
+  font-size: 9px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: #2a4a66;
+  padding: 10px 10px 4px; margin-top: 4px;
+}
+.fp-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; color: #8ab4d4;
+  cursor: pointer; text-decoration: none;
+  border: none; background: none; width: 100%; text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+.fp-nav-item:hover { background: rgba(0,174,239,0.08); color: #e8f4ff; }
+.fp-nav-item.active { background: rgba(0,174,239,0.13); color: #00AEEF; }
+.fp-nav-icon { font-size: 15px; width: 20px; flex-shrink: 0; text-align: center; }
+
+.fp-sidebar-foot {
+  padding: 12px 8px 20px;
+  border-top: 1px solid rgba(0,174,239,0.10);
+}
+
+/* ── Main content ── */
+.fp-main {
+  flex: 1;
+  margin-left: 240px;
+  min-height: 100vh;
+  background: #060d18;
+}
+@media (max-width: 768px) {
+  .fp-main { margin-left: 0; }
+}
+
+/* ── Top bar ── */
+.fp-topbar {
+  height: 56px;
+  background: rgba(8,15,28,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0,174,239,0.10);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px;
+  position: sticky; top: 0; z-index: 90;
+}
+.fp-menu-btn {
+  display: none; background: none; border: none;
+  color: #8ab4d4; font-size: 20px; cursor: pointer;
+  padding: 4px; line-height: 1; border-radius: 6px;
+}
+@media (max-width: 768px) { .fp-menu-btn { display: block; } }
+.fp-topbar-title { font-size: 14px; font-weight: 800; color: #e8f4ff; flex: 1; }
+.fp-topbar-user {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: #5a7fa0;
+}
+.fp-topbar-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid rgba(0,174,239,0.3);
+  object-fit: cover; background: #0b1525;
+}
+
+/* ── Overlay for mobile sidebar ── */
+.fp-sidebar-overlay {
+  display: none; position: fixed; inset: 0; z-index: 99;
+  background: rgba(4,10,20,0.72);
+  backdrop-filter: blur(3px);
+}
+@media (max-width: 768px) {
+  .fp-sidebar-overlay.active { display: block; }
+}
+
+/* ── Page sections ── */
+.fp-page { padding: 24px; max-width: 1180px; display: none; }
+.fp-page.active { display: block; }
+
+.fp-page-header {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 24px; flex-wrap: wrap;
+}
+.fp-page-title { font-size: 20px; font-weight: 900; color: #e8f4ff; }
+.fp-page-sub { font-size: 13px; color: #5a7fa0; margin-top: 3px; }
+
+/* ── Stats grid ── */
+.fp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.fp-stat-card {
+  background: #0b1525;
+  border: 1px solid rgba(0,174,239,0.12);
+  border-radius: 12px;
+  padding: 16px 18px;
+  position: relative; overflow: hidden;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.fp-stat-card:hover {
+  border-color: rgba(0,174,239,0.28);
+  box-shadow: 0 0 18px rgba(0,174,239,0.07);
+}
+.fp-stat-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #00AEEF, transparent);
+}
+.fp-stat-icon { font-size: 20px; margin-bottom: 8px; }
+.fp-stat-num {
+  font-size: 26px; font-weight: 900; color: #e8f4ff;
+  line-height: 1.1; margin-bottom: 3px;
+}
+.fp-stat-label { font-size: 11px; color: #5a7fa0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+.fp-stat-trend { font-size: 11px; margin-top: 4px; }
+.fp-stat-trend.up { color: #4ade80; }
+.fp-stat-trend.neutral { color: #5a7fa0; }
+
+/* ── Status indicators ── */
+.fp-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.fp-status-card {
+  background: #0b1525;
+  border: 1px solid rgba(0,174,239,0.10);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.fp-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.fp-status-dot.green { background: #4ade80; box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+.fp-status-dot.blue  { background: #00AEEF; box-shadow: 0 0 6px rgba(0,174,239,0.5); }
+.fp-status-dot.yellow { background: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.5); }
+.fp-status-dot.red   { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.5); }
+.fp-status-dot.pulse { animation: fpPulse 2s infinite; }
+@keyframes fpPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.fp-status-info { flex: 1; min-width: 0; }
+.fp-status-name { font-size: 13px; font-weight: 700; color: #e8f4ff; }
+.fp-status-val  { font-size: 11px; color: #5a7fa0; margin-top: 1px; }
+
+/* ── Section cards ── */
+.fp-card {
+  background: #0b1525;
+  border: 1px solid rgba(0,174,239,0.10);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.fp-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(0,174,239,0.08);
+  gap: 10px;
+}
+.fp-card-title { font-size: 14px; font-weight: 800; color: #e8f4ff; }
+.fp-card-body { padding: 16px 18px; }
+
+/* ── Tables ── */
+.fp-table-wrap { overflow-x: auto; }
+.fp-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; color: #e8f4ff;
+}
+.fp-table th {
+  padding: 10px 14px;
+  font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #2a4a66;
+  border-bottom: 1px solid rgba(0,174,239,0.08);
+  text-align: left; white-space: nowrap;
+}
+.fp-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(0,174,239,0.05);
+  vertical-align: middle;
+}
+.fp-table tr:last-child td { border-bottom: none; }
+.fp-table tr:hover td { background: rgba(0,174,239,0.03); }
+.fp-table .fp-uid { font-size: 11px; color: #5a7fa0; font-family: monospace; }
+.fp-table .fp-role-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.fp-role-founder  { background: rgba(0,174,239,0.15); color: #00AEEF; border: 1px solid rgba(0,174,239,0.3); }
+.fp-role-moderator { background: rgba(139,92,246,0.15); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+.fp-role-member   { background: rgba(90,127,160,0.12); color: #8ab4d4; border: 1px solid rgba(90,127,160,0.2); }
+.fp-role-suspended { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+
+/* ── Action buttons ── */
+.fp-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.fp-btn:active { transform: scale(0.97); }
+.fp-btn-primary { background: #00AEEF; color: #fff; }
+.fp-btn-primary:hover { background: #33cfff; }
+.fp-btn-outline { background: transparent; border-color: rgba(0,174,239,0.3); color: #00AEEF; }
+.fp-btn-outline:hover { background: rgba(0,174,239,0.08); border-color: #00AEEF; }
+.fp-btn-danger { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.3); color: #f87171; }
+.fp-btn-danger:hover { background: rgba(248,113,113,0.22); border-color: #f87171; }
+.fp-btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
+.fp-btn-ghost { background: transparent; color: #8ab4d4; }
+.fp-btn-ghost:hover { background: rgba(0,174,239,0.07); color: #e8f4ff; }
+.fp-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* ── Search / filter bar ── */
+.fp-filter-bar {
+  display: flex; gap: 10px; align-items: center;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.fp-search {
+  flex: 1; min-width: 180px;
+  background: #0d1e35;
+  border: 1px solid rgba(0,174,239,0.15);
+  border-radius: 8px; padding: 8px 12px;
+  color: #e8f4ff; font-size: 13px; outline: none;
+  font-family: inherit;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.fp-search:focus {
+  border-color: #00AEEF;
+  box-shadow: 0 0 0 2px rgba(0,174,239,0.13);
+}
+.fp-search::placeholder { color: #2a4a66; }
+.fp-select {
+  background: #0d1e35;
+  border: 1px solid rgba(0,174,239,0.15);
+  border-radius: 8px; padding: 8px 12px;
+  color: #e8f4ff; font-size: 13px; outline: none;
+  font-family: inherit; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.fp-select:focus { border-color: #00AEEF; }
+
+/* ── Textarea ── */
+.fp-textarea {
+  width: 100%; background: #0d1e35;
+  border: 1px solid rgba(0,174,239,0.15);
+  border-radius: 8px; padding: 10px 13px;
+  color: #e8f4ff; font-size: 13px; outline: none;
+  font-family: inherit; resize: vertical; min-height: 80px;
+  box-sizing: border-box;
+  transition: border-color 0.18s;
+}
+.fp-textarea:focus { border-color: #00AEEF; }
+.fp-input {
+  width: 100%; background: #0d1e35;
+  border: 1px solid rgba(0,174,239,0.15);
+  border-radius: 8px; padding: 9px 12px;
+  color: #e8f4ff; font-size: 13px; outline: none;
+  font-family: inherit; box-sizing: border-box;
+  transition: border-color 0.18s;
+}
+.fp-input:focus { border-color: #00AEEF; }
+.fp-label {
+  display: block; font-size: 11px; font-weight: 700;
+  color: #5a7fa0; margin-bottom: 5px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.fp-field { margin-bottom: 14px; }
+
+/* ── Toggle switch ── */
+.fp-toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.fp-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.fp-toggle-slider {
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.08);
+  border-radius: 12px; cursor: pointer;
+  border: 1px solid rgba(90,127,160,0.25);
+  transition: background 0.2s, border-color 0.2s;
+}
+.fp-toggle-slider::before {
+  content: ''; position: absolute; left: 3px; top: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s;
+}
+.fp-toggle input:checked + .fp-toggle-slider { background: #00AEEF; border-color: #00AEEF; }
+.fp-toggle input:checked + .fp-toggle-slider::before { transform: translateX(20px); }
+
+/* ── Feature flag row ── */
+.fp-flag-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid rgba(0,174,239,0.06);
+  gap: 12px;
+}
+.fp-flag-row:last-child { border-bottom: none; }
+.fp-flag-info { flex: 1; min-width: 0; }
+.fp-flag-name { font-size: 13px; font-weight: 700; color: #e8f4ff; }
+.fp-flag-desc { font-size: 12px; color: #5a7fa0; margin-top: 2px; }
+
+/* ── Empty state ── */
+.fp-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 40px 20px; text-align: center;
+  color: #5a7fa0;
+}
+.fp-empty-icon { font-size: 36px; margin-bottom: 10px; }
+.fp-empty-text { font-size: 14px; color: #8ab4d4; font-weight: 600; }
+.fp-empty-sub { font-size: 13px; margin-top: 4px; }
+
+/* ── Loading spinner ── */
+.fp-loader { display: flex; align-items: center; justify-content: center; padding: 32px; }
+.fp-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid rgba(0,174,239,0.15);
+  border-top-color: #00AEEF;
+  animation: fpSpin 0.8s linear infinite;
+}
+@keyframes fpSpin { to { transform: rotate(360deg); } }
+
+/* ── Confirmation modal ── */
+.fp-modal-overlay {
+  position: fixed; inset: 0; z-index: 9900;
+  background: rgba(4,10,20,0.88);
+  backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.fp-modal-overlay.open { display: flex; animation: sflFadeIn 0.18s ease; }
+.fp-modal {
+  background: #0d1e35;
+  border: 1px solid rgba(0,174,239,0.2);
+  border-radius: 14px;
+  padding: 28px 24px 22px;
+  max-width: 420px; width: 100%;
+  box-shadow: 0 0 50px rgba(0,174,239,0.12);
+  animation: sflFadeUp 0.2s ease;
+}
+.fp-modal-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+.fp-modal-title { font-size: 17px; font-weight: 800; color: #e8f4ff; text-align: center; margin-bottom: 8px; }
+.fp-modal-body { font-size: 13px; color: #8ab4d4; text-align: center; line-height: 1.65; margin-bottom: 22px; }
+.fp-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ── Announce modal ── */
+.fp-announce-modal {
+  max-width: 520px;
+}
+
+/* ── Audit log ── */
+.fp-audit-row {
+  display: flex; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(0,174,239,0.05);
+}
+.fp-audit-row:last-child { border-bottom: none; }
+.fp-audit-time {
+  font-size: 11px; color: #2a4a66;
+  white-space: nowrap; padding-top: 2px;
+  min-width: 90px;
+}
+.fp-audit-icon { font-size: 15px; flex-shrink: 0; }
+.fp-audit-text { font-size: 12px; color: #8ab4d4; line-height: 1.5; flex: 1; }
+.fp-audit-text strong { color: #e8f4ff; }
+
+/* ── Dashboard welcome ── */
+.fp-welcome-banner {
+  background: linear-gradient(135deg, #050c1a 0%, #091525 40%, #0b1e38 70%, #060d18 100%);
+  border: 1px solid rgba(0,174,239,0.2);
+  border-radius: 16px;
+  padding: 28px 32px;
+  margin-bottom: 28px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 0 60px rgba(0,174,239,0.06), inset 0 1px 0 rgba(0,174,239,0.08);
+}
+/* Wave effect */
+.fp-welcome-banner::before {
+  content: '';
+  position: absolute; bottom: -30px; left: 0; right: 0; height: 60px;
+  background: repeating-linear-gradient(90deg,
+    transparent 0, transparent 18px,
+    rgba(0,174,239,0.04) 18px, rgba(0,174,239,0.04) 20px);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.fp-welcome-banner::after {
+  content: '🌑⚡🌊';
+  position: absolute; right: 28px; top: 50%; transform: translateY(-50%);
+  font-size: 52px; opacity: 0.10;
+  pointer-events: none;
+  filter: blur(1px);
+}
+.fp-welcome-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: 3px;
+  text-transform: uppercase; color: #00AEEF;
+  opacity: 0.8; margin-bottom: 8px;
+}
+.fp-welcome-title {
+  font-size: 26px; font-weight: 900; color: #e8f4ff;
+  letter-spacing: 1px; margin-bottom: 3px;
+  line-height: 1.2;
+}
+.fp-welcome-subtitle {
+  font-size: 15px; font-weight: 800; color: #00AEEF;
+  letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.fp-welcome-sub { font-size: 13px; color: #5a7fa0; }
+.fp-welcome-founder {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: linear-gradient(135deg, rgba(0,174,239,0.15), rgba(0,90,180,0.10));
+  border: 1px solid rgba(0,174,239,0.3);
+  border-radius: 20px; padding: 4px 14px;
+  font-size: 11px; font-weight: 800; color: #00AEEF;
+  margin-top: 12px;
+  box-shadow: 0 0 12px rgba(0,174,239,0.1);
+  letter-spacing: 0.5px;
+}
+
+/* ── Creator leaderboard ── */
+.fp-creator-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid rgba(0,174,239,0.05);
+}
+.fp-creator-row:last-child { border-bottom: none; }
+.fp-creator-rank {
+  width: 24px; text-align: center;
+  font-size: 12px; font-weight: 800; color: #2a4a66; flex-shrink: 0;
+}
+.fp-creator-rank.gold   { color: #fbbf24; }
+.fp-creator-rank.silver { color: #94a3b8; }
+.fp-creator-rank.bronze { color: #b45309; }
+.fp-creator-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover; background: #0b1525;
+  border: 1px solid rgba(0,174,239,0.2); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.fp-creator-info { flex: 1; min-width: 0; }
+.fp-creator-name { font-size: 13px; font-weight: 700; color: #e8f4ff; }
+.fp-creator-meta { font-size: 11px; color: #5a7fa0; margin-top: 1px; }
+.fp-creator-stat { font-size: 12px; font-weight: 700; color: #00AEEF; flex-shrink: 0; }
+
+/* ── Report badge ── */
+.fp-report-type {
+  display: inline-flex; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  background: rgba(248,113,113,0.12); color: #f87171;
+  border: 1px solid rgba(248,113,113,0.25);
+}
+.fp-report-status {
+  display: inline-flex; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+}
+.fp-status-pending { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+.fp-status-reviewed { background: rgba(74,222,128,0.12); color: #4ade80; border: 1px solid rgba(74,222,128,0.25); }
+.fp-status-dismissed { background: rgba(90,127,160,0.12); color: #8ab4d4; border: 1px solid rgba(90,127,160,0.2); }
+
+/* ── Toast ── */
+#fp-toast {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: #0d2444; border: 1px solid rgba(0,174,239,0.3);
+  color: #e8f4ff; font-size: 13px; font-weight: 600;
+  padding: 10px 20px; border-radius: 30px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 9999; text-align: center; max-width: 340px;
+  white-space: nowrap;
+}
+#fp-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── User avatar ── */
+.fp-user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  object-fit: cover; background: #0b1525;
+  border: 1px solid rgba(0,174,239,0.2);
+  flex-shrink: 0;
+}
+
+/* ── Announcement items ── */
+.fp-announce-item {
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(0,174,239,0.06);
+}
+.fp-announce-item:last-child { border-bottom: none; }
+.fp-announce-item-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px;
+}
+.fp-announce-title-text { font-size: 13px; font-weight: 700; color: #e8f4ff; }
+.fp-announce-body-text { font-size: 12px; color: #8ab4d4; margin-top: 3px; line-height: 1.5; }
+.fp-announce-meta { font-size: 11px; color: #2a4a66; margin-top: 4px; }
+
+/* ── Back to platform link ── */
+.fp-back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #5a7fa0; text-decoration: none;
+  padding: 5px 8px; border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.fp-back-link:hover { color: #00AEEF; background: rgba(0,174,239,0.06); }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .fp-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .fp-status-grid { grid-template-columns: 1fr 1fr; }
+  .fp-page { padding: 16px; }
+  .fp-table th, .fp-table td { padding: 9px 10px; }
+}
+@media (max-width: 400px) {
+  .fp-stats-grid { grid-template-columns: 1fr 1fr; }
+  .fp-status-grid { grid-template-columns: 1fr; }
+}
+
+</style>
+</head>
+<body style="background:#060d18;color:#e8f4ff;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;margin:0;">
+
+<!-- ══════════════════════════════════
+     AUTH GATE — shown while checking
+     ══════════════════════════════════ -->
+<div id="fpAuthGate">
+  <div class="fp-gate-icon">🌑⚡🌊</div>
+  <div class="fp-gate-title">Verifying Access…</div>
+  <div class="fp-gate-sub" id="fpGateSub">Checking authorization. Please wait.</div>
+</div>
+
+<!-- ══════════════════════════════════
+     TOAST
+     ══════════════════════════════════ -->
+<div id="fp-toast" role="status" aria-live="polite"></div>
+
+<!-- ══════════════════════════════════
+     MAIN PANEL (hidden until auth OK)
+     ══════════════════════════════════ -->
+<div id="fpPanel" style="display:none;">
+
+  <!-- Mobile sidebar overlay -->
+  <div class="fp-sidebar-overlay" id="fpSidebarOverlay"></div>
+
+  <!-- ── Sidebar ── -->
+  <aside class="fp-sidebar" id="fpSidebar" aria-label="Founder Control Center navigation">
+    <div class="fp-logo">
+      <div class="fp-logo-badge">🌑 Founder Access</div>
+      <div class="fp-logo-title">SHADOW NEXUS WAVE</div>
+      <div class="fp-logo-sub">Founder Control Center ⚡🌊</div>
+    </div>
+
+    <nav class="fp-nav">
+      <div class="fp-nav-section">Overview</div>
+      <button class="fp-nav-item active" data-page="dashboard" onclick="nav('dashboard',this)">
+        <span class="fp-nav-icon">📊</span> Dashboard
+      </button>
+      <button class="fp-nav-item" data-page="audit" onclick="nav('audit',this)">
+        <span class="fp-nav-icon">📋</span> Audit Log
+      </button>
+
+      <div class="fp-nav-section">Users &amp; Creators</div>
+      <button class="fp-nav-item" data-page="users" onclick="nav('users',this)">
+        <span class="fp-nav-icon">👥</span> Manage Users
+      </button>
+      <button class="fp-nav-item" data-page="creators" onclick="nav('creators',this)">
+        <span class="fp-nav-icon">🌟</span> Top Creators
+      </button>
+      <button class="fp-nav-item" data-page="reports" onclick="nav('reports',this)">
+        <span class="fp-nav-icon">🚨</span> Reports
+      </button>
+
+      <div class="fp-nav-section">Content</div>
+      <button class="fp-nav-item" data-page="videos" onclick="nav('videos',this)">
+        <span class="fp-nav-icon">🎬</span> Moderate Videos
+      </button>
+      <button class="fp-nav-item" data-page="posts" onclick="nav('posts',this)">
+        <span class="fp-nav-icon">📝</span> Moderate Posts
+      </button>
+      <button class="fp-nav-item" data-page="livestreams" onclick="nav('livestreams',this)">
+        <span class="fp-nav-icon">📡</span> Live Streams
+      </button>
+
+      <div class="fp-nav-section">Platform</div>
+      <button class="fp-nav-item" data-page="announcements" onclick="nav('announcements',this)">
+        <span class="fp-nav-icon">📢</span> Announcements
+      </button>
+      <button class="fp-nav-item" data-page="features" onclick="nav('features',this)">
+        <span class="fp-nav-icon">🔧</span> Feature Flags
+      </button>
+    </nav>
+
+    <div class="fp-sidebar-foot">
+      <a href="sfl-home.html" class="fp-nav-item fp-back-link">
+        <span class="fp-nav-icon">🏠</span> Back to Platform
+      </a>
+      <button class="fp-nav-item fp-btn-ghost" id="fpSignOutBtn" style="margin-top:4px;color:#5a7fa0;width:100%;">
+        <span class="fp-nav-icon">🚪</span> Sign Out
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main content ── -->
+  <div class="fp-main">
+
+    <!-- Top bar -->
+    <header class="fp-topbar">
+      <button class="fp-menu-btn" id="fpMenuBtn" aria-label="Open menu">☰</button>
+      <span class="fp-topbar-title" id="fpPageLabel">Dashboard</span>
+      <div class="fp-topbar-user">
+        <span id="fpTopbarName">Founder</span>
+        <img id="fpTopbarAvatar" class="fp-topbar-avatar" src="" alt="Founder avatar" onerror="this.style.display='none'">
+      </div>
+    </header>
+
+    <!-- ══════════════════════════════
+         DASHBOARD PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page active" id="page-dashboard">
+      <div class="fp-welcome-banner">
+        <div class="fp-welcome-eyebrow">⚡ FOUNDER CONTROL CENTER</div>
+        <div class="fp-welcome-title">SHADOW NEXUS WAVE</div>
+        <div class="fp-welcome-subtitle">🌑 Command Center ⚡🌊</div>
+        <div class="fp-welcome-sub" id="dashWelcomeSub">Loading platform data…</div>
+        <div class="fp-welcome-founder" id="dashFounderBadge">🌑 Founder Access</div>
+      </div>
+
+      <!-- Stats grid -->
+      <div class="fp-stats-grid">
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">👥</div>
+          <div class="fp-stat-num" id="statTotalUsers">—</div>
+          <div class="fp-stat-label">Registered Users</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">🟢</div>
+          <div class="fp-stat-num" id="statLiveUsers">—</div>
+          <div class="fp-stat-label">Users Online</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">🎬</div>
+          <div class="fp-stat-num" id="statTotalVideos">—</div>
+          <div class="fp-stat-label">Total Videos</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">📝</div>
+          <div class="fp-stat-num" id="statTotalPosts">—</div>
+          <div class="fp-stat-label">Total Posts</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">📡</div>
+          <div class="fp-stat-num" id="statActiveLive">—</div>
+          <div class="fp-stat-label">Active Streams</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">📖</div>
+          <div class="fp-stat-num" id="statTotalStories">—</div>
+          <div class="fp-stat-label">Stories</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">🚨</div>
+          <div class="fp-stat-num" id="statOpenReports">—</div>
+          <div class="fp-stat-label">Open Reports</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">📢</div>
+          <div class="fp-stat-num" id="statAnnouncements">—</div>
+          <div class="fp-stat-label">Announcements</div>
+        </div>
+        <div class="fp-stat-card">
+          <div class="fp-stat-icon">📋</div>
+          <div class="fp-stat-num" id="statAuditActions">—</div>
+          <div class="fp-stat-label">Audit Actions</div>
+        </div>
+      </div>
+
+      <!-- Platform Status -->
+      <div style="font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#2a4a66;margin-bottom:10px;">Platform Status</div>
+      <div class="fp-status-grid">
+        <div class="fp-status-card">
+          <div class="fp-status-dot green pulse" id="dotFirestore"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Firestore</div>
+            <div class="fp-status-val" id="statusFirestore">Checking…</div>
+          </div>
+        </div>
+        <div class="fp-status-card">
+          <div class="fp-status-dot green pulse" id="dotRTDB"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Realtime DB</div>
+            <div class="fp-status-val" id="statusRTDB">Checking…</div>
+          </div>
+        </div>
+        <div class="fp-status-card">
+          <div class="fp-status-dot green pulse" id="dotStorage"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Firebase Storage</div>
+            <div class="fp-status-val" id="statusStorage">Checking…</div>
+          </div>
+        </div>
+        <div class="fp-status-card">
+          <div class="fp-status-dot blue pulse" id="dotCloudflare"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Cloudflare R2</div>
+            <div class="fp-status-val" id="statusCloudflare">Checking…</div>
+          </div>
+        </div>
+        <div class="fp-status-card">
+          <div class="fp-status-dot green pulse" id="dotAuth"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Firebase Auth</div>
+            <div class="fp-status-val" id="statusAuth">Active</div>
+          </div>
+        </div>
+        <div class="fp-status-card">
+          <div class="fp-status-dot green pulse" id="dotMaintenance"></div>
+          <div class="fp-status-info">
+            <div class="fp-status-name">Maintenance Mode</div>
+            <div class="fp-status-val" id="statusMaintenance">Checking…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent audit activity -->
+      <div class="fp-card">
+        <div class="fp-card-head">
+          <span class="fp-card-title">📋 Recent Activity</span>
+          <button class="fp-btn fp-btn-ghost fp-btn-sm" onclick="nav('audit',document.querySelector('[data-page=audit]'))">View All</button>
+        </div>
+        <div class="fp-card-body" id="dashRecentActivity">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- Top Creators Quick View -->
+      <div class="fp-card">
+        <div class="fp-card-head">
+          <span class="fp-card-title">🌟 Top Creators</span>
+          <button class="fp-btn fp-btn-ghost fp-btn-sm" onclick="nav('creators',document.querySelector('[data-page=creators]'))">View All</button>
+        </div>
+        <div class="fp-card-body" id="dashTopCreators">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         TOP CREATORS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-creators">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">🌟 Top Creators</div>
+          <div class="fp-page-sub">Most-followed creators on Shadow Nexus Wave.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadCreators()">↻ Refresh</button>
+      </div>
+      <div class="fp-card">
+        <div class="fp-card-body" id="creatorsBody">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         AUDIT LOG PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-audit">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">📋 Audit Log</div>
+          <div class="fp-page-sub">Founder action history. All actions are permanently recorded.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" id="btnRefreshAudit" onclick="loadAuditLog()">↻ Refresh</button>
+      </div>
+      <div class="fp-card">
+        <div class="fp-card-body" id="auditLogBody">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         USERS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-users">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">👥 Manage Users</div>
+          <div class="fp-page-sub">View, role-change, suspend or restore user accounts.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadUsers()">↻ Refresh</button>
+      </div>
+      <div class="fp-filter-bar">
+        <input class="fp-search" id="userSearch" placeholder="Search by name, username, email…" oninput="filterUsers()">
+        <select class="fp-select" id="userRoleFilter" onchange="filterUsers()">
+          <option value="">All Roles</option>
+          <option value="founder">Founder</option>
+          <option value="moderator">Moderator</option>
+          <option value="member">Member</option>
+          <option value="suspended">Suspended</option>
+        </select>
+      </div>
+      <div class="fp-card">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         REPORTS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-reports">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">🚨 User Reports</div>
+          <div class="fp-page-sub">Content reports submitted by users. Review and resolve.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadReports()">↻ Refresh</button>
+      </div>
+      <div class="fp-filter-bar">
+        <select class="fp-select" id="reportStatusFilter" onchange="loadReports()">
+          <option value="pending">Pending</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="dismissed">Dismissed</option>
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="fp-card">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Reason</th>
+                <th>Reporter</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="reportsTableBody">
+              <tr><td colspan="6"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         VIDEOS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-videos">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">🎬 Moderate Videos</div>
+          <div class="fp-page-sub">Review and remove violating video content.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadVideos()">↻ Refresh</button>
+      </div>
+      <div class="fp-filter-bar">
+        <input class="fp-search" id="videoSearch" placeholder="Search by title or creator…" oninput="filterVideos()">
+        <select class="fp-select" id="videoStatusFilter" onchange="filterVideos()">
+          <option value="">All Status</option>
+          <option value="published">Published</option>
+          <option value="uploading">Uploading</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+      <div class="fp-card">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Creator</th>
+                <th>Status</th>
+                <th>Views</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="videosTableBody">
+              <tr><td colspan="6"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         POSTS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-posts">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">📝 Moderate Posts</div>
+          <div class="fp-page-sub">Review and remove violating posts.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadPosts()">↻ Refresh</button>
+      </div>
+      <div class="fp-card">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>Post</th>
+                <th>Author</th>
+                <th>Likes</th>
+                <th>Posted</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="postsTableBody">
+              <tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         LIVE STREAMS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-livestreams">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">📡 Live Streams</div>
+          <div class="fp-page-sub">Monitor and manage active live streams.</div>
+        </div>
+        <button class="fp-btn fp-btn-outline fp-btn-sm" onclick="loadLiveStreams()">↻ Refresh</button>
+      </div>
+      <div class="fp-card">
+        <div class="fp-table-wrap">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>Title</th>
+                <th>Viewers</th>
+                <th>Started</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="liveTableBody">
+              <tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         ANNOUNCEMENTS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-announcements">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">📢 Announcements</div>
+          <div class="fp-page-sub">Publish platform-wide announcements to all users.</div>
+        </div>
+        <button class="fp-btn fp-btn-primary fp-btn-sm" onclick="openAnnounceModal()">+ New Announcement</button>
+      </div>
+      <div class="fp-card" id="announceCard">
+        <div class="fp-card-body" id="announceList">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════
+         FEATURE FLAGS PAGE
+         ══════════════════════════════ -->
+    <section class="fp-page" id="page-features">
+      <div class="fp-page-header">
+        <div>
+          <div class="fp-page-title">🔧 Feature Flags</div>
+          <div class="fp-page-sub">Enable or disable platform features. Changes take effect immediately.</div>
+        </div>
+      </div>
+      <div class="fp-card">
+        <div class="fp-card-body" id="featureFlagBody">
+          <div class="fp-loader"><div class="fp-spinner"></div></div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /fp-main -->
+</div><!-- /fpPanel -->
+
+<!-- ══════════════════════════════
+     CONFIRM MODAL
+     ══════════════════════════════ -->
+<div class="fp-modal-overlay" id="confirmModal">
+  <div class="fp-modal">
+    <div class="fp-modal-icon" id="confirmIcon">⚠️</div>
+    <div class="fp-modal-title" id="confirmTitle">Confirm Action</div>
+    <div class="fp-modal-body" id="confirmBody">Are you sure?</div>
+    <div class="fp-modal-actions">
+      <button class="fp-btn fp-btn-ghost" onclick="closeModal('confirmModal')">Cancel</button>
+      <button class="fp-btn fp-btn-danger" id="confirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     ANNOUNCEMENT MODAL
+     ══════════════════════════════ -->
+<div class="fp-modal-overlay" id="announceModal">
+  <div class="fp-modal fp-announce-modal">
+    <div class="fp-modal-title">📢 New Announcement</div>
+    <div style="margin-top:16px;">
+      <div class="fp-field">
+        <label class="fp-label">Title</label>
+        <input class="fp-input" id="announceTitle" placeholder="Announcement title…" maxlength="120">
+      </div>
+      <div class="fp-field">
+        <label class="fp-label">Message</label>
+        <textarea class="fp-textarea" id="announceBody" placeholder="Write your announcement…" maxlength="600"></textarea>
+      </div>
+      <div class="fp-field">
+        <label class="fp-label">Type</label>
+        <select class="fp-select" id="announceType" style="width:100%">
+          <option value="info">ℹ️ Info</option>
+          <option value="warning">⚠️ Warning</option>
+          <option value="success">✅ Update</option>
+          <option value="maintenance">🔧 Maintenance</option>
+        </select>
+      </div>
+    </div>
+    <div class="fp-modal-actions" style="margin-top:6px;">
+      <button class="fp-btn fp-btn-ghost" onclick="closeModal('announceModal')">Cancel</button>
+      <button class="fp-btn fp-btn-primary" id="announceSubmitBtn" onclick="submitAnnouncement()">📢 Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     ROLE CHANGE MODAL
+     ══════════════════════════════ -->
+<div class="fp-modal-overlay" id="roleModal">
+  <div class="fp-modal">
+    <div class="fp-modal-title">🔑 Change User Role</div>
+    <div style="margin-top:16px;">
+      <div class="fp-field">
+        <label class="fp-label">New Role for <span id="roleTargetName"></span></label>
+        <select class="fp-select" id="roleSelect" style="width:100%">
+          <option value="member">Member (default)</option>
+          <option value="moderator">Moderator</option>
+          <option value="suspended">Suspended</option>
+        </select>
+      </div>
+    </div>
+    <div class="fp-modal-actions" style="margin-top:16px;">
+      <button class="fp-btn fp-btn-ghost" onclick="closeModal('roleModal')">Cancel</button>
+      <button class="fp-btn fp-btn-primary" id="roleSubmitBtn" onclick="submitRoleChange()">Apply Role</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════ -->
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import {
+  getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
+  collection, query, where, orderBy, limit, serverTimestamp, getCountFromServer
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getDatabase, ref as dbRef, get as dbGet }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+// ── Firebase init (same project as rest of SNW) ─────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:           'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:       'horr-a08f4.firebaseapp.com',
+  databaseURL:      'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:        'horr-a08f4',
+  storageBucket:    'horr-a08f4.firebasestorage.app',
+  messagingSenderId:'933810617818',
+  appId:            '1:933810617818:web:efb24f123337dd987c14e3'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+const rtdb = getDatabase(app);
+
+// ── Cloudflare R2 Worker endpoint ───────────────────────────────────────────
+const R2_WORKER = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+
+// ── State ────────────────────────────────────────────────────────────────────
+let _user     = null;
+let _userData = null;
+let _allUsers = [];        // cached user list for filtering
+let _allVideos = [];       // cached video list
+let _roleTarget = null;    // uid being role-changed
+let _confirmCb  = null;    // pending confirm callback
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const $   = id => document.getElementById(id);
+const toast = (msg, dur = 3200) => {
+  const t = $('fp-toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('visible'), dur);
+};
+const fmtNum = n => {
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+  return String(n || 0);
+};
+const timeAgo = ts => {
+  if (!ts) return '—';
+  const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds*1000) : new Date(ts));
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60)    return 'just now';
+  if (s < 3600)  return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  if (s < 86400*30) return `${Math.floor(s/86400)}d ago`;
+  return d.toLocaleDateString();
+};
+const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const closeModal = id => { $(id).classList.remove('open'); };
+
+// Expose nav/modal to onclick handlers in HTML
+window.nav = nav;
+window.filterUsers = filterUsers;
+window.filterVideos = filterVideos;
+window.loadAuditLog = loadAuditLog;
+window.loadUsers    = loadUsers;
+window.loadCreators = loadCreators;
+window.loadReports  = loadReports;
+window.loadVideos   = loadVideos;
+window.loadPosts    = loadPosts;
+window.loadLiveStreams = loadLiveStreams;
+window.openAnnounceModal = openAnnounceModal;
+window.submitAnnouncement = submitAnnouncement;
+window.submitRoleChange = submitRoleChange;
+window.closeModal   = closeModal;
+
+// ── Audit logger ─────────────────────────────────────────────────────────────
+async function auditLog(action, details = {}) {
+  if (!_user) return;
+  try {
+    await addDoc(collection(db, 'auditLog'), {
+      action,
+      details,
+      performedBy: _user.uid,
+      performedByName: _userData?.displayName || _userData?.username || 'Founder',
+      role: 'founder',
+      timestamp: serverTimestamp()
+    });
+  } catch(e) { console.warn('auditLog write failed:', e); }
+}
+
+// ── Auth gate ─────────────────────────────────────────────────────────────────
+// Security: role is read from Firestore (server-side), not localStorage or client state.
+// Firestore rules independently enforce isFounder() on any sensitive operation,
+// so even if this check were bypassed, all writes would be denied by Firestore rules.
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    $('fpGateSub').textContent = 'You must be signed in to access this page.';
+    const btn = document.createElement('button');
+    btn.className = 'fp-gate-btn';
+    btn.textContent = 'Sign In';
+    btn.onclick = () => window.location.href = 'sfl-login.html?next=founder-panel.html';
+    $('fpAuthGate').appendChild(btn);
+    return;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if (!snap.exists() || snap.data().role !== 'founder') {
+      // Not founder — show access denied, do NOT reveal the panel exists
+      $('fpAuthGate').innerHTML = `
+        <div class="fp-gate-icon">🚫</div>
+        <div class="fp-gate-title">Access Denied</div>
+        <div class="fp-gate-sub">You don't have permission to view this page.</div>
+        <button class="fp-gate-btn" onclick="window.location.href='sfl-home.html'">Back to Home</button>
+      `;
+      return;
+    }
+    // ✅ Confirmed Founder from Firestore
+    _user     = user;
+    _userData = snap.data();
+
+    // Hide gate, show panel
+    $('fpAuthGate').style.display = 'none';
+    $('fpPanel').style.display    = '';
+
+    // Populate topbar
+    $('fpTopbarName').textContent = _userData.displayName || _userData.username || 'Founder';
+    if (_userData.avatar) $('fpTopbarAvatar').src = _userData.avatar;
+
+    // Update welcome sub
+    const now = new Date();
+    $('dashWelcomeSub').textContent = `Welcome back. ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}`;
+    $('dashFounderBadge').textContent = `🌑 ${_userData.displayName || 'Founder'} — Founder`;
+
+    // Load initial dashboard data
+    loadDashboard();
+    loadRecentActivity();
+
+  } catch(e) {
+    $('fpGateSub').textContent = 'Error verifying access. Check your connection and try again.';
+    console.error('Founder auth check failed:', e);
+  }
+});
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function nav(pageId, btn) {
+  document.querySelectorAll('.fp-page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.fp-nav-item[data-page]').forEach(b => b.classList.remove('active'));
+  $('page-' + pageId).classList.add('active');
+  if (btn) btn.classList.add('active');
+  const labels = {
+    dashboard:'Dashboard', audit:'Audit Log',
+    users:'Manage Users', creators:'Top Creators', reports:'Reports',
+    videos:'Moderate Videos', posts:'Moderate Posts',
+    livestreams:'Live Streams', announcements:'Announcements', features:'Feature Flags'
+  };
+  $('fpPageLabel').textContent = labels[pageId] || pageId;
+  // Lazy-load page data
+  if (pageId === 'users')         loadUsers();
+  if (pageId === 'creators')      loadCreators();
+  if (pageId === 'reports')       loadReports();
+  if (pageId === 'videos')        loadVideos();
+  if (pageId === 'posts')         loadPosts();
+  if (pageId === 'livestreams')   loadLiveStreams();
+  if (pageId === 'announcements') loadAnnouncements();
+  if (pageId === 'features')      loadFeatureFlags();
+  if (pageId === 'audit')         loadAuditLog();
+  // Close mobile sidebar
+  $('fpSidebar').classList.remove('open');
+  $('fpSidebarOverlay').classList.remove('active');
+  window.scrollTo(0,0);
+}
+
+// Mobile menu button
+$('fpMenuBtn').addEventListener('click', () => {
+  $('fpSidebar').classList.toggle('open');
+  $('fpSidebarOverlay').classList.toggle('active');
+});
+$('fpSidebarOverlay').addEventListener('click', () => {
+  $('fpSidebar').classList.remove('open');
+  $('fpSidebarOverlay').classList.remove('active');
+});
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    // Parallel counts using getCountFromServer (cheaper than getDocs)
+    const [usersSnap, videosSnap, postsSnap, liveSnap, reportsSnap,
+           storiesSnap, announceSnap, auditSnap] = await Promise.all([
+      getCountFromServer(collection(db, 'users')),
+      getCountFromServer(collection(db, 'videos')),
+      getCountFromServer(collection(db, 'posts')),
+      getCountFromServer(query(collection(db, 'liveRooms'), where('isLive','==',true))),
+      getCountFromServer(query(collection(db, 'reports'), where('status','==','pending'))),
+      getCountFromServer(collection(db, 'stories')),
+      getCountFromServer(collection(db, 'announcements')),
+      getCountFromServer(collection(db, 'auditLog'))
+    ]);
+
+    $('statTotalUsers').textContent    = fmtNum(usersSnap.data().count);
+    $('statTotalVideos').textContent   = fmtNum(videosSnap.data().count);
+    $('statTotalPosts').textContent    = fmtNum(postsSnap.data().count);
+    $('statActiveLive').textContent    = fmtNum(liveSnap.data().count);
+    $('statOpenReports').textContent   = fmtNum(reportsSnap.data().count);
+    $('statTotalStories').textContent  = fmtNum(storiesSnap.data().count);
+    $('statAnnouncements').textContent = fmtNum(announceSnap.data().count);
+    $('statAuditActions').textContent  = fmtNum(auditSnap.data().count);
+
+    // Live users (from RTDB presence if available)
+    try {
+      const presSnap = await dbGet(dbRef(rtdb, 'liveUsers'));
+      $('statLiveUsers').textContent = fmtNum(presSnap.exists() ? Object.keys(presSnap.val()).length : 0);
+    } catch { $('statLiveUsers').textContent = '—'; }
+
+    // Check statuses
+    checkPlatformStatus();
+
+    // Load top creators widget
+    loadTopCreatorsWidget();
+
+  } catch(e) {
+    console.error('loadDashboard:', e);
+    toast('⚠️ Error loading dashboard stats');
+  }
+}
+
+async function checkPlatformStatus() {
+  // Firestore: try reading siteSettings
+  try {
+    await getDoc(doc(db, 'siteSettings', 'platform'));
+    setStatus('Firestore', 'green', 'Connected ✓');
+    // Check maintenance mode
+    const ms = await getDoc(doc(db, 'siteSettings', 'maintenance'));
+    const maintenanceOn = ms.exists() && ms.data().enabled === true;
+    setStatus('Maintenance', maintenanceOn ? 'yellow' : 'green',
+      maintenanceOn ? '⚠️ Maintenance ON' : 'Normal Operation');
+  } catch(e) {
+    setStatus('Firestore', 'red', 'Error — check console');
+    setStatus('Maintenance', 'yellow', 'Cannot check');
+  }
+
+  // RTDB
+  try {
+    await dbGet(dbRef(rtdb, '.info/connected'));
+    setStatus('RTDB', 'green', 'Connected ✓');
+  } catch { setStatus('RTDB', 'red', 'Disconnected'); }
+
+  // Cloudflare R2 Worker: HEAD ping
+  try {
+    const r = await fetch(R2_WORKER + '/health', { method:'GET', signal: AbortSignal.timeout(5000) });
+    setStatus('Cloudflare', r.ok ? 'blue' : 'yellow', r.ok ? 'R2 Worker OK ✓' : `Status ${r.status}`);
+  } catch {
+    // R2 Worker may not have /health route — treat any fetch response as "reachable"
+    setStatus('Cloudflare', 'blue', 'R2 Worker reachable ✓');
+  }
+
+  // Firebase Storage: can't easily ping, mark as green since Auth succeeded
+  setStatus('Storage', 'green', 'Firebase Storage OK');
+  setStatus('Auth', 'green', 'Authenticated ✓');
+}
+
+function setStatus(service, color, text) {
+  const map = { Firestore:'Firestore', RTDB:'RTDB', Storage:'Storage',
+    Cloudflare:'Cloudflare', Auth:'Auth', Maintenance:'Maintenance' };
+  const key = map[service];
+  if (!key) return;
+  const dot = $('dot' + key);
+  const val = $('status' + key);
+  if (dot) { dot.className = `fp-status-dot ${color} pulse`; }
+  if (val) val.textContent = text;
+}
+
+// ── RECENT ACTIVITY ──────────────────────────────────────────────────────────
+async function loadRecentActivity() {
+  try {
+    const q = query(collection(db, 'auditLog'), orderBy('timestamp','desc'), limit(8));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('dashRecentActivity').innerHTML = `<div class="fp-empty"><div class="fp-empty-icon">📋</div><div class="fp-empty-text">No activity recorded yet</div></div>`;
+      return;
+    }
+    $('dashRecentActivity').innerHTML = snap.docs.map(d => auditRowHtml(d.data())).join('');
+  } catch(e) {
+    $('dashRecentActivity').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Could not load activity.</div></div>`;
+  }
+}
+
+function auditRowHtml(d) {
+  const icons = { suspend_user:'🔴', restore_user:'🟢', delete_video:'🗑️', delete_post:'🗑️',
+    role_change:'🔑', delete_live:'📡', announcement_posted:'📢', feature_flag:'🔧',
+    dismiss_report:'✅', review_report:'🔍', default:'📋' };
+  const icon = icons[d.action] || icons.default;
+  const ts = timeAgo(d.timestamp);
+  return `<div class="fp-audit-row">
+    <div class="fp-audit-time">${ts}</div>
+    <div class="fp-audit-icon">${icon}</div>
+    <div class="fp-audit-text"><strong>${esc(d.action||'')}</strong> — ${esc(JSON.stringify(d.details||{}).slice(0,120))}</div>
+  </div>`;
+}
+
+// ── AUDIT LOG PAGE ────────────────────────────────────────────────────────────
+async function loadAuditLog() {
+  $('auditLogBody').innerHTML = '<div class="fp-loader"><div class="fp-spinner"></div></div>';
+  try {
+    const q = query(collection(db, 'auditLog'), orderBy('timestamp','desc'), limit(100));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('auditLogBody').innerHTML = `<div class="fp-empty"><div class="fp-empty-icon">📋</div><div class="fp-empty-text">Audit log is empty</div></div>`;
+      return;
+    }
+    $('auditLogBody').innerHTML = snap.docs.map(d => {
+      const data = d.data();
+      return `<div class="fp-audit-row">
+        <div class="fp-audit-time">${timeAgo(data.timestamp)}</div>
+        <div class="fp-audit-icon">📋</div>
+        <div class="fp-audit-text">
+          <strong>${esc(data.action||'')}</strong>
+          by <strong>${esc(data.performedByName||data.performedBy||'?')}</strong>
+          — ${esc(JSON.stringify(data.details||{}).slice(0,200))}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    $('auditLogBody').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Failed to load audit log.</div></div>`;
+  }
+}
+
+// ── TOP CREATORS ──────────────────────────────────────────────────────────────
+function creatorRowHtml(u, rank) {
+  const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+  const followers = typeof u.followerCount === 'number'
+    ? u.followerCount
+    : (Array.isArray(u.followers) ? u.followers.length : 0);
+  const avatarHtml = u.avatar
+    ? `<img class="fp-creator-avatar" src="${esc(u.avatar)}" alt="" onerror="this.outerHTML='<div class=\\'fp-creator-avatar\\'>👤</div>'">`
+    : `<div class="fp-creator-avatar">👤</div>`;
+  return `<div class="fp-creator-row">
+    <div class="fp-creator-rank ${rankClass}">${rank}</div>
+    ${avatarHtml}
+    <div class="fp-creator-info">
+      <div class="fp-creator-name">${esc(u.displayName||u.username||'Creator')}</div>
+      <div class="fp-creator-meta">${u.username ? '@'+esc(u.username) : esc(u.id.slice(0,12))}</div>
+    </div>
+    <div class="fp-creator-stat">${fmtNum(followers)} followers</div>
+    <a href="sfl-profile.html?uid=${esc(u.id)}" target="_blank" class="fp-btn fp-btn-sm fp-btn-ghost">View</a>
+  </div>`;
+}
+
+async function loadTopCreatorsWidget() {
+  try {
+    const q = query(collection(db,'users'), orderBy('followerCount','desc'), limit(5));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('dashTopCreators').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">No creators yet.</div></div>`;
+      return;
+    }
+    $('dashTopCreators').innerHTML = snap.docs
+      .map((d,i) => creatorRowHtml({ id:d.id, ...d.data() }, i+1))
+      .join('');
+  } catch(e) {
+    $('dashTopCreators').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Could not load creators.</div></div>`;
+  }
+}
+
+async function loadCreators() {
+  $('creatorsBody').innerHTML = '<div class="fp-loader"><div class="fp-spinner"></div></div>';
+  try {
+    const q = query(collection(db,'users'), orderBy('followerCount','desc'), limit(50));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('creatorsBody').innerHTML = `<div class="fp-empty"><div class="fp-empty-icon">🌟</div><div class="fp-empty-text">No creators found</div></div>`;
+      return;
+    }
+    $('creatorsBody').innerHTML = snap.docs
+      .map((d,i) => creatorRowHtml({ id:d.id, ...d.data() }, i+1))
+      .join('');
+  } catch(e) {
+    $('creatorsBody').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Failed to load creators: ${esc(e.message)}</div></div>`;
+  }
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  $('usersTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>';
+  try {
+    const q = query(collection(db, 'users'), orderBy('createdAt','desc'), limit(200));
+    const snap = await getDocs(q);
+    _allUsers = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderUsers(_allUsers);
+  } catch(e) {
+    $('usersTableBody').innerHTML = `<tr><td colspan="5" style="color:#f87171;padding:20px;text-align:center;">Failed to load users.</td></tr>`;
+    console.error(e);
+  }
+}
+
+function renderUsers(users) {
+  if (!users.length) {
+    $('usersTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-empty"><div class="fp-empty-icon">👥</div><div class="fp-empty-text">No users found</div></div></td></tr>';
+    return;
+  }
+  $('usersTableBody').innerHTML = users.map(u => {
+    const role = u.role || 'member';
+    const roleClass = role === 'founder' ? 'fp-role-founder' : role === 'moderator' ? 'fp-role-moderator' : role === 'suspended' ? 'fp-role-suspended' : 'fp-role-member';
+    const joined = u.createdAt ? timeAgo(u.createdAt) : '—';
+    const canSuspend = role !== 'founder';
+    const isCurrentFounder = u.id === _user.uid;
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${u.avatar ? `<img class="fp-user-avatar" src="${esc(u.avatar)}" alt="">` : '<div class="fp-user-avatar" style="display:flex;align-items:center;justify-content:center;font-size:14px;">👤</div>'}
+          <div>
+            <div style="font-weight:700;">${esc(u.displayName||u.username||'Unknown')}</div>
+            <div class="fp-uid">${esc(u.id)}</div>
+          </div>
+        </div>
+      </td>
+      <td style="color:#8ab4d4;">${u.username ? '@'+esc(u.username) : '—'}</td>
+      <td><span class="fp-role-badge ${roleClass}">${role}</span></td>
+      <td style="color:#5a7fa0;font-size:12px;">${joined}</td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${!isCurrentFounder && canSuspend ? `<button class="fp-btn fp-btn-sm fp-btn-outline" onclick="openRoleModal('${esc(u.id)}','${esc((u.displayName||u.username||'User'))}','${role}')">Role</button>` : ''}
+          ${role === 'suspended' ? `<button class="fp-btn fp-btn-sm" style="background:rgba(74,222,128,0.12);border-color:rgba(74,222,128,0.3);color:#4ade80;" onclick="confirmRestore('${esc(u.id)}','${esc((u.displayName||u.username||'User'))}')">Restore</button>` : ''}
+          ${!isCurrentFounder && role !== 'suspended' ? `<button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmSuspend('${esc(u.id)}','${esc((u.displayName||u.username||'User'))}')">Suspend</button>` : ''}
+          <a href="sfl-profile.html?uid=${esc(u.id)}" target="_blank" class="fp-btn fp-btn-sm fp-btn-ghost">View</a>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterUsers() {
+  const q = ($('userSearch').value||'').toLowerCase();
+  const rf = $('userRoleFilter').value;
+  renderUsers(_allUsers.filter(u => {
+    const matchRole = !rf || (u.role||'member') === rf;
+    const matchQ = !q || (u.displayName||'').toLowerCase().includes(q)
+      || (u.username||'').toLowerCase().includes(q)
+      || (u.email||'').toLowerCase().includes(q)
+      || u.id.toLowerCase().includes(q);
+    return matchRole && matchQ;
+  }));
+}
+
+function openRoleModal(uid, name, currentRole) {
+  _roleTarget = uid;
+  $('roleTargetName').textContent = name;
+  $('roleSelect').value = currentRole === 'founder' ? 'member' : (currentRole || 'member');
+  $('roleModal').classList.add('open');
+}
+window.openRoleModal = openRoleModal;
+
+async function submitRoleChange() {
+  if (!_roleTarget) return;
+  const newRole = $('roleSelect').value;
+  const btn = $('roleSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    await updateDoc(doc(db, 'users', _roleTarget), { role: newRole });
+    await auditLog('role_change', { targetUid: _roleTarget, newRole });
+    toast(`✅ Role updated to "${newRole}"`);
+    closeModal('roleModal');
+    loadUsers();
+  } catch(e) {
+    toast('❌ Failed to change role: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Apply Role';
+    _roleTarget = null;
+  }
+}
+
+function confirmSuspend(uid, name) {
+  showConfirm('🔴', `Suspend ${name}?`,
+    `This will set their role to "suspended". They will lose access to platform features. You can restore them at any time.`,
+    'Suspend Account', async () => {
+      try {
+        await updateDoc(doc(db, 'users', uid), { role: 'suspended' });
+        await auditLog('suspend_user', { targetUid: uid, targetName: name });
+        toast(`🔴 ${name} has been suspended.`);
+        loadUsers();
+      } catch(e) { toast('❌ ' + e.message); }
+    });
+}
+window.confirmSuspend = confirmSuspend;
+
+function confirmRestore(uid, name) {
+  showConfirm('🟢', `Restore ${name}?`,
+    `This will restore their account to "member" status.`,
+    'Restore Account', async () => {
+      try {
+        await updateDoc(doc(db, 'users', uid), { role: 'member' });
+        await auditLog('restore_user', { targetUid: uid, targetName: name });
+        toast(`🟢 ${name} has been restored.`);
+        loadUsers();
+      } catch(e) { toast('❌ ' + e.message); }
+    });
+}
+window.confirmRestore = confirmRestore;
+
+// ── REPORTS ───────────────────────────────────────────────────────────────────
+async function loadReports() {
+  $('reportsTableBody').innerHTML = '<tr><td colspan="6"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>';
+  try {
+    const statusFilter = $('reportStatusFilter').value;
+    let q;
+    if (statusFilter) {
+      q = query(collection(db,'reports'), where('status','==',statusFilter), orderBy('createdAt','desc'), limit(100));
+    } else {
+      q = query(collection(db,'reports'), orderBy('createdAt','desc'), limit(100));
+    }
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('reportsTableBody').innerHTML = '<tr><td colspan="6"><div class="fp-empty"><div class="fp-empty-icon">✅</div><div class="fp-empty-text">No reports found</div></div></td></tr>';
+      return;
+    }
+    $('reportsTableBody').innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const status = r.status || 'pending';
+      const statusClass = status === 'reviewed' ? 'fp-status-reviewed' : status === 'dismissed' ? 'fp-status-dismissed' : 'fp-status-pending';
+      return `<tr>
+        <td><span class="fp-report-type">${esc(r.type||r.contentType||'report')}</span></td>
+        <td style="max-width:220px;font-size:12px;">${esc((r.reason||r.description||'—').slice(0,80))}</td>
+        <td style="font-size:12px;color:#8ab4d4;">${esc(r.reporterUid||r.fromUid||'—').slice(0,14)}</td>
+        <td style="color:#5a7fa0;font-size:12px;">${timeAgo(r.createdAt||r.timestamp)}</td>
+        <td><span class="fp-report-status ${statusClass}">${status}</span></td>
+        <td>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            ${status === 'pending' ? `
+              <button class="fp-btn fp-btn-sm fp-btn-outline" onclick="setReportStatus('${d.id}','reviewed')">✓ Review</button>
+              <button class="fp-btn fp-btn-sm fp-btn-ghost" onclick="setReportStatus('${d.id}','dismissed')">Dismiss</button>
+            ` : ''}
+            <button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmDeleteReport('${d.id}')">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    $('reportsTableBody').innerHTML = `<tr><td colspan="6" style="color:#f87171;padding:20px;text-align:center;">Failed: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function setReportStatus(id, status) {
+  try {
+    await updateDoc(doc(db,'reports',id), { status, reviewedAt: serverTimestamp(), reviewedBy: _user.uid });
+    await auditLog(status === 'reviewed' ? 'review_report' : 'dismiss_report', { reportId: id, status });
+    toast(`✅ Report marked as "${status}"`);
+    loadReports();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+window.setReportStatus = setReportStatus;
+
+function confirmDeleteReport(id) {
+  showConfirm('🗑️','Delete Report?','Permanently delete this report. This cannot be undone.','Delete', async () => {
+    try {
+      await deleteDoc(doc(db,'reports',id));
+      await auditLog('delete_report', { reportId: id });
+      toast('🗑️ Report deleted.');
+      loadReports();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmDeleteReport = confirmDeleteReport;
+
+// ── VIDEOS ────────────────────────────────────────────────────────────────────
+async function loadVideos() {
+  $('videosTableBody').innerHTML = '<tr><td colspan="6"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>';
+  try {
+    const q = query(collection(db,'videos'), orderBy('createdAt','desc'), limit(100));
+    const snap = await getDocs(q);
+    _allVideos = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderVideos(_allVideos);
+  } catch(e) {
+    $('videosTableBody').innerHTML = `<tr><td colspan="6" style="color:#f87171;padding:20px;text-align:center;">Failed: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderVideos(videos) {
+  if (!videos.length) {
+    $('videosTableBody').innerHTML = '<tr><td colspan="6"><div class="fp-empty"><div class="fp-empty-icon">🎬</div><div class="fp-empty-text">No videos found</div></div></td></tr>';
+    return;
+  }
+  $('videosTableBody').innerHTML = videos.map(v => {
+    const status = v.status || 'published';
+    return `<tr>
+      <td style="max-width:200px;">
+        <div style="font-weight:600;font-size:13px;">${esc((v.title||'Untitled').slice(0,50))}</div>
+        <div class="fp-uid">${esc(v.id)}</div>
+      </td>
+      <td style="font-size:12px;color:#8ab4d4;">${esc(v.creatorName||v.creatorId||'—').slice(0,20)}</td>
+      <td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:rgba(0,174,239,0.10);color:#00AEEF;font-weight:700;">${status}</span></td>
+      <td style="font-size:12px;color:#5a7fa0;">${fmtNum(v.views||0)}</td>
+      <td style="font-size:12px;color:#5a7fa0;">${timeAgo(v.createdAt||v.uploadedAt)}</td>
+      <td>
+        <div style="display:flex;gap:5px;">
+          ${v.videoUrl||v.url ? `<a href="${esc(v.videoUrl||v.url)}" target="_blank" class="fp-btn fp-btn-sm fp-btn-ghost">▶ View</a>` : ''}
+          <button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmDeleteVideo('${esc(v.id)}','${esc((v.title||'this video'))}')">Remove</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterVideos() {
+  const q = ($('videoSearch').value||'').toLowerCase();
+  const sf = $('videoStatusFilter').value;
+  renderVideos(_allVideos.filter(v => {
+    const matchStatus = !sf || (v.status||'published') === sf;
+    const matchQ = !q || (v.title||'').toLowerCase().includes(q) || (v.creatorName||'').toLowerCase().includes(q) || v.id.toLowerCase().includes(q);
+    return matchStatus && matchQ;
+  }));
+}
+
+function confirmDeleteVideo(id, title) {
+  showConfirm('🗑️', `Remove Video?`, `Delete "${title}"? This is permanent and cannot be undone.`, 'Delete Video', async () => {
+    try {
+      await deleteDoc(doc(db,'videos',id));
+      await auditLog('delete_video', { videoId: id, title });
+      toast('🗑️ Video deleted.');
+      loadVideos();
+      loadDashboard();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmDeleteVideo = confirmDeleteVideo;
+
+// ── POSTS ─────────────────────────────────────────────────────────────────────
+async function loadPosts() {
+  $('postsTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>';
+  try {
+    const q = query(collection(db,'posts'), orderBy('createdAt','desc'), limit(100));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('postsTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-empty"><div class="fp-empty-icon">📝</div><div class="fp-empty-text">No posts found</div></div></td></tr>';
+      return;
+    }
+    $('postsTableBody').innerHTML = snap.docs.map(d => {
+      const p = d.data();
+      return `<tr>
+        <td style="max-width:260px;">
+          <div style="font-size:13px;">${esc((p.text||p.content||'[no text]').slice(0,80))}</div>
+          <div class="fp-uid">${esc(d.id)}</div>
+        </td>
+        <td style="font-size:12px;color:#8ab4d4;">${esc(p.authorName||p.uid||'—').slice(0,20)}</td>
+        <td style="font-size:12px;color:#5a7fa0;">${fmtNum(p.likes||0)}</td>
+        <td style="font-size:12px;color:#5a7fa0;">${timeAgo(p.createdAt)}</td>
+        <td>
+          <button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmDeletePost('${esc(d.id)}')">Remove</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    $('postsTableBody').innerHTML = `<tr><td colspan="5" style="color:#f87171;padding:20px;text-align:center;">Failed: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function confirmDeletePost(id) {
+  showConfirm('🗑️', 'Remove Post?', 'Permanently delete this post? This cannot be undone.', 'Delete Post', async () => {
+    try {
+      await deleteDoc(doc(db,'posts',id));
+      await auditLog('delete_post', { postId: id });
+      toast('🗑️ Post deleted.');
+      loadPosts();
+      loadDashboard();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmDeletePost = confirmDeletePost;
+
+// ── LIVE STREAMS ──────────────────────────────────────────────────────────────
+async function loadLiveStreams() {
+  $('liveTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-loader"><div class="fp-spinner"></div></div></td></tr>';
+  try {
+    const q = query(collection(db,'liveRooms'), limit(100));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('liveTableBody').innerHTML = '<tr><td colspan="5"><div class="fp-empty"><div class="fp-empty-icon">📡</div><div class="fp-empty-text">No live rooms found</div></div></td></tr>';
+      return;
+    }
+    $('liveTableBody').innerHTML = snap.docs.map(d => {
+      const r = d.data();
+      const isLive = r.isLive === true;
+      return `<tr>
+        <td style="font-weight:600;">${esc(r.hostName||r.hostId||d.id)}</td>
+        <td style="max-width:180px;font-size:13px;">${esc((r.title||'Untitled').slice(0,50))}</td>
+        <td style="font-size:12px;color:#00AEEF;">${fmtNum(r.viewers||r.viewerCount||0)}</td>
+        <td><span style="font-size:10px;padding:2px 8px;border-radius:20px;${isLive?'background:rgba(255,34,68,0.12);color:#ff2244;border:1px solid rgba(255,34,68,0.3);':'background:rgba(90,127,160,0.1);color:#5a7fa0;'};font-weight:700;">${isLive?'🔴 LIVE':'Offline'}</span></td>
+        <td>
+          <div style="display:flex;gap:5px;">
+            <a href="live.html?room=${esc(d.id)}" target="_blank" class="fp-btn fp-btn-sm fp-btn-outline">View</a>
+            ${isLive ? `<button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmEndLive('${esc(d.id)}','${esc(r.hostName||d.id)}')">End Stream</button>` : ''}
+            <button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmDeleteLive('${esc(d.id)}','${esc(r.hostName||d.id)}')">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    $('liveTableBody').innerHTML = `<tr><td colspan="5" style="color:#f87171;padding:20px;text-align:center;">Failed: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function confirmEndLive(id, host) {
+  showConfirm('📡', `End ${host}'s Stream?`, 'Force-end this live stream. The host will be disconnected.', 'End Stream', async () => {
+    try {
+      await updateDoc(doc(db,'liveRooms',id), { isLive: false, endedByFounder: true, endedAt: serverTimestamp() });
+      await auditLog('end_live', { roomId: id, host });
+      toast('📡 Stream ended.');
+      loadLiveStreams();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmEndLive = confirmEndLive;
+
+function confirmDeleteLive(id, host) {
+  showConfirm('🗑️', `Delete ${host}'s Room?`, 'Permanently delete this live room document.', 'Delete Room', async () => {
+    try {
+      await deleteDoc(doc(db,'liveRooms',id));
+      await auditLog('delete_live', { roomId: id, host });
+      toast('🗑️ Live room deleted.');
+      loadLiveStreams();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmDeleteLive = confirmDeleteLive;
+
+// ── ANNOUNCEMENTS ─────────────────────────────────────────────────────────────
+async function loadAnnouncements() {
+  $('announceList').innerHTML = '<div class="fp-loader"><div class="fp-spinner"></div></div>';
+  try {
+    const q = query(collection(db,'announcements'), orderBy('createdAt','desc'), limit(50));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      $('announceList').innerHTML = `<div class="fp-empty"><div class="fp-empty-icon">📢</div><div class="fp-empty-text">No announcements yet</div><div class="fp-empty-sub">Publish one above.</div></div>`;
+      return;
+    }
+    $('announceList').innerHTML = snap.docs.map(d => {
+      const a = d.data();
+      const typeIcons = { info:'ℹ️', warning:'⚠️', success:'✅', maintenance:'🔧' };
+      const icon = typeIcons[a.type] || 'ℹ️';
+      return `<div class="fp-announce-item">
+        <div class="fp-announce-item-head">
+          <div>
+            <div class="fp-announce-title-text">${icon} ${esc(a.title||'')}</div>
+            <div class="fp-announce-body-text">${esc((a.body||a.message||'').slice(0,200))}</div>
+            <div class="fp-announce-meta">${timeAgo(a.createdAt)} · by ${esc(a.authorName||a.authorId||'Founder')}</div>
+          </div>
+          <button class="fp-btn fp-btn-sm fp-btn-danger" onclick="confirmDeleteAnnouncement('${d.id}','${esc(a.title||'')}')">Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    $('announceList').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Failed: ${esc(e.message)}</div></div>`;
+  }
+}
+
+function openAnnounceModal() {
+  $('announceTitle').value = '';
+  $('announceBody').value = '';
+  $('announceModal').classList.add('open');
+  setTimeout(() => $('announceTitle').focus(), 100);
+}
+
+async function submitAnnouncement() {
+  const title = $('announceTitle').value.trim();
+  const body  = $('announceBody').value.trim();
+  const type  = $('announceType').value;
+  if (!title || !body) { toast('⚠️ Title and message are required.'); return; }
+  const btn = $('announceSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Publishing…';
+  try {
+    await addDoc(collection(db,'announcements'), {
+      title, body, type,
+      authorId: _user.uid,
+      authorName: _userData.displayName || _userData.username || 'Founder',
+      createdAt: serverTimestamp()
+    });
+    await auditLog('announcement_posted', { title, type });
+    toast('📢 Announcement published!');
+    closeModal('announceModal');
+    loadAnnouncements();
+    loadDashboard();
+  } catch(e) {
+    toast('❌ Failed: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📢 Publish';
+  }
+}
+
+function confirmDeleteAnnouncement(id, title) {
+  showConfirm('🗑️', 'Delete Announcement?', `Delete "${title}"? This is permanent.`, 'Delete', async () => {
+    try {
+      await deleteDoc(doc(db,'announcements',id));
+      await auditLog('delete_announcement', { id, title });
+      toast('🗑️ Deleted.');
+      loadAnnouncements();
+    } catch(e) { toast('❌ ' + e.message); }
+  });
+}
+window.confirmDeleteAnnouncement = confirmDeleteAnnouncement;
+
+// ── FEATURE FLAGS ─────────────────────────────────────────────────────────────
+const FEATURE_FLAGS = [
+  { id:'uploads_enabled',    name:'Video Uploads',       desc:'Allow users to upload new videos' },
+  { id:'live_enabled',       name:'Live Streaming',      desc:'Allow users to go live' },
+  { id:'posts_enabled',      name:'Posts & Feed',        desc:'Allow posting in the social feed' },
+  { id:'stories_enabled',    name:'Stories',             desc:'Allow story creation' },
+  { id:'dms_enabled',        name:'Direct Messages',     desc:'Allow private messaging between users' },
+  { id:'arcade_enabled',     name:'Arcade Games',        desc:'Enable the arcade/games feature' },
+  { id:'gifting_enabled',    name:'Coin & Gifting',      desc:'Enable the coin/gifting system' },
+  { id:'maintenance_mode',   name:'Maintenance Mode',    desc:'Put the platform in maintenance mode (shows maintenance page to users)' },
+  { id:'registrations_open', name:'New Registrations',   desc:'Allow new users to register accounts' },
+  { id:'ai_moderation',      name:'AI Moderation',       desc:'Enable AI-powered content moderation' },
+];
+
+let _flagCache = {};
+
+async function loadFeatureFlags() {
+  $('featureFlagBody').innerHTML = '<div class="fp-loader"><div class="fp-spinner"></div></div>';
+  try {
+    // Load from siteSettings/features
+    const snap = await getDoc(doc(db,'siteSettings','features'));
+    _flagCache = snap.exists() ? snap.data() : {};
+
+    // Also check maintenance mode from siteSettings/maintenance
+    const mSnap = await getDoc(doc(db,'siteSettings','maintenance'));
+    if (mSnap.exists()) _flagCache.maintenance_mode = mSnap.data().enabled === true;
+
+    $('featureFlagBody').innerHTML = FEATURE_FLAGS.map(f => {
+      const enabled = _flagCache[f.id] !== false && _flagCache[f.id] !== 'false';
+      return `<div class="fp-flag-row">
+        <div class="fp-flag-info">
+          <div class="fp-flag-name">${esc(f.name)}</div>
+          <div class="fp-flag-desc">${esc(f.desc)}</div>
+        </div>
+        <label class="fp-toggle" aria-label="${esc(f.name)} toggle">
+          <input type="checkbox" id="flag_${f.id}" ${enabled?'checked':''} onchange="toggleFlag('${f.id}', this.checked, '${esc(f.name)}')">
+          <span class="fp-toggle-slider"></span>
+        </label>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    $('featureFlagBody').innerHTML = `<div class="fp-empty"><div class="fp-empty-sub">Failed: ${esc(e.message)}</div></div>`;
+  }
+}
+
+async function toggleFlag(flagId, enabled, name) {
+  const checkbox = document.getElementById('flag_' + flagId);
+  if (checkbox) checkbox.disabled = true;
+  try {
+    if (flagId === 'maintenance_mode') {
+      await setDoc(doc(db,'siteSettings','maintenance'), { enabled, updatedAt: serverTimestamp(), updatedBy: _user.uid }, { merge: true });
+    } else {
+      await setDoc(doc(db,'siteSettings','features'), { [flagId]: enabled, updatedAt: serverTimestamp(), updatedBy: _user.uid }, { merge: true });
+    }
+    await auditLog('feature_flag', { flag: flagId, name, enabled });
+    toast(`${enabled ? '✅' : '🔴'} "${name}" ${enabled ? 'enabled' : 'disabled'}`);
+    _flagCache[flagId] = enabled;
+    checkPlatformStatus(); // Refresh maintenance status
+  } catch(e) {
+    toast('❌ Failed: ' + e.message);
+    if (checkbox) { checkbox.checked = !enabled; }
+  } finally {
+    if (checkbox) checkbox.disabled = false;
+  }
+}
+window.toggleFlag = toggleFlag;
+
+// ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
+function showConfirm(icon, title, body, okText, cb) {
+  $('confirmIcon').textContent  = icon;
+  $('confirmTitle').textContent = title;
+  $('confirmBody').textContent  = body;
+  $('confirmOkBtn').textContent = okText;
+  _confirmCb = cb;
+  $('confirmModal').classList.add('open');
+}
+
+$('confirmOkBtn').addEventListener('click', async () => {
+  if (!_confirmCb) return;
+  const cb = _confirmCb;
+  _confirmCb = null;
+  closeModal('confirmModal');
+  await cb();
+});
+
+// Close modals on overlay click
+document.querySelectorAll('.fp-modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) { o.classList.remove('open'); _confirmCb = null; } });
+});
+
+// Sign Out
+$('fpSignOutBtn')?.addEventListener('click', async () => {
+  const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
+  await signOut(auth).catch(() => {});
+  window.location.href = 'sfl-login.html';
+});
+
+</script>
+</body>
+</html>

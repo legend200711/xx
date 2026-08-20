@@ -156,6 +156,11 @@
   </nav>
   <div class="sfl-sidebar-footer">
     <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+    <!-- Founder Panel link — shown by JS only if role === 'founder' -->
+    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
+       style="color:#00AEEF;border:1px solid rgba(0,174,239,0.2);border-radius:8px;margin-top:4px;">
+      <span class="sfl-nav-icon">🌑</span> Founder Panel
+    </a>
   </div>
 </aside>
 
@@ -245,7 +250,7 @@ import { getAuth, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, collection, query, where, orderBy, limit,
-  getDocs, onSnapshot, doc, getDoc, updateDoc, arrayUnion, arrayRemove
+  getDocs, onSnapshot, doc, getDoc, updateDoc, arrayUnion, arrayRemove, increment
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const FIREBASE_CONFIG = {
@@ -461,16 +466,27 @@ async function handleFollowToggle(btn) {
     const targetRef = doc(db, 'users', uid);
     const myRef     = doc(db, 'users', _user.uid);
     if(wasFollowing) {
-      await updateDoc(targetRef, { followers: arrayRemove(_user.uid) });
-      await updateDoc(myRef,     { following: arrayRemove(uid) });
+      await updateDoc(targetRef, {
+        followers:     arrayRemove(_user.uid),
+        followerCount: increment(-1)
+      });
+      await updateDoc(myRef, {
+        following:      arrayRemove(uid),
+        followingCount: increment(-1)
+      });
       _followState[uid] = false;
       btn.textContent = 'Follow';
       btn.className   = 'sfl-btn sfl-btn-sm sfl-btn-primary srch-follow-btn';
-      btn.removeAttribute('aria-label');
       btn.setAttribute('aria-label', 'Follow');
     } else {
-      await updateDoc(targetRef, { followers: arrayUnion(_user.uid) });
-      await updateDoc(myRef,     { following: arrayUnion(uid) });
+      await updateDoc(targetRef, {
+        followers:     arrayUnion(_user.uid),
+        followerCount: increment(1)
+      });
+      await updateDoc(myRef, {
+        following:      arrayUnion(uid),
+        followingCount: increment(1)
+      });
       _followState[uid] = true;
       btn.textContent = '✓ Following';
       btn.className   = 'sfl-btn sfl-btn-sm sfl-btn-outline srch-follow-btn is-following';
@@ -478,7 +494,10 @@ async function handleFollowToggle(btn) {
     }
   } catch(e) {
     console.error('Follow toggle error:', e.code, e.message);
-    toast('Could not update follow. Please try again.');
+    const reason = e.code === 'permission-denied'
+      ? 'Permission denied. Please sign out and sign back in.'
+      : 'Unable to follow this account. Please try again.';
+    toast(reason);
   } finally {
     btn.disabled = false;
   }
@@ -824,7 +843,17 @@ if(urlQ) {
   runSearch(urlQ, 'all');
 }
 
-onAuthStateChanged(auth, u => { _user = u; });
+onAuthStateChanged(auth, async u => {
+  _user = u;
+  if (u) {
+    try {
+      const snap = await getDoc(doc(db, 'users', u.uid));
+      if (snap.exists() && snap.data().role === 'founder') {
+        $('sidebarFounderLink')?.classList.remove('sfl-hidden');
+      }
+    } catch(e) {}
+  }
+});
 loadDefault();
 </script>
 

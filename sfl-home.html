@@ -279,6 +279,11 @@
     <a href="sfl-settings.html" class="sfl-nav-item">
       <span class="sfl-nav-icon">⚙️</span> Settings
     </a>
+    <!-- Founder Panel link — shown by JS only if role === 'founder' -->
+    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
+       style="color:#00AEEF;border:1px solid rgba(0,174,239,0.2);border-radius:8px;margin-top:4px;">
+      <span class="sfl-nav-icon">🌑</span> Founder Panel
+    </a>
     <button class="sfl-nav-item" id="sidebarLogout">
       <span class="sfl-nav-icon">🚪</span> Sign Out
     </button>
@@ -745,7 +750,13 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     try {
       const snap = await getDoc(doc(db,'users',user.uid));
-      if (snap.exists()) _userData = snap.data();
+      if (snap.exists()) {
+        _userData = snap.data();
+        // Show Founder Panel link only for the verified founder account
+        if (_userData.role === 'founder') {
+          $('sidebarFounderLink')?.classList.remove('sfl-hidden');
+        }
+      }
     } catch(e) {}
     loadNotifCount(user.uid);
     // Update profile links
