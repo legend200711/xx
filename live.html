@@ -20,8 +20,8 @@
 (function() {
   try {
     var ctrl = JSON.parse(localStorage.getItem('founderFeatureControls') || '{}');
-    // liveEnabled must be explicitly true — defaults OFF until Founder enables
-    var enabled = ctrl.liveEnabled === true;
+    // liveEnabled defaults ON; Founder can explicitly disable by setting false
+    var enabled = ctrl.liveEnabled !== false;
     if (!enabled) {
       document.documentElement.style.background = '#0B1F3A';
       document.write(
