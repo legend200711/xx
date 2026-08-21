@@ -1,14 +1,15 @@
 /**
- * Shadow Nexus Wave Live — live.js
+ * Shadow Nexus Live — live.js
  *
- * Firebase: shadow-nexus-wave (dedicated Wave project)
+ * Firebase split architecture:
  *
- *  Firestore:
+ *  MAIN Firebase (horr-a08f4) — Firestore:
  *    - Auth / user profiles
+ *    - Feed posts, stories, notifications
  *    - Live chat messages  (liveRooms/{roomId}/liveMessages)
  *    - Likes counter       (liveRooms/{roomId}.likes)
  *
- *  LIVE Firebase (Shadow Nexus Wave) — Realtime Database:
+ *  LIVE Firebase (Shadow Nexus Live) — Realtime Database:
  *    - Room status             (liveRooms/{roomId})
  *    - WebRTC per-viewer slots (liveConnections/{roomId}/viewers/{viewerUid})
  *      host writes offer+hostCandidates; viewer writes answer+viewerCandidates
@@ -61,21 +62,20 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 /* ════════════════════════════════════════════════════
-   Shadow Nexus Wave Firebase — dedicated project
-   Project: shadow-nexus-wave
+   MAIN Firebase — live.html is a standalone page.
+   index.html is NOT loaded here — no conflict exists.
    ════════════════════════════════════════════════════ */
 const _CFG = {
-  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:        'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:         'shadow-nexus-wave',
-  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId: '68850298302',
-  appId:             '1:68850298302:web:603bbb8539079903cb1def',
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
 };
 
-const _SNW_APP_NAME = 'shadow-nexus-wave-live';
-const _app    = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(_CFG, _SNW_APP_NAME);
+const _app    = initializeApp(_CFG);
 const _auth   = getAuth(_app);
 const _db     = getFirestore(_app);
 const _liveDB = getDatabase(_app);
@@ -386,17 +386,11 @@ async function _loadUserData() {
 
 /* ── Decide mode from URL hash ── */
 async function _resolveMode() {
-  const hash   = location.hash;
-  const params = new URLSearchParams(location.search);
+  const hash = location.hash;
   localStorage.removeItem('snx_live_intent');
 
-  // Accept both ?room=<roomId> (SNS card links) and #watch=<roomId> (native links)
-  const roomFromParam = params.get('room');
-  const roomFromHash  = hash.startsWith('#watch=') ? decodeURIComponent(hash.slice(7)) : null;
-  const roomId        = roomFromParam || roomFromHash;
-
-  if (roomId) {
-    _roomId = roomId;
+  if (hash.startsWith('#watch=')) {
+    _roomId = hash.slice(7);   // roomId is plain [a-zA-Z0-9_] — no decoding needed
     _mode   = 'viewer';
     document.body.classList.add('is-viewer');
     await _startViewer();

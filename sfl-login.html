@@ -377,6 +377,8 @@ async function ensureWaveProfile(user, overrides = {}) {
 
 /* ── Already signed in → redirect ── */
 onAuthStateChanged(auth, async user => {
+  // Don't redirect when we just deleted the account — stay on the login page.
+  if (params.get('deleted') === '1') return;
   if (user) {
     // Always ensure the Wave profile exists before redirecting.
     await ensureWaveProfile(user).catch(() => {});
@@ -388,6 +390,7 @@ onAuthStateChanged(auth, async user => {
 $('tabSignIn').addEventListener('click', () => showTab('signin'));
 $('tabRegister').addEventListener('click', () => showTab('register'));
 if (params.get('mode') === 'register') showTab('register');
+if (params.get('deleted') === '1') showInfo('Your Shadow Nexus Wave account has been deleted.');
 
 function showTab(tab) {
   $('tabSignIn').classList.toggle('active', tab === 'signin');
