@@ -50,11 +50,24 @@ const FIREBASE_PROJECT  = 'horr-a08f4';
 
 // ─── CORS Helper ──────────────────────────────────────────────────────────────
 
+const ALLOWED_ORIGINS = [
+  'https://shadownexussocial.online',
+  'https://www.shadownexussocial.online',
+  'https://shadowfirelive.com',
+  'https://www.shadowfirelive.com',
+  'https://shadow-nexus-wave.web.app',
+  'https://shadow-nexus-wave.firebaseapp.com',
+];
+
 function corsHeaders(origin, env) {
-  const allowed = env.SNX_ORIGIN || 'https://shadownexussocial.online';
-  const isAllowed = origin && (origin === allowed || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1'));
+  const isAllowed = origin && (
+    ALLOWED_ORIGINS.some(o => origin === o) ||
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://127.0.0.1')
+  );
+  const respondOrigin = isAllowed ? origin : (env.SNX_ORIGIN || ALLOWED_ORIGINS[0]);
   return {
-    'Access-Control-Allow-Origin':  isAllowed ? origin : allowed,
+    'Access-Control-Allow-Origin':  respondOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Firebase-UID, X-Firebase-Token',
     'Access-Control-Max-Age':       '86400',

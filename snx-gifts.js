@@ -42,9 +42,10 @@ function _snxgToast(msg, ms) {
   }
 }
 
-// PayPal Worker base URL — the yellow-term-11e6 worker handles all PayPal routes.
-// This is a different origin from shadownexussocial.online so the URL must be absolute.
-const SNX_PAYPAL_WORKER = 'https://yellow-term-11e6.nthntjrn.workers.dev/paypal';
+// PayPal Worker base URL — the snx-paypal-worker handles all PayPal routes for Wave.
+// This is a different origin from shadowfirelive.com so the URL must be absolute.
+// Wave: snx-paypal-worker.nthntjrn.workers.dev  (NOT yellow-term-11e6 which is Shadow Nexus Social)
+const SNX_PAYPAL_WORKER = 'https://snx-paypal-worker.nthntjrn.workers.dev/paypal';
 
 /**
  * Get the current user's Firebase ID token for backend calls.
