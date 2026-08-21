@@ -62,21 +62,20 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 /* ════════════════════════════════════════════════════
-   Shadow Nexus Wave Firebase — live.html is a standalone page.
-   TARGET PROJECT: shadow-nexus-wave (NOT horr-a08f4 / Shadow Nexus Social).
+   MAIN Firebase — live.html is a standalone page.
    index.html is NOT loaded here — no conflict exists.
    ════════════════════════════════════════════════════ */
 const _CFG = {
-  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:        'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:         'shadow-nexus-wave',
-  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId: '68850298302',
-  appId:             '1:68850298302:web:603bbb8539079903cb1def',
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
 };
 
-const _app    = initializeApp(_CFG, 'shadow-nexus-wave-live');
+const _app    = initializeApp(_CFG);
 const _auth   = getAuth(_app);
 const _db     = getFirestore(_app);
 const _liveDB = getDatabase(_app);
