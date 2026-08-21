@@ -1,7 +1,9 @@
 /**
- * Shadow Nexus Social — Firebase Messaging Service Worker
+ * Shadow Nexus Wave — Firebase Messaging Service Worker
  *
  * Handles background push notifications when the app is closed/locked.
+ * Firebase project: shadow-nexus-wave  (NOT horr-a08f4)
+ *
  * Message flow:
  *   Profile → Message Button → Firebase /chats → pushNotification()
  *   → pushQueue → OS Notification → Notification Center 🔔
@@ -20,12 +22,13 @@ if (!self._snxFbInitialised) {
 
   try {
     firebase.initializeApp({
-      apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-      authDomain:        'horr-a08f4.firebaseapp.com',
-      projectId:         'horr-a08f4',
-      storageBucket:     'horr-a08f4.firebasestorage.app',
-      messagingSenderId: '933810617818',
-      appId:             '1:933810617818:web:efb24f123337dd987c14e3',
+      /* ── Shadow Nexus Wave Firebase config ── */
+      apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+      authDomain:        'shadow-nexus-wave.firebaseapp.com',
+      projectId:         'shadow-nexus-wave',
+      storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+      messagingSenderId: '68850298302',
+      appId:             '1:68850298302:web:603bbb8539079903cb1def',
     });
     console.log('[FCM-SW] Firebase initialised');
   } catch (initErr) {
