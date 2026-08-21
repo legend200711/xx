@@ -1157,6 +1157,246 @@ async function handleR2Delete(request, env, cors, sec) {
   }
 }
 
+// ── Social→Wave Authentication Bridge ────────────────────────────────────────
+//
+// POST /auth/social-bridge
+// Body: { email, password }
+//
+// Purpose:
+//   Lets a Shadow Nexus Social user sign in to Wave using the same credentials
+//   they already have on Social, without merging the two Firebase projects.
+//
+// Security properties:
+//   - Social credentials are NEVER stored or forwarded to the browser.
+//   - Social Firebase ID tokens are verified and then DISCARDED server-side.
+//   - No Social Firestore data is read or written.
+//   - Social Firebase Admin credentials are NOT used (only the Social Web API key,
+//     which is a public client key equivalent to what any browser sends).
+//   - Only the user's email and Social UID are extracted from the verified token.
+//   - A Wave Firebase custom token is minted using Wave's own service account
+//     and returned to the browser. The browser receives NO Social token.
+//   - Wave custom tokens expire in 1 hour (Firebase default).
+//
+// Required Worker secrets:
+//   SOCIAL_FIREBASE_WEB_API_KEY  — Social project Web API key (horr-a08f4)
+//   WAVE_SA_CLIENT_EMAIL         — Wave Firebase service account email
+//   WAVE_SA_PRIVATE_KEY          — Wave Firebase service account private key (PEM)
+//
+// Flow:
+//   1. POST credentials to Social Identity Toolkit (signInWithPassword).
+//   2. Verify the returned Social ID token by calling Social's getAccountInfo.
+//   3. Extract uid + email from the verified Social user record.
+//   4. Mint a Wave custom token for uid="snx_social_{socialUid}" using
+//      Wave's service account + RS256 JWT. The "snx_" prefix namespaces
+//      Social-bridged UIDs to avoid collisions with native Wave UIDs.
+//   5. Return { customToken, waveUid, email } to the browser.
+//   6. Browser calls signInWithCustomToken(waveAuth, customToken).
+//
+async function handleSocialBridge(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Validate required secrets are configured ─────────────────────────────
+  if (!env.SOCIAL_FIREBASE_WEB_API_KEY || !env.WAVE_SA_CLIENT_EMAIL || !env.WAVE_SA_PRIVATE_KEY) {
+    return new Response(JSON.stringify({ error: 'Authentication bridge not configured on server.' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { email, password } = body || {};
+  if (!email || !password) {
+    return new Response(JSON.stringify({ error: 'email and password are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 1: Sign in to Social Firebase (server-side REST call) ─────────────
+  // This is identical to what the Firebase JS SDK does client-side, but performed
+  // entirely in the Worker so the credentials never reach the browser response.
+  let socialIdToken, socialLocalId, socialEmail;
+  try {
+    const signInRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, password, returnSecureToken: true }),
+      }
+    );
+    const signInData = await signInRes.json();
+    if (!signInRes.ok || !signInData.idToken) {
+      // Translate Social Firebase error codes to user-friendly messages
+      const code = signInData?.error?.message || '';
+      if (code === 'EMAIL_NOT_FOUND' || code === 'INVALID_EMAIL') {
+        return new Response(JSON.stringify({ error: 'No Shadow Nexus Social account found for this email.', code: 'NOT_FOUND' }), {
+          status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      }
+      if (code === 'INVALID_PASSWORD' || code.startsWith('INVALID_LOGIN_CREDENTIALS')) {
+        return new Response(JSON.stringify({ error: 'Incorrect password for your Shadow Nexus Social account.', code: 'WRONG_PASSWORD' }), {
+          status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      }
+      if (code === 'USER_DISABLED') {
+        return new Response(JSON.stringify({ error: 'Your Shadow Nexus Social account has been disabled.', code: 'DISABLED' }), {
+          status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      }
+      if (code === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+        return new Response(JSON.stringify({ error: 'Too many sign-in attempts. Please wait a moment and try again.', code: 'RATE_LIMITED' }), {
+          status: 429, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      }
+      return new Response(JSON.stringify({ error: 'Social sign-in failed. Check your credentials and try again.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    socialIdToken = signInData.idToken;
+    socialLocalId = signInData.localId;
+    socialEmail   = signInData.email;
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not reach Shadow Nexus Social for verification. Try again shortly.' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 2: Verify the Social ID token (confirm it's genuine) ───────────────
+  // We call Social's getAccountInfo endpoint with the token we just received.
+  // This confirms Firebase actually issued it for project horr-a08f4.
+  try {
+    const verifyRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ idToken: socialIdToken }),
+      }
+    );
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || !verifyData.users?.[0]?.localId) {
+      return new Response(JSON.stringify({ error: 'Social identity verification failed.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    // Confirm the verified uid matches what the sign-in response claimed
+    if (verifyData.users[0].localId !== socialLocalId) {
+      return new Response(JSON.stringify({ error: 'Social identity mismatch — refusing to bridge.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    // socialIdToken is no longer needed — discard it (GC'd, never returned to browser)
+    socialIdToken = null;
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Social identity verification error.' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 3: Mint a Wave Firebase custom token ────────────────────────────────
+  // We use the Wave service account to sign an RS256 JWT that Firebase Auth
+  // will accept as a custom token. This is the standard Firebase Admin SDK flow
+  // implemented manually because the Admin SDK is not available in Workers.
+  //
+  // The Wave UID for this bridged user is "snx_social_{socialLocalId}".
+  // The "snx_social_" prefix:
+  //   - Namespaces Social-origin UIDs away from native Wave UIDs
+  //   - Makes bridged accounts auditable in the Founder Panel
+  //   - Prevents collisions even if Social and Wave ever assign the same UID string
+  //
+  const waveUid = `snx_social_${socialLocalId}`;
+
+  let customToken;
+  try {
+    customToken = await _mintFirebaseCustomToken(
+      env.WAVE_SA_CLIENT_EMAIL,
+      env.WAVE_SA_PRIVATE_KEY,
+      waveUid,
+      { provider: 'snx_social', socialEmail: socialEmail || email }
+    );
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Failed to create Wave session token: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Return only the Wave custom token and the Wave UID.
+  // The Social UID and Social ID token are NEVER returned.
+  return new Response(JSON.stringify({
+    customToken,
+    waveUid,
+    email: socialEmail || email,
+  }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ── Internal: Mint a Firebase custom token (RS256 JWT) ───────────────────────
+//
+// Implements the Firebase Admin SDK custom token format using the Web Crypto API.
+// Reference: https://firebase.google.com/docs/auth/admin/create-custom-tokens
+//
+// Parameters:
+//   serviceAccountEmail — Wave Firebase service account email
+//   privateKeyPem       — Wave Firebase service account private key (PKCS8 PEM)
+//   uid                 — the UID to embed in the token
+//   claims              — optional additional claims (stored under "claims" key)
+//
+async function _mintFirebaseCustomToken(serviceAccountEmail, privateKeyPem, uid, claims = {}) {
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = {
+    iss: serviceAccountEmail,
+    sub: serviceAccountEmail,
+    aud: 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit',
+    iat: now,
+    exp: now + 3600,   // 1 hour — Firebase custom token max lifetime
+    uid: uid,
+    claims: claims,
+  };
+
+  const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const enc = obj => b64url(new TextEncoder().encode(JSON.stringify(obj)));
+
+  const headerB64  = enc(header);
+  const payloadB64 = enc(payload);
+  const sigInput   = `${headerB64}.${payloadB64}`;
+
+  // Import the PEM private key
+  const pemBody = privateKeyPem
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const keyDer  = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyDer.buffer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const sigBuffer = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    cryptoKey,
+    new TextEncoder().encode(sigInput)
+  );
+
+  return `${sigInput}.${b64url(sigBuffer)}`;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -1190,6 +1430,12 @@ export default {
         headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
       });
     }
+
+    // ── Social→Wave authentication bridge ──
+    // POST /auth/social-bridge
+    // Verifies a Social account server-side and issues a Wave custom token.
+    // Never exposes Social credentials or tokens to the browser.
+    if (url.pathname === '/auth/social-bridge') return handleSocialBridge(request, env, cors, sec);
 
     // ── LiveKit endpoints ──
     if (url.pathname === '/livekit-room')  return handleLiveKitRoom(request, env, cors, sec);

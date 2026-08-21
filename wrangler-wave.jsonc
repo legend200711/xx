@@ -16,13 +16,41 @@
   //    npx wrangler dev   --config wrangler-wave.jsonc
   //
   //  Secrets (set once, never stored here):
-  //    npx wrangler secret put FIREBASE_WEB_API_KEY  --config wrangler-wave.jsonc
-  //    npx wrangler secret put CLOUDFLARE_ACCOUNT_ID --config wrangler-wave.jsonc
-  //    npx wrangler secret put CLOUDFLARE_API_TOKEN  --config wrangler-wave.jsonc
-  //    npx wrangler secret put R2_ACCESS_KEY_ID      --config wrangler-wave.jsonc
-  //    npx wrangler secret put R2_SECRET_ACCESS_KEY  --config wrangler-wave.jsonc
-  //    npx wrangler secret put LIVEKIT_API_KEY       --config wrangler-wave.jsonc
-  //    npx wrangler secret put LIVEKIT_API_SECRET    --config wrangler-wave.jsonc
+  //    npx wrangler secret put FIREBASE_WEB_API_KEY        --config wrangler-wave.jsonc
+  //    npx wrangler secret put CLOUDFLARE_ACCOUNT_ID       --config wrangler-wave.jsonc
+  //    npx wrangler secret put CLOUDFLARE_API_TOKEN        --config wrangler-wave.jsonc
+  //    npx wrangler secret put R2_ACCESS_KEY_ID            --config wrangler-wave.jsonc
+  //    npx wrangler secret put R2_SECRET_ACCESS_KEY        --config wrangler-wave.jsonc
+  //    npx wrangler secret put LIVEKIT_API_KEY             --config wrangler-wave.jsonc
+  //    npx wrangler secret put LIVEKIT_API_SECRET          --config wrangler-wave.jsonc
+  //
+  //  ── Social→Wave Authentication Bridge secrets (POST /auth/social-bridge) ──
+  //
+  //    npx wrangler secret put SOCIAL_FIREBASE_WEB_API_KEY --config wrangler-wave.jsonc
+  //    npx wrangler secret put WAVE_SA_CLIENT_EMAIL        --config wrangler-wave.jsonc
+  //    npx wrangler secret put WAVE_SA_PRIVATE_KEY         --config wrangler-wave.jsonc
+  //
+  //  SOCIAL_FIREBASE_WEB_API_KEY
+  //    = AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y  (Social project horr-a08f4 Web API key)
+  //    This is a public client key (same key the Social browser client uses).
+  //    It is used server-side only to call the Social Identity Toolkit REST API.
+  //    It NEVER grants admin access to Social Firestore or Social Auth admin.
+  //    DO NOT use the Social Firebase Admin SDK service account key here.
+  //
+  //  WAVE_SA_CLIENT_EMAIL  — Wave Firebase service account email
+  //    Get from: Firebase Console → shadow-nexus-wave → Project Settings →
+  //              Service Accounts → Generate new private key → JSON field "client_email"
+  //    Example: firebase-adminsdk-xxxxx@shadow-nexus-wave.iam.gserviceaccount.com
+  //
+  //  WAVE_SA_PRIVATE_KEY   — Wave Firebase service account private key (PKCS8 PEM)
+  //    Get from: same JSON file, field "private_key"
+  //    The value includes "-----BEGIN PRIVATE KEY-----" and "-----END PRIVATE KEY-----".
+  //    When setting via wrangler secret put, paste the full PEM including newlines.
+  //    (wrangler reads from stdin so multiline values are supported)
+  //
+  //  These three secrets power /auth/social-bridge ONLY.
+  //  They do NOT grant Wave any access to Social's Firestore, Auth admin,
+  //  Storage, or any other Social resource.
   //
   //  FIREBASE_WEB_API_KEY = AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE
   //    (the Wave Firebase project's Web API key — NOT the Social key)

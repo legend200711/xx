@@ -101,6 +101,26 @@
 }
 .avatar-pick-btn:hover { background: var(--sfl-bg-hover); }
 
+/* Social bridge button */
+.btn-social-bridge {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 11px 16px;
+  background: rgba(255,100,0,0.08);
+  border: 1px solid rgba(255,100,0,0.35);
+  border-radius: var(--sfl-r-sm);
+  color: #ff8c40;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-top: 0;
+}
+.btn-social-bridge:hover:not(:disabled) {
+  background: rgba(255,100,0,0.15);
+  border-color: rgba(255,100,0,0.55);
+}
+.btn-social-bridge:disabled { opacity: 0.55; cursor: not-allowed; }
+
 @media (max-width: 480px) {
   .login-card { padding: 28px 20px; }
 }
@@ -210,6 +230,37 @@
       Continue with Google
     </button>
 
+    <!-- Shadow Nexus Social bridge -->
+    <div class="login-divider">already on Shadow Nexus Social?</div>
+    <button class="btn-social-bridge" id="btnSocialBridge" type="button">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" stroke="#ff8c40" stroke-width="1.5"/>
+        <path d="M8 12h8M14 9l3 3-3 3" stroke="#ff8c40" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Sign in with Shadow Nexus Social
+    </button>
+    <!-- Bridge credential inputs (hidden until button clicked) -->
+    <div id="socialBridgeForm" class="sfl-hidden" style="margin-top:12px;">
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="bridgeEmail">Social Account Email</label>
+        <input class="sfl-input" id="bridgeEmail" type="email" placeholder="you@example.com"
+          autocomplete="email">
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="bridgePassword">Social Account Password</label>
+        <input class="sfl-input" id="bridgePassword" type="password" placeholder="Your Shadow Nexus Social password"
+          autocomplete="current-password">
+      </div>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="btnBridgeSubmit"
+        type="button" style="width:100%;margin-top:4px;">
+        Continue to Wave
+      </button>
+      <div style="margin-top:10px;font-size:11px;color:var(--sfl-text-faint);line-height:1.6;text-align:center;">
+        Your Social credentials are verified securely on our server.<br>
+        They are never stored, shared, or sent to the browser.
+      </div>
+    </div>
+
     <div style="text-align:center;margin-top:20px;font-size:11px;color:var(--sfl-text-faint);">
       By signing in you agree to the Shadow Nexus Wave terms of service.
     </div>
@@ -243,7 +294,7 @@ import {
   getAuth, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup,
-  updateProfile, fetchSignInMethodsForEmail
+  updateProfile, fetchSignInMethodsForEmail, signInWithCustomToken
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, updateDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -571,6 +622,112 @@ $('forgotLink').addEventListener('click', async () => {
     } else {
       showError(friendlyError(err));
     }
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   SHADOW NEXUS SOCIAL → WAVE AUTHENTICATION BRIDGE
+   ──────────────────────────────────────────────────────────────────────
+   Lets an existing Shadow Nexus Social user sign in to Wave using their
+   Social credentials, without merging the two Firebase projects.
+
+   Security model:
+     - Credentials are sent to the Wave Cloudflare Worker (POST /auth/social-bridge).
+     - The worker verifies them against Social Firebase server-side.
+     - The worker returns a Wave Firebase custom token only — never a Social token.
+     - The browser calls signInWithCustomToken(waveAuth, customToken) to create a
+       normal Wave Firebase session.
+     - Social credentials never appear in any server response.
+     - Social Firebase and Social Cloudflare are NOT modified.
+   ══════════════════════════════════════════════════════════════════════ */
+const WAVE_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+
+/* Toggle the bridge credential panel */
+$('btnSocialBridge').addEventListener('click', () => {
+  const panel = $('socialBridgeForm');
+  const isHidden = panel.classList.contains('sfl-hidden');
+  panel.classList.toggle('sfl-hidden', !isHidden);
+  if (!isHidden) return; // closing — nothing else to do
+  clearMessages();
+  // Pre-fill email from the sign-in form if the user already typed it
+  const existingEmail = $('siEmail').value.trim();
+  if (existingEmail) $('bridgeEmail').value = existingEmail;
+  $('bridgeEmail').focus();
+});
+
+/* Submit the bridge sign-in */
+$('btnBridgeSubmit').addEventListener('click', async () => {
+  clearMessages();
+  const email    = $('bridgeEmail').value.trim();
+  const password = $('bridgePassword').value;
+
+  if (!email)    { showError('Please enter your Shadow Nexus Social email.'); return; }
+  if (!password) { showError('Please enter your Shadow Nexus Social password.'); return; }
+
+  const btn = $('btnBridgeSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Verifying with Shadow Nexus Social…';
+
+  try {
+    // ── POST to Wave Worker bridge endpoint ──────────────────────────────
+    // The worker verifies against Social Firebase and returns a Wave custom token.
+    // No Social token or Social UID is ever included in the response.
+    const res = await fetch(`${WAVE_WORKER_URL}/auth/social-bridge`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email, password }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const msg = data.error || 'Sign-in failed. Check your Social credentials and try again.';
+      showError(msg);
+      btn.disabled = false;
+      btn.textContent = 'Continue to Wave';
+      return;
+    }
+
+    const { customToken, waveUid, email: verifiedEmail } = data;
+    if (!customToken) {
+      showError('Bridge response did not include a session token. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Continue to Wave';
+      return;
+    }
+
+    // ── Sign in to Wave Firebase with the custom token ───────────────────
+    // This is a normal Wave Firebase sign-in — creates a Wave session with
+    // the Wave UID "snx_social_{socialUid}". No Social session is created.
+    btn.textContent = 'Setting up your Wave account…';
+    const cred = await signInWithCustomToken(auth, customToken);
+
+    // Auto-provision the Wave profile (same as email/Google sign-in).
+    // Pass socialEmail so ensureWaveProfile can store it for audit purposes.
+    await ensureWaveProfile(cred.user, {
+      // Use the email as display name fallback if nothing is set yet
+      displayName: cred.user.displayName || verifiedEmail || '',
+      socialEmail: verifiedEmail || email,
+    });
+
+    // onAuthStateChanged will handle the redirect — no explicit redirect needed.
+    // (If for some reason it doesn't fire within 2 s, redirect manually.)
+    setTimeout(() => {
+      if (window.location.pathname !== '/' + redirect) {
+        window.location.href = redirect;
+      }
+    }, 2000);
+
+  } catch (err) {
+    // signInWithCustomToken errors (network, expired token, etc.)
+    const msg = err.code === 'auth/invalid-custom-token'
+      ? 'Wave session token was invalid. Please try again.'
+      : err.code === 'auth/network-request-failed'
+        ? 'Network error. Check your connection and try again.'
+        : 'An error occurred. Please try again.';
+    showError(msg);
+    btn.disabled = false;
+    btn.textContent = 'Continue to Wave';
   }
 });
 </script>
