@@ -1,8 +1,14 @@
 {
-  "projects": {
-    "default": "horr-a08f4"
-  },
+  "//": [
+    "═══════════════════════════════════════════════════════════════════════",
+    " firebase.json — Shadow Nexus SOCIAL configuration",
+    " Firebase project: horr-a08f4",
+    " DO NOT use this file for Shadow Nexus Wave — use firebase-wave.json",
+    "═══════════════════════════════════════════════════════════════════════"
+  ],
   "firestore": {
+    "database": "(default)",
+    "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -39,7 +45,10 @@
       {
         "source": "**/*.@(js|mjs|html|css|png|jpg|webp|svg|ico|json|woff2)",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       }
     ]

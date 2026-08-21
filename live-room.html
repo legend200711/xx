@@ -472,17 +472,18 @@ import {
 import { getDatabase, ref, set, onValue, off, onDisconnect, remove }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
-/* ── Firebase config ── */
+/* ── Shadow Nexus Wave Firebase config ── */
 const _CFG = {
-  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:        'horr-a08f4.firebaseapp.com',
-  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:         'horr-a08f4',
-  storageBucket:     'horr-a08f4.firebasestorage.app',
-  messagingSenderId: '933810617818',
-  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def',
 };
-const _app  = getApps().length ? getApp() : initializeApp(_CFG);
+const _SNW_APP_NAME = 'shadow-nexus-wave';
+const _app  = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(_CFG, _SNW_APP_NAME);
 const _auth = getAuth(_app);
 const _db   = getFirestore(_app);
 const _rtdb = getDatabase(_app);

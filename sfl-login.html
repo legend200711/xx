@@ -218,50 +218,125 @@
 </div>
 
 <script type="module">
+/*
+ * sfl-login.html — Shadow Nexus Wave Authentication
+ *
+ * Firebase project: shadow-nexus-wave  (NOT horr-a08f4)
+ *
+ * Auth flow:
+ *   Email/password  — user signs in or registers with same credentials they use
+ *                     anywhere. Wave Firebase Auth is independent of Social Auth.
+ *                     A Wave Firestore profile is auto-provisioned on first sign-in.
+ *   Google OAuth    — signInWithPopup against the Wave project. The same Google
+ *                     account is recognised by Firebase and creates a Wave-project
+ *                     UID automatically. Profile auto-provisioned on first login.
+ *   New users       — register tab creates a Wave account from scratch.
+ *
+ * Migration note:
+ *   Shadow Nexus Social users can access Wave by signing in with the SAME email
+ *   and password (or Google account) they use on Social. Wave Firebase Auth is a
+ *   separate identity store — it does NOT share users, tokens, or sessions with
+ *   Social (horr-a08f4). Passwords are never copied or transmitted between projects.
+ */
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup,
+  updateProfile, fetchSignInMethodsForEmail
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
+import { getFirestore, doc, setDoc, getDoc, serverTimestamp, updateDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+/* ── Shadow Nexus Wave Firebase config ─────────────────────────────────── */
+/* TARGET PROJECT: shadow-nexus-wave  |  DO NOT change to horr-a08f4       */
 const FIREBASE_CONFIG = {
-  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:'horr-a08f4.firebaseapp.com',
-  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:'horr-a08f4',
-  storageBucket:'horr-a08f4.firebasestorage.app',
-  messagingSenderId:'933810617818',
-  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def'
 };
-const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const _SNW_APP_NAME = 'shadow-nexus-wave';
+const app  = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(FIREBASE_CONFIG, _SNW_APP_NAME);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// R2 Worker endpoint — same as used by sfl-settings.html
-const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+/* ── R2 Worker endpoint (avatar upload) ─────────────────────────────────── */
+// Wave worker endpoint — shadow-nexus-wave (NOT yellow-term-11e6 which is Shadow Nexus Social)
+const R2_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
 
 const $ = id => document.getElementById(id);
 const params   = new URLSearchParams(location.search);
 const redirect = params.get('next') || 'sfl-home.html';
 
 /* ── Avatar file state ── */
-let _avatarFile = null;
+let _avatarFile    = null;
 let _avatarDataURL = null;
 
+/* ══════════════════════════════════════════════════════════════════════
+   ensureWaveProfile
+   ──────────────────────────────────────────────────────────────────────
+   Called after EVERY successful auth (sign-in, register, Google).
+   Creates the /users/{uid} document in the Wave Firestore if it doesn't
+   exist yet, so every authenticated user always has a Wave profile.
+   Never overwrites an existing profile.
+   ══════════════════════════════════════════════════════════════════════ */
+async function ensureWaveProfile(user, overrides = {}) {
+  if (!user) return;
+  const ref = doc(db, 'users', user.uid);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    // Profile exists — only refresh avatar/displayName if they came from Google
+    // and those fields are currently blank in the Wave profile.
+    const d = snap.data();
+    const patch = {};
+    if (!d.avatar    && user.photoURL)    patch.avatar      = user.photoURL;
+    if (!d.displayName && user.displayName) patch.displayName = user.displayName;
+    if (Object.keys(patch).length) {
+      await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() }).catch(() => {});
+    }
+    return;
+  }
+  // First time this user has authenticated on Wave — create their profile.
+  await setDoc(ref, {
+    uid:           user.uid,
+    displayName:   overrides.displayName   || user.displayName || '',
+    username:      overrides.username      || '',
+    email:         user.email              || '',
+    avatar:        overrides.avatar        || user.photoURL    || '',
+    bio:           overrides.bio           || '',
+    role:          'member',
+    followers:     [],
+    following:     [],
+    followerCount: 0,
+    followingCount:0,
+    isLive:        false,
+    liveRoomId:    null,
+    // Link back to Social identity (email only — never UID or token)
+    // This lets the Founder panel show that this Wave user was previously
+    // a Social user, without exposing any Social data.
+    socialEmail:   user.email || null,
+    createdAt:     serverTimestamp(),
+    updatedAt:     serverTimestamp(),
+  });
+}
+
 /* ── Already signed in → redirect ── */
-onAuthStateChanged(auth, user => {
-  if(user) window.location.href = redirect;
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    // Always ensure the Wave profile exists before redirecting.
+    await ensureWaveProfile(user).catch(() => {});
+    window.location.href = redirect;
+  }
 });
 
 /* ── Tab switching ── */
 $('tabSignIn').addEventListener('click', () => showTab('signin'));
 $('tabRegister').addEventListener('click', () => showTab('register'));
-
-// Pre-select register tab if ?mode=register
-if(params.get('mode') === 'register') showTab('register');
+if (params.get('mode') === 'register') showTab('register');
 
 function showTab(tab) {
   $('tabSignIn').classList.toggle('active', tab === 'signin');
@@ -276,7 +351,7 @@ function showError(msg) {
   $('loginError').style.display = 'block';
   $('loginSuccess').style.display = 'none';
 }
-function showSuccess(msg) {
+function showInfo(msg) {
   $('loginSuccess').textContent = msg;
   $('loginSuccess').style.display = 'block';
   $('loginError').style.display = 'none';
@@ -288,15 +363,30 @@ function clearMessages() {
 
 function friendlyError(err) {
   const codes = {
-    'auth/user-not-found':      'No account found with that email.',
-    'auth/wrong-password':      'Incorrect password.',
-    'auth/invalid-email':       'Please enter a valid email address.',
-    'auth/too-many-requests':   'Too many attempts. Please wait and try again.',
-    'auth/email-already-in-use':'An account with this email already exists.',
-    'auth/weak-password':       'Password must be at least 6 characters.',
-    'auth/network-request-failed': 'Network error. Check your connection.',
-    'auth/popup-closed-by-user':'Sign-in cancelled.',
-    'auth/invalid-credential':  'Incorrect email or password.',
+    'auth/user-not-found':
+      'No Wave account found with that email. Use the same password you use on Shadow Nexus Social — or tap "Create Account" to register.',
+    'auth/wrong-password':
+      'Incorrect password. If you normally sign in to Shadow Nexus Social, use that same password here.',
+    'auth/invalid-email':
+      'Please enter a valid email address.',
+    'auth/too-many-requests':
+      'Too many attempts. Please wait a moment and try again.',
+    'auth/email-already-in-use':
+      'An account with this email already exists. Try signing in instead.',
+    'auth/weak-password':
+      'Password must be at least 6 characters.',
+    'auth/network-request-failed':
+      'Network error. Check your connection and try again.',
+    'auth/popup-closed-by-user':
+      'Sign-in window was closed. Please try again.',
+    'auth/invalid-credential':
+      'Incorrect email or password. If you have a Shadow Nexus Social account, use the same password here.',
+    'auth/popup-blocked':
+      'Pop-up was blocked by the browser. Please allow pop-ups for this site and try again.',
+    'auth/cancelled-popup-request':
+      'Sign-in cancelled.',
+    'auth/operation-not-allowed':
+      'This sign-in method is not enabled yet. Please contact support.',
   };
   return codes[err.code] || err.message || 'An error occurred. Please try again.';
 }
@@ -304,7 +394,6 @@ function friendlyError(err) {
 /* ── Avatar picker ── */
 $('avatarPickBtn').addEventListener('click', () => $('avatarFileInput').click());
 $('avatarPreview').addEventListener('click', () => $('avatarFileInput').click());
-
 $('avatarFileInput').addEventListener('change', e => {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -313,13 +402,12 @@ $('avatarFileInput').addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = ev => {
     _avatarDataURL = ev.target.result;
-    const preview = $('avatarPreview');
-    preview.innerHTML = `<img src="${_avatarDataURL}" alt="Preview">`;
+    $('avatarPreview').innerHTML = `<img src="${_avatarDataURL}" alt="Preview">`;
   };
   reader.readAsDataURL(file);
 });
 
-/* Upload avatar to Cloudflare R2 Worker — mirrors sfl-settings.html pattern */
+/* ── Upload avatar to Cloudflare R2 ── */
 async function uploadAvatar(uid, file) {
   return new Promise(resolve => {
     const fd = new FormData();
@@ -329,57 +417,69 @@ async function uploadAvatar(uid, file) {
     xhr.open('POST', R2_WORKER_URL);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          resolve(data.url || '');
-        } catch(_) { resolve(''); }
+        try { resolve(JSON.parse(xhr.responseText).url || ''); }
+        catch(_) { resolve(''); }
       } else { resolve(''); }
     };
-    xhr.onerror = () => resolve('');
-    xhr.ontimeout = () => resolve('');
+    xhr.onerror = xhr.ontimeout = () => resolve('');
     xhr.timeout = 30000;
     xhr.send(fd);
   });
 }
 
-/* Validate username format */
 function validUsername(u) {
   return /^[a-zA-Z0-9_]{2,30}$/.test(u);
 }
 
-/* ── Sign in ── */
+/* ══════════════════════════════════════════════════════════════════════
+   SIGN IN
+   ══════════════════════════════════════════════════════════════════════ */
 $('formSignIn').addEventListener('submit', async e => {
   e.preventDefault();
   clearMessages();
   const email = $('siEmail').value.trim();
   const pass  = $('siPassword').value;
-  if(!email || !pass) { showError('Please enter your email and password.'); return; }
+  if (!email || !pass) { showError('Please enter your email and password.'); return; }
+
   const btn = $('btnSignIn');
   btn.disabled = true; btn.textContent = 'Signing in…';
+
   try {
-    await signInWithEmailAndPassword(auth, email, pass);
-    // onAuthStateChanged will redirect
-  } catch(e) {
-    showError(friendlyError(e));
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    // ensureWaveProfile is called by onAuthStateChanged — no duplicate call needed.
+    // onAuthStateChanged handles the redirect.
+  } catch (err) {
+    // If the user exists on Social but not yet on Wave, show a helpful migration hint.
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      showError(
+        'No Wave account found for this email. ' +
+        'If you have a Shadow Nexus Social account, use the same password here — ' +
+        'or tap "Create Account" to register on Wave.'
+      );
+    } else {
+      showError(friendlyError(err));
+    }
     btn.disabled = false; btn.textContent = 'Sign In';
   }
 });
 
-/* ── Register ── */
+/* ══════════════════════════════════════════════════════════════════════
+   REGISTER
+   ══════════════════════════════════════════════════════════════════════ */
 $('formRegister').addEventListener('submit', async e => {
   e.preventDefault();
   clearMessages();
-  const name     = $('regName').value.trim();
+  const name        = $('regName').value.trim();
   const usernameRaw = $('regUsername').value.trim();
-  const email    = $('regEmail').value.trim();
-  const pass     = $('regPassword').value;
-  const bio      = $('regBio').value.trim();
+  const email       = $('regEmail').value.trim();
+  const pass        = $('regPassword').value;
+  const bio         = $('regBio').value.trim();
 
-  if(!name) { showError('Please enter a display name.'); return; }
-  if(!email) { showError('Please enter your email.'); return; }
-  if(pass.length < 6) { showError('Password must be at least 6 characters.'); return; }
-  if(usernameRaw && !validUsername(usernameRaw)) {
-    showError('Username can only contain letters, numbers, and underscores (2–30 characters).');
+  if (!name)          { showError('Please enter a display name.'); return; }
+  if (!email)         { showError('Please enter your email address.'); return; }
+  if (pass.length < 6){ showError('Password must be at least 6 characters.'); return; }
+  if (usernameRaw && !validUsername(usernameRaw)) {
+    showError('Username: letters, numbers, and underscores only (2–30 chars).');
     return;
   }
 
@@ -387,6 +487,14 @@ $('formRegister').addEventListener('submit', async e => {
   btn.disabled = true; btn.textContent = 'Creating account…';
 
   try {
+    // If a Wave account already exists for this email, sign in instead of failing.
+    const existingMethods = await fetchSignInMethodsForEmail(auth, email).catch(() => []);
+    if (existingMethods.length > 0 && existingMethods.includes('password')) {
+      showError('A Wave account with this email already exists. Use "Sign In" instead.');
+      btn.disabled = false; btn.textContent = 'Create Account';
+      return;
+    }
+
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const uid  = cred.user.uid;
 
@@ -397,87 +505,72 @@ $('formRegister').addEventListener('submit', async e => {
       avatarUrl = await uploadAvatar(uid, _avatarFile);
     }
 
-    // Update Firebase Auth profile
+    // Update Firebase Auth display name / photo
     await updateProfile(cred.user, {
       displayName: name,
-      photoURL: avatarUrl || null,
+      photoURL:    avatarUrl || null,
     });
 
-    // Create user document in Firestore (Shadow Nexus Wave profile structure)
-    const userRef  = doc(db, 'users', uid);
-    const existing = await getDoc(userRef);
-    if(!existing.exists()) {
-      await setDoc(userRef, {
-        uid,
-        displayName:    name,
-        username:       usernameRaw.toLowerCase() || '',
-        email,
-        avatar:         avatarUrl,
-        bio,
-        role:           'member',
-        followers:      [],
-        following:      [],
-        followerCount:  0,
-        followingCount: 0,
-        isLive:         false,
-        liveRoomId:     null,
-        createdAt:      serverTimestamp(),
-        updatedAt:      serverTimestamp(),
-      });
-    }
-    // onAuthStateChanged will redirect
-  } catch(e) {
-    showError(friendlyError(e));
+    // Create the Wave Firestore profile with the registration overrides.
+    // ensureWaveProfile is also called from onAuthStateChanged, but we pass
+    // the registration fields here to populate them before the redirect.
+    await ensureWaveProfile(cred.user, {
+      displayName: name,
+      username:    usernameRaw.toLowerCase() || '',
+      avatar:      avatarUrl,
+      bio,
+    });
+
+    // onAuthStateChanged handles the redirect.
+  } catch (err) {
+    showError(friendlyError(err));
     btn.disabled = false; btn.textContent = 'Create Account';
   }
 });
 
-/* ── Google ── */
+/* ══════════════════════════════════════════════════════════════════════
+   GOOGLE SIGN-IN / SIGN-UP
+   The same Google account recognised on Social will produce a different
+   Wave UID. Wave creates its own /users/{uid} record. No Social data
+   is accessed. No Social tokens are used.
+   ══════════════════════════════════════════════════════════════════════ */
 $('btnGoogle').addEventListener('click', async () => {
   clearMessages();
-  $('btnGoogle').disabled = true;
+  const btn = $('btnGoogle');
+  btn.disabled = true;
   try {
     const provider = new GoogleAuthProvider();
+    // Add scopes: email + profile (defaults, but explicit is clearer)
+    provider.addScope('email');
+    provider.addScope('profile');
     const cred = await signInWithPopup(auth, provider);
-    // Ensure user doc exists
-    const uid = cred.user.uid;
-    const userRef = doc(db, 'users', uid);
-    const existing = await getDoc(userRef);
-    if(!existing.exists()) {
-      await setDoc(userRef, {
-        uid,
-        displayName:    cred.user.displayName || '',
-        username:       '',
-        email:          cred.user.email || '',
-        avatar:         cred.user.photoURL || '',
-        bio:            '',
-        role:           'member',
-        followers:      [],
-        following:      [],
-        followerCount:  0,
-        followingCount: 0,
-        isLive:         false,
-        liveRoomId:     null,
-        createdAt:      serverTimestamp(),
-        updatedAt:      serverTimestamp(),
-      });
-    }
-    // onAuthStateChanged will redirect
-  } catch(e) {
-    showError(friendlyError(e));
-    $('btnGoogle').disabled = false;
+    // ensureWaveProfile is called from onAuthStateChanged.
+    // onAuthStateChanged handles the redirect.
+  } catch (err) {
+    showError(friendlyError(err));
+    btn.disabled = false;
   }
 });
 
-/* ── Forgot password ── */
+/* ══════════════════════════════════════════════════════════════════════
+   FORGOT PASSWORD
+   Sends a Firebase Auth password reset email for the Wave project only.
+   This never touches Shadow Nexus Social's Auth.
+   ══════════════════════════════════════════════════════════════════════ */
 $('forgotLink').addEventListener('click', async () => {
+  clearMessages();
   const email = $('siEmail').value.trim();
-  if(!email) { showError('Enter your email address above first.'); return; }
+  if (!email) { showError('Enter your email address above first.'); return; }
   try {
     await sendPasswordResetEmail(auth, email);
-    showSuccess('Password reset email sent. Check your inbox.');
-  } catch(e) {
-    showError(friendlyError(e));
+    showInfo('Password reset email sent. Check your inbox — it may take a minute.');
+  } catch (err) {
+    if (err.code === 'auth/user-not-found') {
+      // Don't leak whether an account exists — show a neutral message.
+      showInfo('If a Wave account exists for that email, a reset link has been sent.');
+    } else {
+      showError(friendlyError(err));
+    }
   }
 });
 </script>

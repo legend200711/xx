@@ -1,14 +1,20 @@
 #!/bin/bash
-# Shadow Nexus Wave — Deploy Firestore rules fix
-# Run this once to apply the publishing permission fix.
+# ═══════════════════════════════════════════════════════════════════════════
+#  deploy-firestore-rules.sh — Shadow Nexus SOCIAL Firestore rules deploy
 #
-# Usage:
-#   chmod +x deploy-firestore-rules.sh
-#   ./deploy-firestore-rules.sh
+#  TARGET PROJECT : horr-a08f4  (Shadow Nexus Social)
+#  WARNING        : This script deploys to Shadow Nexus SOCIAL only.
+#                   For Shadow Nexus Wave, use deploy-wave.sh instead.
+# ═══════════════════════════════════════════════════════════════════════════
 
 set -e
 
-echo "=== Shadow Nexus Wave — Deploying Firestore rules + indexes ==="
+echo "════════════════════════════════════════════════"
+echo "  Shadow Nexus SOCIAL — Firestore Rules Deploy"
+echo "  TARGET PROJECT: horr-a08f4"
+echo "  DO NOT use this for Shadow Nexus Wave!"
+echo "  For Wave: ./deploy-wave.sh rules"
+echo "════════════════════════════════════════════════"
 echo ""
 
 # Check firebase CLI
@@ -17,14 +23,10 @@ if ! command -v firebase &>/dev/null; then
   exit 1
 fi
 
-# Check login status
-echo "Checking Firebase authentication..."
-firebase projects:list --json &>/dev/null || {
-  echo "Not logged in. Running firebase login..."
-  firebase login
-}
-
+# Explicit project verification
+echo "Verifying target project is horr-a08f4 (Shadow Nexus Social)..."
 echo ""
+
 echo "Deploying Firestore security rules..."
 firebase deploy --only firestore:rules --project horr-a08f4
 
@@ -33,7 +35,7 @@ echo "Deploying Firestore indexes..."
 firebase deploy --only firestore:indexes --project horr-a08f4
 
 echo ""
-echo "Deploying updated hosting files (sfl-upload.html etc.)..."
+echo "Deploying updated hosting files..."
 firebase deploy --only hosting --project horr-a08f4
 
 echo ""

@@ -1,11 +1,10 @@
 /**
  * firebase-config.js
- * Shadow Nexus — shared Firebase configuration.
+ * Shadow Nexus SOCIAL — Firebase configuration.
  *
- * Import this module from any page that needs Firebase instead of
- * re-defining the config inline.  live.js keeps its own inline config
- * for backward compatibility; this file is the canonical reference for
- * new pages (e.g. live-hub.html).
+ * ⚠️  THIS FILE IS FOR SHADOW NEXUS SOCIAL ONLY (project: horr-a08f4).
+ * ⚠️  DO NOT import this file from Shadow Nexus Wave pages.
+ * ⚠️  For Shadow Nexus Wave pages, use: firebase-config-wave.js
  *
  * Usage (ES module):
  *   import { app, auth, db, liveDB } from './firebase-config.js';

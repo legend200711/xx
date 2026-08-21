@@ -1,0 +1,129 @@
+{
+  "rules": {
+
+    // ── Co-Host system ────────────────────────────────────────────────
+    "cohosts": {
+      "$liveId": {
+        "settings": {
+          ".read":  "auth != null",
+          ".write": "auth != null"
+        },
+        "requests": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null"
+          }
+        },
+        "active": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null"
+          }
+        },
+        "removed": {
+          ".read": "auth != null",
+          "$uid": {
+            ".write": "auth != null"
+          }
+        }
+      }
+    },
+
+    // ── Live Rooms ────────────────────────────────────────────────────
+    "liveRooms": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── WebRTC signaling ──────────────────────────────────────────────
+    "liveSignaling": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── Viewer + host presence ────────────────────────────────────────
+    "livePresence": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── WebRTC signaling (legacy live.js) ─────────────────────────────
+    "liveConnections": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── Guest box requests ────────────────────────────────────────────
+    "guestRequests": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── Guest WebRTC signaling ────────────────────────────────────────
+    "guestSignaling": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── Guest presence ────────────────────────────────────────────────
+    "liveGuests": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── Guest→viewer relay signaling ──────────────────────────────────
+    "guestViewerSignaling": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    // ── User presence ─────────────────────────────────────────────────
+    "presence": {
+      "$uid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+
+    // ── Per-user live status ──────────────────────────────────────────
+    "userLive": {
+      "$uid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+
+    // ── Online presence ───────────────────────────────────────────────
+    "users": {
+      "$uid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+
+    // ── Guest Signal (live.js co-host relay) ──────────────────────────
+    "liveSignal": {
+      "$roomId": {
+        ".read":  "auth != null",
+        ".write": "auth != null"
+      }
+    }
+
+  }
+}

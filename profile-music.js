@@ -11,7 +11,8 @@
   const ALLOWED_AUDIO = ['audio/mpeg','audio/mp3','audio/wav','audio/ogg','audio/aac','audio/flac','audio/x-flac','audio/mp4','audio/x-m4a'];
   const ALLOWED_AUDIO_EXT = /\.(mp3|wav|ogg|aac|flac|m4a)$/i;
   const MAX_AUDIO_MB = 200;
-  const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+  // Wave worker endpoint — shadow-nexus-wave (NOT yellow-term-11e6 which is Shadow Nexus Social)
+  const R2_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
   const COLL_SONGS     = 'profileMusic';       // /profileMusic/{songId}
   const COLL_PLAYLISTS = 'profilePlaylists';   // /profilePlaylists/{plId}
   // musicSettings stored as a field inside users/{uid}

@@ -616,16 +616,18 @@ import {
 // convId = [uid1, uid2].sort().join('_')
 // Wave-specific block collection: waveBlocks/{blockerId_blockedId}
 
+/* ── Shadow Nexus Wave Firebase config ── */
 const FIREBASE_CONFIG = {
-  apiKey:'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:'horr-a08f4.firebaseapp.com',
-  databaseURL:'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:'horr-a08f4',
-  storageBucket:'horr-a08f4.firebasestorage.app',
-  messagingSenderId:'933810617818',
-  appId:'1:933810617818:web:efb24f123337dd987c14e3'
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def'
 };
-const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const _SNW_APP_NAME = 'shadow-nexus-wave';
+const app  = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(FIREBASE_CONFIG, _SNW_APP_NAME);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
@@ -898,7 +900,19 @@ $('waveBlockConfirm').addEventListener('click', async () => {
   const path = `waveBlocks/${blockId}`;
 
   try {
-    await setDoc(doc(db, 'waveBlocks', blockId), {
+    // Force-refresh the auth token before writing — prevents stale-token
+    // permission-denied errors when the user has been on the page for a long time.
+    await liveUser.getIdToken(/* forceRefresh */ true);
+
+    // waveBlocks rule: allow update: if false.
+    // setDoc() on an *existing* doc is evaluated as 'update' by Firestore rules,
+    // even with {merge:true} — the merge option only affects data write behaviour,
+    // not rule evaluation.  To guarantee a 'create' evaluation we must ensure the
+    // doc does not exist first.  Delete any stale block doc (silently), then write
+    // a fresh one so Firestore always sees a 'create'.
+    const blockRef = doc(db, 'waveBlocks', blockId);
+    try { await deleteDoc(blockRef); } catch(_) { /* not present — that's fine */ }
+    await setDoc(blockRef, {
       blockerId:   liveUser.uid,
       blockedId:   _targetUid,
       createdAt:   serverTimestamp(),
@@ -910,11 +924,13 @@ $('waveBlockConfirm').addEventListener('click', async () => {
     $('waveBlockOverlay').style.display = 'none';
     toast('User blocked.');
   } catch(e) {
-    console.error(`[Wave Block] block failed — path: ${path}`, e.code, e.message);
+    console.error(`[Wave Block] block failed — path: ${path} — code: ${e.code}`, e.message);
     if (e.code === 'permission-denied') {
-      toast('Block failed: permission denied. You must be signed in as yourself to block users.');
+      toast(`Block failed (${e.code}). Refresh the page and try again.`);
+    } else if (e.code === 'unauthenticated') {
+      toast('Block failed: your session has expired. Please sign in again.');
     } else {
-      toast('Unable to block. Please try again.');
+      toast(`Unable to block (${e.code || 'unknown error'}). Please try again.`);
     }
   } finally {
     btn.disabled = false;
@@ -927,17 +943,21 @@ async function doUnblock(liveUser) {
   const blockId = `${liveUser.uid}_${_targetUid}`;
   const path = `waveBlocks/${blockId}`;
   try {
+    // Force-refresh token before writing to prevent stale-token denials
+    await liveUser.getIdToken(/* forceRefresh */ true);
     await deleteDoc(doc(db, 'waveBlocks', blockId));
     _isBlocked = false;
     updateBlockMenuItem();
     $('btnMessage').style.display = '';
     toast('User unblocked.');
   } catch(e) {
-    console.error(`[Wave Block] unblock failed — path: ${path}`, e.code, e.message);
+    console.error(`[Wave Block] unblock failed — path: ${path} — code: ${e.code}`, e.message);
     if (e.code === 'permission-denied') {
-      toast('Unblock failed: permission denied. You can only remove your own blocks.');
+      toast(`Unblock failed (${e.code}). Refresh the page and try again.`);
+    } else if (e.code === 'unauthenticated') {
+      toast('Unblock failed: your session has expired. Please sign in again.');
     } else {
-      toast('Unable to unblock. Please try again.');
+      toast(`Unable to unblock (${e.code || 'unknown error'}). Please try again.`);
     }
   }
 }
@@ -1094,6 +1114,13 @@ $('btnFollow').addEventListener('click', async () => {
   const myRef     = doc(db, 'users', liveUser.uid);
 
   try {
+    // Force-refresh the auth token before writing.  auth.currentUser can be
+    // non-null while the underlying ID token is expired or mid-refresh; a stale
+    // token causes Firestore to reject the write with permission-denied even
+    // though the user IS authenticated.  getIdToken(true) ensures the token is
+    // valid before any Firestore call is made.
+    await liveUser.getIdToken(/* forceRefresh */ true);
+
     if (wasFollowing) {
       /* ── UNFOLLOW ── */
       // Target doc (profile page loaded → always exists) — use updateDoc
@@ -1144,15 +1171,17 @@ $('btnFollow').addEventListener('click', async () => {
     console.error(
       `[Wave Follow] ${wasFollowing ? 'unfollow' : 'follow'} failed`,
       `target=users/${_targetUid}`, `self=users/${liveUser.uid}`,
-      e.code, e.message
+      `code=${e.code}`, e.message
     );
     // Revert state — button must reflect actual DB state, not optimistic guess
     _following = wasFollowing;
     updateFollowBtn();
     if (e.code === 'permission-denied') {
-      toast('Follow failed: permission denied. Make sure you are signed in.');
+      toast(`Follow failed (${e.code}). Refresh the page and try again.`);
+    } else if (e.code === 'unauthenticated') {
+      toast('Follow failed: your session has expired. Please sign in again.');
     } else {
-      toast('Unable to follow this account. Please try again.');
+      toast(`Unable to follow this account (${e.code || 'unknown error'}). Please try again.`);
     }
   } finally {
     // Always re-enable — no matter what happened above
@@ -1286,6 +1315,8 @@ async function openFollowModal(type) {
         const wasFollowing = btn.dataset.following === 'true';
         btn.disabled = true;
         try {
+          // Force-refresh the token before writing to prevent stale-token denials
+          await liveModalUser.getIdToken(/* forceRefresh */ true);
           const tRef = doc(db, 'users', targetUid);
           const mRef = doc(db, 'users', liveModalUser.uid);
           if (wasFollowing) {
@@ -1348,13 +1379,15 @@ async function openFollowModal(type) {
           console.error(
             `[Wave Follow Modal] ${wasFollowing ? 'unfollow' : 'follow'} failed`,
             `target=users/${targetUid}`, `self=users/${liveModalUser.uid}`,
-            err.code, err.message
+            `code=${err.code}`, err.message
           );
           // Do NOT update btn state — it still reflects the correct DB state
           if (err.code === 'permission-denied') {
-            toast('Follow failed: permission denied. Make sure you are signed in.');
+            toast(`Follow failed (${err.code}). Refresh the page and try again.`);
+          } else if (err.code === 'unauthenticated') {
+            toast('Follow failed: your session has expired. Please sign in again.');
           } else {
-            toast('Unable to follow this account. Please try again.');
+            toast(`Unable to follow this account (${err.code || 'unknown error'}). Please try again.`);
           }
         } finally {
           btn.disabled = false;
@@ -1660,7 +1693,7 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
     const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
     if (streamId) {
       try {
-        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/stream/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
@@ -1676,7 +1709,7 @@ $('profileDeleteConfirm').addEventListener('click', async () => {
     const r2Key = vidData.r2Key || vidData.storageKey || null;
     if (r2Key && !streamId) {
       try {
-        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/r2/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),

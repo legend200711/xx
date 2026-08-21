@@ -1,15 +1,14 @@
 /**
- * Shadow Nexus Live — live.js
+ * Shadow Nexus Wave Live — live.js
  *
- * Firebase split architecture:
+ * Firebase: shadow-nexus-wave (dedicated Wave project)
  *
- *  MAIN Firebase (horr-a08f4) — Firestore:
+ *  Firestore:
  *    - Auth / user profiles
- *    - Feed posts, stories, notifications
  *    - Live chat messages  (liveRooms/{roomId}/liveMessages)
  *    - Likes counter       (liveRooms/{roomId}.likes)
  *
- *  LIVE Firebase (Shadow Nexus Live) — Realtime Database:
+ *  LIVE Firebase (Shadow Nexus Wave) — Realtime Database:
  *    - Room status             (liveRooms/{roomId})
  *    - WebRTC per-viewer slots (liveConnections/{roomId}/viewers/{viewerUid})
  *      host writes offer+hostCandidates; viewer writes answer+viewerCandidates
@@ -62,20 +61,21 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 /* ════════════════════════════════════════════════════
-   MAIN Firebase — live.html is a standalone page.
-   index.html is NOT loaded here — no conflict exists.
+   Shadow Nexus Wave Firebase — dedicated project
+   Project: shadow-nexus-wave
    ════════════════════════════════════════════════════ */
 const _CFG = {
-  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:        'horr-a08f4.firebaseapp.com',
-  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:         'horr-a08f4',
-  storageBucket:     'horr-a08f4.firebasestorage.app',
-  messagingSenderId: '933810617818',
-  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def',
 };
 
-const _app    = initializeApp(_CFG);
+const _SNW_APP_NAME = 'shadow-nexus-wave-live';
+const _app    = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(_CFG, _SNW_APP_NAME);
 const _auth   = getAuth(_app);
 const _db     = getFirestore(_app);
 const _liveDB = getDatabase(_app);

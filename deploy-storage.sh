@@ -1,7 +1,11 @@
 #!/bin/bash
-# Shadow Nexus Wave — deploy Firebase Storage rules + CORS
-# Run this AFTER Firebase Storage has been initialized at:
-# https://console.firebase.google.com/project/horr-a08f4/storage
+# ═══════════════════════════════════════════════════════════════════════════
+#  deploy-storage.sh — Shadow Nexus SOCIAL Storage rules deploy
+#
+#  TARGET PROJECT : horr-a08f4  (Shadow Nexus Social)
+#  WARNING        : This script deploys to Shadow Nexus SOCIAL only.
+#                   For Shadow Nexus Wave storage, use deploy-wave.sh storage
+# ═══════════════════════════════════════════════════════════════════════════
 #
 # Prerequisites:
 #   gcloud CLI installed and authenticated:  gcloud auth login
@@ -15,6 +19,14 @@ set -e
 
 PROJECT_ID="horr-a08f4"
 BUCKET="horr-a08f4.firebasestorage.app"
+
+echo "════════════════════════════════════════════════"
+echo "  Shadow Nexus SOCIAL — Storage Rules Deploy"
+echo "  TARGET PROJECT: $PROJECT_ID"
+echo "  DO NOT use this for Shadow Nexus Wave!"
+echo "  For Wave: ./deploy-wave.sh storage"
+echo "════════════════════════════════════════════════"
+echo ""
 
 echo "=== Shadow Nexus Wave — Storage Deploy ==="
 echo "Project : $PROJECT_ID"
