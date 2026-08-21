@@ -9,6 +9,8 @@ rules_version = '2';
 //
 // Collections in this project:
 //   /users/{uid}                   — Wave user profiles + social graph
+//   /posts/{postId}                — feed posts (live_share, live, etc.)
+//   /stories/{storyId}             — live stories (live indicator in story bar)
 //   /videos/{videoId}              — uploaded video metadata
 //   /videoLikes/{likeId}           — who liked which video
 //   /liveRooms/{uid}               — live stream rooms (one per host)
@@ -25,6 +27,13 @@ rules_version = '2';
 //   /boxRequests/{requestId}       — guest box join requests
 //   /coHostRequests/{requestId}    — co-host invites
 //   /mediaFiles/{fileId}           — R2/Storage upload metadata
+//   /giftTransactions/{id}         — gift audit records (live.html gift watcher)
+//   /giftCatalog/{giftId}          — gift definitions
+//   /wallets/{uid}                 — coin balances (backend-written only)
+//   /coinPurchases/{id}            — purchase records
+//   /creatorEarnings/{uid}         — creator accumulated earnings
+//   /creatorPayouts/{id}           — cash-out requests
+//   /paypalAccounts/{uid}          — creator PayPal connection
 //   /testUsers/{accountId}         — test accounts (dev only)
 //   /testPosts/{postId}            — test posts (dev only)
 //   /founderStats/{docId}          — founder-only platform stats
@@ -222,6 +231,48 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ── Posts ────────────────────────────────────────────────────────────────
+    //
+    //   /posts/{postId}
+    //   Used by live.js for live_share posts and feed posts.
+
+    match /posts/{postId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && (
+          resource.data.uid == request.auth.uid
+          || request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['likes', 'comments', 'isLive'])
+          || isModerator()
+        );
+
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isModerator());
+    }
+
+    // ── Stories ──────────────────────────────────────────────────────────────
+    //
+    //   /stories/{storyId}
+    //   Used by live.js: _createLiveStory / _deleteLiveStory
+    //   storyId = "live_{uid}"
+
+    match /stories/{storyId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isModerator());
+    }
+
     // ── Live Rooms ──────────────────────────────────────────────────────────
     //
     //   /liveRooms/{uid}  — one doc per host, keyed by host uid.
@@ -382,6 +433,56 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow read: if isModerator();
       allow update, delete: if false;
+    }
+
+    // ── Gifting & Monetization ──────────────────────────────────────────────
+    //
+    //   /giftTransactions/{id}   — immutable gift audit records
+    //   /giftCatalog/{giftId}    — gift definitions (public read)
+    //   /wallets/{uid}           — coin balances (backend-written only)
+    //   /coinPurchases/{id}      — purchase records
+    //   /creatorEarnings/{uid}   — creator earnings (backend-written only)
+    //   /creatorPayouts/{id}     — payout requests
+    //   /paypalAccounts/{uid}    — creator PayPal connection status
+
+    match /giftTransactions/{txId} {
+      // live.html listens to this collection to show incoming gift toasts.
+      allow read: if isSignedIn();
+      // Gifts are written by the backend only — clients never write directly.
+      allow write: if false;
+    }
+
+    match /giftCatalog/{giftId} {
+      allow read: if true;
+      allow write: if isFounder();
+    }
+
+    match /wallets/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow write: if false;  // backend only
+    }
+
+    match /coinPurchases/{purchaseId} {
+      allow read: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isFounder());
+      allow write: if false;  // backend only
+    }
+
+    match /creatorEarnings/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow write: if false;  // backend only
+    }
+
+    match /creatorPayouts/{payoutId} {
+      allow read: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isFounder());
+      allow write: if false;  // backend only
+    }
+
+    match /paypalAccounts/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow create, update: if isOwner(uid);
+      allow delete: if isOwner(uid) || isFounder();
     }
 
     // ── Founder Stats ───────────────────────────────────────────────────────

@@ -63,6 +63,14 @@ check_project() {
 
 # ── Deployment functions ──────────────────────────────────────────────────────
 
+deploy_database_rules() {
+  echo "--- Deploying Realtime Database rules → $WAVE_PROJECT ---"
+  firebase deploy --only database \
+    --project "$WAVE_PROJECT" \
+    --config "$WAVE_CONFIG"
+  echo "✅  RTDB rules deployed to $WAVE_PROJECT"
+}
+
 deploy_firestore_rules() {
   echo "--- Deploying Firestore security rules → $WAVE_PROJECT ---"
   firebase deploy --only firestore:rules \
@@ -117,8 +125,13 @@ case "$MODE" in
   hosting)
     deploy_hosting
     ;;
+  database)
+    deploy_database_rules
+    ;;
   all)
     echo "=== Deploying all Wave resources ==="
+    deploy_database_rules
+    echo ""
     deploy_firestore_rules
     echo ""
     deploy_firestore_indexes
@@ -129,7 +142,7 @@ case "$MODE" in
     ;;
   *)
     echo "Unknown mode: $MODE"
-    echo "Valid modes: verify | rules | indexes | storage | hosting | all"
+    echo "Valid modes: verify | database | rules | indexes | storage | hosting | all"
     exit 1
     ;;
 esac
