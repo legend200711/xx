@@ -613,6 +613,14 @@ async function handleUploadChunk(request, env, cors, sec) {
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: mergeHeaders(cors, sec) });
   }
+  const ucCt = (request.headers.get('Content-Type') || '').toLowerCase();
+  if (ucCt && !ucCt.startsWith('multipart/form-data') && !ucCt.startsWith('application/x-www-form-urlencoded')) {
+    return new Response(JSON.stringify({
+      error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${ucCt}`
+    }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
   let fd;
   try { fd = await request.formData(); }
   catch (e) {
@@ -666,6 +674,14 @@ async function handleUploadComplete(request, env, cors, sec) {
   // Videos use /mpu/* endpoints instead.
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: mergeHeaders(cors, sec) });
+  }
+  const ucompCt = (request.headers.get('Content-Type') || '').toLowerCase();
+  if (ucompCt && !ucompCt.startsWith('multipart/form-data') && !ucompCt.startsWith('application/x-www-form-urlencoded')) {
+    return new Response(JSON.stringify({
+      error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${ucompCt}`
+    }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
   }
   let fd;
   try { fd = await request.formData(); }
@@ -1468,6 +1484,14 @@ export default {
     // The client sends: file, uid, path (the full R2 key)
     // Path must start with profiles/{uid}/music/ — enforced server-side.
     if (request.method === 'POST' && url.pathname === '/upload-music') {
+      const umCt = (request.headers.get('Content-Type') || '').toLowerCase();
+      if (umCt && !umCt.startsWith('multipart/form-data') && !umCt.startsWith('application/x-www-form-urlencoded')) {
+        return new Response(JSON.stringify({
+          error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${umCt}`
+        }), {
+          status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      }
       let formData;
       try { formData = await request.formData(); }
       catch (e) {
@@ -1603,6 +1627,20 @@ export default {
       return new Response('Method not allowed', {
         status: 405,
         headers: mergeHeaders(cors, sec)
+      });
+    }
+
+    // Guard: the Workers runtime throws "Unrecognized Content-Type" if the body
+    // is not multipart/form-data or application/x-www-form-urlencoded.
+    // Check the Content-Type upfront and return a clear error rather than letting
+    // the runtime throw a confusing exception.
+    const ct = (request.headers.get('Content-Type') || '').toLowerCase();
+    if (ct && !ct.startsWith('multipart/form-data') && !ct.startsWith('application/x-www-form-urlencoded')) {
+      return new Response(JSON.stringify({
+        error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${ct}`
+      }), {
+        status: 400,
+        headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
       });
     }
 
