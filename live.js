@@ -358,19 +358,60 @@ document.addEventListener('DOMContentLoaded', () => {
     D.stage.classList.toggle('live-controls-hidden');
   });
 
+  // ── Auth state ──
+  // _authResolved: true after the FIRST onAuthStateChanged callback fires.
+  // Guards against redirecting while Firebase is still loading the persisted session.
+  // Also guards against mid-session kick-out if a token-refresh fails (e.g. offline).
+  let _authResolved = false;
+
   onAuthStateChanged(_auth, user => {
     if (!user) {
+      if (!_authResolved) {
+        // First resolution came back null — user is genuinely not signed in.
+        _authResolved = true;
+        _hideLoading();
+        // Redirect to login page so the user can sign in.
+        // Only redirect if we haven't already started a live session.
+        if (!_mode) {
+          // Build the redirect URL back to live.html (preserving hash and query params).
+          // Encode only the value part so the login page's URLSearchParams.get('next') works.
+          const _liveSearch = location.search || '';  // e.g. '?room=abc123'
+          const _liveHash   = location.hash   || '';  // e.g. '#watch=abc123'
+          const _liveNext   = 'live.html' + _liveSearch + _liveHash;
+          window.location.href = 'sfl-login.html?next=' + encodeURIComponent(_liveNext);
+        }
+        return;
+      }
+      // Auth state went null AFTER a session was already established.
+      // This can happen during a token-refresh failure (e.g. network drop, token revoked).
+      // Do NOT redirect — the user is actively live. Show an error instead.
+      if (_mode) {
+        // We are in an active session (creator or viewer). Do not kick out.
+        // Firebase will automatically re-authenticate when connectivity is restored.
+        console.warn('[Live] Auth state became null during active session — likely a transient token refresh failure. Not redirecting.');
+        toast('Connection interrupted — reconnecting…', 5000);
+        return;
+      }
+      // No mode started yet but this is a subsequent null event — still don't redirect
+      // to avoid a race condition loop. Just hide the loading screen.
       _hideLoading();
-      window.location.href = 'index.html';
       return;
     }
+
+    const wasAlreadyResolved = _authResolved;
+    _authResolved = true;
     _user = user;
-    _loadUserData().then(() => {
-      if (D.goLiveBtn) { D.goLiveBtn.disabled = false; }
-      _resolveMode();
-      // ── One-time update check per session ──
-      _checkForUpdate();
-    });
+
+    if (!wasAlreadyResolved) {
+      // First resolution with a real user — normal startup path.
+      _loadUserData().then(() => {
+        if (D.goLiveBtn) { D.goLiveBtn.disabled = false; }
+        _resolveMode();
+        // ── One-time update check per session ──
+        _checkForUpdate();
+      });
+    }
+    // If wasAlreadyResolved: token was refreshed mid-session — nothing to do.
   });
 });
 
@@ -384,13 +425,26 @@ async function _loadUserData() {
   }
 }
 
-/* ── Decide mode from URL hash ── */
+/* ── Decide mode from URL hash or query param ──
+   Supports two equivalent viewer-entry URL forms:
+     live.html#watch=roomId      ← used by share bar, notifications, direct links
+     live.html?room=roomId       ← used by home page / live hub card links
+   Both are equivalent and resolve to viewer mode.
+*/
 async function _resolveMode() {
   const hash = location.hash;
+  const qp   = new URLSearchParams(location.search);
   localStorage.removeItem('snx_live_intent');
 
+  // Viewer: URL hash form  (#watch=roomId)
   if (hash.startsWith('#watch=')) {
     _roomId = hash.slice(7);   // roomId is plain [a-zA-Z0-9_] — no decoding needed
+    _mode   = 'viewer';
+    document.body.classList.add('is-viewer');
+    await _startViewer();
+  // Viewer: query-param form (?room=roomId)  — used by home page live cards
+  } else if (qp.has('room') && qp.get('room')) {
+    _roomId = qp.get('room');
     _mode   = 'viewer';
     document.body.classList.add('is-viewer');
     await _startViewer();
