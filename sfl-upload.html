@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Upload Video — Shadow Nexus Wave</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.upload-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+.upload-drop {
+  border: 2px dashed var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 52px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--sfl-t), border-color var(--sfl-t);
+  background: rgba(0,174,239,0.03);
+  position: relative;
+}
+.upload-drop.drag-over { background: rgba(0,174,239,0.09); border-color: var(--sfl-blue-bright); }
+.upload-drop input[type="file"] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%; }
+.upload-drop-icon { font-size: 48px; margin-bottom: 14px; }
+.upload-drop-title { font-size: 17px; font-weight: 700; color: var(--sfl-text); margin-bottom: 6px; }
+.upload-drop-sub { font-size: 13px; color: var(--sfl-text-muted); }
+
+/* File info card shown after pick */
+.upload-file-info {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.upload-file-info-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+.upload-file-info-details { flex: 1; min-width: 0; }
+.upload-file-info-name {
+  font-size: 13px; font-weight: 700; color: var(--sfl-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.upload-file-info-meta { font-size: 12px; color: var(--sfl-text-muted); }
+
+.upload-preview-wrap {
+  background: #000;
+  border-radius: var(--sfl-r-md);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 20px;
+  aspect-ratio: 16/9;
+  display: flex; align-items: center; justify-content: center;
+}
+.upload-preview-wrap video { width: 100%; height: 100%; object-fit: contain; }
+
+/* ── Upload status panel (shown during upload) ── */
+.upload-status-panel {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.upload-stage-list {
+  display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;
+}
+.upload-stage {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--sfl-text-muted);
+  transition: color 0.2s;
+}
+.upload-stage.active { color: var(--sfl-text); font-weight: 600; }
+.upload-stage.done   { color: var(--sfl-blue); }
+.upload-stage.error  { color: #ff4455; }
+.upload-stage-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--sfl-border); flex-shrink: 0;
+  transition: background 0.2s;
+}
+.upload-stage.active .upload-stage-dot { background: var(--sfl-blue-bright); animation: pulse-dot 1.2s infinite; }
+.upload-stage.done   .upload-stage-dot { background: var(--sfl-blue); }
+.upload-stage.error  .upload-stage-dot { background: #ff4455; }
+@keyframes pulse-dot {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
+.upload-progress-bar {
+  height: 6px;
+  background: var(--sfl-border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sfl-blue) 0%, var(--sfl-flame-hot) 100%);
+  border-radius: 3px;
+  transition: width 0.25s ease;
+  width: 0%;
+}
+
+.upload-pct {
+  font-size: 28px; font-weight: 800; color: var(--sfl-text);
+  line-height: 1; margin-bottom: 6px;
+}
+.upload-bytes {
+  font-size: 13px; color: var(--sfl-text-muted); margin-bottom: 4px;
+}
+.upload-speed {
+  font-size: 12px; color: var(--sfl-text-faint);
+}
+
+.upload-status-label {
+  font-size: 12px; color: var(--sfl-text-muted); margin-top: 10px;
+}
+
+/* ── Retry/fail state ── */
+.upload-fail-panel {
+  background: rgba(255,68,85,0.06);
+  border: 1px solid rgba(255,68,85,0.3);
+  border-radius: var(--sfl-r-md);
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+.upload-fail-panel h3 { font-size: 15px; color: #ff6678; margin: 0 0 8px; }
+.upload-fail-panel p  { font-size: 12px; color: var(--sfl-text-muted); margin: 0 0 14px; }
+
+.upload-thumb-row {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.upload-thumb-preview {
+  width: 140px; height: 79px;
+  border-radius: var(--sfl-r-sm);
+  object-fit: cover;
+  border: 1px solid var(--sfl-border);
+  background: var(--sfl-bg-card);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--sfl-text-faint);
+}
+.upload-thumb-preview img { width:100%;height:100%;object-fit:cover;border-radius:var(--sfl-r-sm); }
+
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag-pill {
+  background: var(--sfl-bg-active);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-full);
+  padding: 4px 10px;
+  font-size: 12px; color: var(--sfl-blue);
+  display: flex; align-items: center; gap: 5px;
+  cursor: default;
+}
+.tag-pill-rm { cursor: pointer; opacity: 0.7; transition: opacity 0.15s; }
+.tag-pill-rm:hover { opacity: 1; color: #ff4455; }
+
+.vis-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.vis-opt {
+  flex: 1; min-width: 120px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  cursor: pointer;
+  transition: border-color var(--sfl-t), background var(--sfl-t);
+  text-align: center;
+}
+.vis-opt.selected { border-color: var(--sfl-border-hot); background: var(--sfl-bg-active); }
+.vis-opt-icon { font-size: 22px; margin-bottom: 4px; }
+.vis-opt-label { font-size: 13px; font-weight: 600; color: var(--sfl-text); }
+.vis-opt-sub { font-size: 11px; color: var(--sfl-text-muted); margin-top: 2px; }
+
+.page-head {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--sfl-border);
+}
+.page-head-back {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--sfl-text); font-size: 18px;
+  cursor: pointer; text-decoration: none;
+  transition: background var(--sfl-t);
+  flex-shrink: 0;
+}
+.page-head-back:hover { background: var(--sfl-bg-hover); }
+.page-head-title { font-size: 18px; font-weight: 800; }
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<!-- Auth gate overlay -->
+<div class="sfl-modal-overlay sfl-hidden" id="authGate">
+  <div class="sfl-modal" style="max-width:380px;text-align:center;">
+    <div class="sfl-modal-body" style="padding:32px 24px;">
+      <div style="font-size:40px;margin-bottom:14px;">🔐</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Sign In Required</div>
+      <p style="font-size:13px;color:var(--sfl-text-label);margin-bottom:20px;line-height:1.6;">
+        You need a Shadow Nexus Wave account to upload videos.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <a href="sfl-login.html" class="sfl-btn sfl-btn-primary">Sign In</a>
+        <a href="sfl-home.html" class="sfl-btn sfl-btn-ghost">Go Back</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="padding-top:0;min-height:100vh;">
+<div class="upload-page" id="uploadPage">
+
+  <div class="page-head">
+    <a href="sfl-home.html" class="page-head-back" aria-label="Back">←</a>
+    <div class="page-head-title">📤 Upload Video</div>
+  </div>
+
+  <!-- Step 1: File picker -->
+  <div id="stepPick">
+    <div class="upload-drop" id="dropZone">
+      <input type="file" id="videoFileInput" accept="video/*" aria-label="Choose video file">
+      <div class="upload-drop-icon">🎬</div>
+      <div class="upload-drop-title">Drag & drop your video here</div>
+      <div class="upload-drop-sub">Or click to browse · MP4, MOV, WebM, MKV · Max 2 GB</div>
+    </div>
+  </div>
+
+  <!-- Step 2: Metadata form (hidden until file chosen) -->
+  <div id="stepMeta" class="sfl-hidden">
+
+    <!-- File info card -->
+    <div class="upload-file-info" id="fileInfoCard">
+      <div class="upload-file-info-icon">🎬</div>
+      <div class="upload-file-info-details">
+        <div class="upload-file-info-name" id="fileInfoName">—</div>
+        <div class="upload-file-info-meta" id="fileInfoMeta">—</div>
+      </div>
+    </div>
+
+    <!-- Video preview -->
+    <div class="upload-preview-wrap" id="videoPreviewWrap">
+      <video id="videoPreview" controls preload="metadata" playsinline></video>
+    </div>
+
+    <!-- Upload progress (shown during active upload) -->
+    <div id="progressWrap" class="sfl-hidden">
+      <div class="upload-status-panel">
+        <!-- Stage list -->
+        <div class="upload-stage-list" id="stageList">
+          <div class="upload-stage" id="stage-prepare">
+            <div class="upload-stage-dot"></div>Preparing upload
+          </div>
+          <div class="upload-stage" id="stage-upload">
+            <div class="upload-stage-dot"></div>Uploading to Cloudflare
+          </div>
+          <div class="upload-stage" id="stage-process">
+            <div class="upload-stage-dot"></div>Processing video…
+          </div>
+          <div class="upload-stage" id="stage-save">
+            <div class="upload-stage-dot"></div>Publishing
+          </div>
+          <div class="upload-stage" id="stage-done">
+            <div class="upload-stage-dot"></div>Published ✓
+          </div>
+        </div>
+
+        <!-- Real progress numbers (visible during upload stage) -->
+        <div id="progressNumbers" class="sfl-hidden">
+          <div class="upload-progress-bar">
+            <div class="upload-progress-fill" id="progressFill"></div>
+          </div>
+          <div class="upload-pct" id="progressPct">0%</div>
+          <div class="upload-bytes" id="progressBytes"> </div>
+          <div class="upload-speed" id="progressSpeed"> </div>
+        </div>
+
+        <div class="upload-status-label" id="progressLabel">Preparing upload…</div>
+      </div>
+
+      <!-- Fail / retry panel -->
+      <div class="upload-fail-panel sfl-hidden" id="failPanel">
+        <h3 id="failTitle">Upload Failed</h3>
+        <p id="failMsg">Network error. Check your connection and try again.</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="sfl-btn sfl-btn-primary" id="retryBtn" type="button">↺ Retry</button>
+          <button class="sfl-btn sfl-btn-ghost" id="failCancelBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thumbnail -->
+    <div class="sfl-form-group">
+      <label class="sfl-label">Thumbnail</label>
+      <div class="upload-thumb-row">
+        <div class="upload-thumb-preview" id="thumbPreview">🖼</div>
+        <div style="flex:1;">
+          <input type="file" id="thumbInput" accept="image/*" class="sfl-input" style="padding:7px 10px;font-size:12px;">
+          <div style="font-size:11px;color:var(--sfl-text-muted);margin-top:6px;">
+            Optional · JPG, PNG, WebP · Recommended: 1280×720
+          </div>
+          <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="autoThumbBtn" style="margin-top:8px;" type="button">
+            📸 Capture from video
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <div class="sfl-form-group">
+      <label class="sfl-label" for="videoTitle">Title <span style="color:var(--sfl-live);">*</span></label>
+      <input class="sfl-input" id="videoTitle" type="text" maxlength="100"
+        placeholder="Give your video a great title…" autocomplete="off">
+      <div class="sfl-char-count"><span id="titleCount">0</span>/100</div>
+    </div>
+
+    <!-- Description -->
+    <div class="sfl-form-group">
+      <label class="sfl-label" for="videoDesc">Description</label>
+      <textarea class="sfl-textarea sfl-input" id="videoDesc" maxlength="2000" rows="4"
+        placeholder="Tell viewers about your video…"></textarea>
+      <div class="sfl-char-count"><span id="descCount">0</span>/2000</div>
+    </div>
+
+    <!-- Category + Tags row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="videoCategory">Category</label>
+        <select class="sfl-input sfl-select" id="videoCategory">
+          <option value="">Select category…</option>
+          <option value="gaming">🎮 Gaming</option>
+          <option value="music">🎵 Music</option>
+          <option value="art">🎨 Art</option>
+          <option value="tech">💻 Tech</option>
+          <option value="sports">⚽ Sports</option>
+          <option value="education">📚 Education</option>
+          <option value="lifestyle">✨ Lifestyle</option>
+          <option value="comedy">😂 Comedy</option>
+          <option value="news">📰 News</option>
+          <option value="other">🔷 Other</option>
+        </select>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="tagInput">Tags</label>
+        <input class="sfl-input" id="tagInput" type="text" maxlength="40"
+          placeholder="Type tag + Enter">
+        <div class="tag-list" id="tagList"></div>
+      </div>
+    </div>
+
+    <!-- Visibility -->
+    <div class="sfl-form-group">
+      <label class="sfl-label">Visibility</label>
+      <div class="vis-row" id="visRow">
+        <div class="vis-opt selected" data-vis="public">
+          <div class="vis-opt-icon">🌐</div>
+          <div class="vis-opt-label">Public</div>
+          <div class="vis-opt-sub">Anyone can watch</div>
+        </div>
+        <div class="vis-opt" data-vis="followers">
+          <div class="vis-opt-icon">👥</div>
+          <div class="vis-opt-label">Followers</div>
+          <div class="vis-opt-sub">Followers only</div>
+        </div>
+        <div class="vis-opt" data-vis="private">
+          <div class="vis-opt-icon">🔒</div>
+          <div class="vis-opt-label">Private</div>
+          <div class="vis-opt-sub">Only you</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="publishBtn">🚀 Publish Video</button>
+      <button class="sfl-btn sfl-btn-ghost" id="cancelUploadBtn" type="button">Cancel</button>
+    </div>
+
+  </div><!-- /stepMeta -->
+
+</div><!-- /uploadPage -->
+</div>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { getAuth, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import { getFirestore, collection, addDoc, doc, updateDoc, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+
+// ── Firebase config (auth + Firestore only — video files go to Cloudflare Stream) ──
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:'shadow-nexus-wave',
+  storageBucket:'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId:'68850298302',
+  appId:'1:68850298302:web:603bbb8539079903cb1def'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── Worker endpoint (keeps Cloudflare API token server-side only) ──
+const WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+
+const $ = id => document.getElementById(id);
+const toast = (msg, dur=3500) => {
+  const t = $('sfl-toast'); t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
+};
+
+// ── Format helpers ──
+function fmtBytes(b) {
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(1) + ' MB';
+}
+function fmtSpeed(bps) {
+  if (bps < 1024 * 1024) return (bps / 1024).toFixed(0) + ' KB/s';
+  return (bps / (1024 * 1024)).toFixed(1) + ' MB/s';
+}
+function fmtEta(secs) {
+  if (secs < 5) return null;
+  if (secs < 60) return `About ${Math.round(secs)} seconds remaining`;
+  return `About ${Math.round(secs / 60)} minutes remaining`;
+}
+
+// ── Upload state ──
+let _user = null, _userData = null;
+let _videoFile = null, _thumbFile = null, _tags = [], _visibility = 'public';
+let _uploading    = false;   // lock to prevent double-submit
+let _cancelled    = false;   // set on cancel to break async loops
+let _sessionId    = null;    // unique ID per upload attempt (prevents duplicates)
+let _pendingDocId = null;    // Firestore doc created early with status='uploading'
+// Cloudflare Stream state (preferred path — requires Stream subscription)
+let _streamId     = null;    // Cloudflare Stream video UID
+let _tusUploadUrl  = null;   // Cloudflare tus endpoint (from /stream/upload-url)
+let _tusOffset     = 0;      // bytes confirmed by Stream server
+let _TUS_CHUNK     = 50 * 1024 * 1024; // 50 MB tus chunk size
+let _pollTimer     = null;   // processing-poll interval id
+// R2 multipart state (fallback path — no Stream subscription required)
+let _r2UploadId   = null;
+let _r2Key        = null;
+let _uploadedParts = [];     // [{ partNumber, etag }]
+let _useR2Fallback = false;  // true once we've confirmed Stream is unavailable
+const PART_SIZE = 10 * 1024 * 1024; // 10 MB parts (R2 minimum is 5 MB)
+// Publishing retry state — set when upload+processing succeeded but Firestore failed
+let _publishRetryReady = false;   // true: upload done, only need to retry Firestore write
+let _publishRetryMeta  = null;    // cached metadata for retry { playbackUrl, thumbnailUrl, duration, r2VideoUrl }
+
+/* ── Auth gate ── */
+onAuthStateChanged(auth, async u => {
+  _user = u;
+  if (!u) { $('authGate').classList.remove('sfl-hidden'); return; }
+  $('authGate').classList.add('sfl-hidden');
+  try {
+    const { getDoc, doc: firestoreDoc } = await import('https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js');
+    const snap = await getDoc(firestoreDoc(db,'users',u.uid));
+    if (snap.exists()) _userData = snap.data();
+  } catch(e) { console.warn('[SFL] User profile fetch failed (non-critical):', e.message); }
+});
+
+/* ── Stage UI helpers ── */
+const STAGES = ['prepare','upload','process','save','done'];
+function setStage(name, status) {
+  const el = $(`stage-${name}`);
+  if (!el) return;
+  STAGES.forEach(s => {
+    const e = $(`stage-${s}`);
+    if (e) e.classList.remove('active','done','error');
+  });
+  const idx = STAGES.indexOf(name);
+  STAGES.slice(0, idx).forEach(s => {
+    const e = $(`stage-${s}`);
+    if (e) e.classList.add('done');
+  });
+  el.classList.add(status);
+}
+
+function showProgressNumbers(show) {
+  $('progressNumbers').classList.toggle('sfl-hidden', !show);
+}
+
+function updateProgress(pct, uploadedBytes, totalBytes, speedBps) {
+  $('progressFill').style.width = `${pct}%`;
+  $('progressPct').textContent = `${Math.round(pct)}%`;
+  $('progressBytes').textContent = totalBytes > 0
+    ? `${fmtBytes(uploadedBytes)} / ${fmtBytes(totalBytes)}`
+    : '';
+  if (speedBps > 0 && uploadedBytes > 0 && totalBytes > 0) {
+    const remaining = totalBytes - uploadedBytes;
+    const etaSecs   = remaining / speedBps;
+    const etaStr    = fmtEta(etaSecs);
+    $('progressSpeed').textContent = fmtSpeed(speedBps) + (etaStr ? `  ·  ${etaStr}` : '');
+  } else {
+    $('progressSpeed').textContent = '';
+  }
+}
+
+/* ── Drag & drop / file pick ── */
+const dropZone = $('dropZone');
+const fileInput = $('videoFileInput');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+// Supported video MIME types
+const SUPPORTED_VIDEO_TYPES = [
+  'video/mp4','video/quicktime','video/webm','video/x-matroska',
+  'video/x-msvideo','video/mpeg','video/ogg','video/3gpp','video/3gpp2',
+  'video/x-m4v','application/octet-stream'
+];
+function isVideoSupported(file) {
+  const mime = file.type.toLowerCase();
+  const ext  = file.name.split('.').pop().toLowerCase();
+  const supportedExts = ['mp4','mov','webm','mkv','avi','mpeg','mpg','m4v','ogv','3gp','3g2'];
+  return SUPPORTED_VIDEO_TYPES.some(t => mime === t || mime.startsWith('video/')) ||
+         supportedExts.includes(ext);
+}
+
+function handleFile(file) {
+  if (!isVideoSupported(file)) {
+    toast('Unsupported file type. Please choose MP4, MOV, WebM or MKV.');
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024 * 1024) {
+    toast('File too large. Maximum size is 2 GB.');
+    return;
+  }
+  if (file.size < 1024) {
+    toast('File appears to be empty.');
+    return;
+  }
+
+  _videoFile  = file;
+  _sessionId  = null; // reset so a fresh session is generated on publish
+  _tusUploadUrl = null; _tusOffset = 0;
+  _r2UploadId = null; _r2Key = null; _uploadedParts = []; _useR2Fallback = false;
+
+  $('fileInfoName').textContent = file.name;
+  $('fileInfoMeta').textContent = `${fmtBytes(file.size)} · ${file.type || 'video'} · Max 2 GB`;
+
+  const objUrl = URL.createObjectURL(file);
+  $('videoPreview').src = objUrl;
+  $('stepPick').classList.add('sfl-hidden');
+  $('stepMeta').classList.remove('sfl-hidden');
+
+  $('videoPreview').onloadedmetadata = () => {
+    const dur = Math.round($('videoPreview').duration);
+    if (!isNaN(dur)) $('videoPreview').dataset.duration = dur;
+  };
+}
+
+/* ── Thumbnail ── */
+$('thumbInput').addEventListener('change', () => {
+  const f = $('thumbInput').files[0];
+  if (!f) return;
+  _thumbFile = f;
+  $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="Thumbnail">`;
+});
+
+$('autoThumbBtn').addEventListener('click', () => {
+  const video = $('videoPreview');
+  if (!video.src) { toast('Load a video first.'); return; }
+  video.currentTime = Math.min((video.duration || 0) * 0.25, 5);
+  video.onseeked = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      _thumbFile = new File([blob], 'thumb.jpg', { type: 'image/jpeg' });
+      $('thumbPreview').innerHTML = `<img src="${URL.createObjectURL(_thumbFile)}" alt="Thumbnail">`;
+      toast('Thumbnail captured!');
+    }, 'image/jpeg', 0.88);
+  };
+});
+
+/* ── Char counts ── */
+$('videoTitle').addEventListener('input', () => $('titleCount').textContent = $('videoTitle').value.length);
+$('videoDesc').addEventListener('input',  () => $('descCount').textContent  = $('videoDesc').value.length);
+
+/* ── Tags ── */
+$('tagInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = $('tagInput').value.trim().replace(/,/g,'').toLowerCase();
+    if (val && !_tags.includes(val) && _tags.length < 10) { _tags.push(val); renderTags(); }
+    $('tagInput').value = '';
+  }
+});
+function renderTags() {
+  $('tagList').innerHTML = _tags.map((t,i) =>
+    `<div class="tag-pill">#${t}<span class="tag-pill-rm" data-i="${i}">✕</span></div>`
+  ).join('');
+  $('tagList').querySelectorAll('.tag-pill-rm').forEach(btn =>
+    btn.addEventListener('click', () => { _tags.splice(+btn.dataset.i,1); renderTags(); })
+  );
+}
+
+/* ── Visibility ── */
+document.querySelectorAll('.vis-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.vis-opt').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    _visibility = opt.dataset.vis;
+  });
+});
+
+/* ── Reset UI fully ── */
+function resetUI() {
+  _videoFile = null; _thumbFile = null; _tags = []; _visibility = 'public';
+  _sessionId = null; _uploading = false; _cancelled = false; _pendingDocId = null;
+  _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
+  _r2UploadId = null; _r2Key = null; _uploadedParts = []; _useR2Fallback = false;
+  _publishRetryReady = false; _publishRetryMeta = null;
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  $('videoPreview').src = '';
+  $('videoTitle').value = '';
+  $('videoDesc').value  = '';
+  $('tagList').innerHTML = '';
+  $('thumbPreview').innerHTML = '🖼';
+  $('titleCount').textContent = '0';
+  $('descCount').textContent  = '0';
+  $('fileInfoName').textContent = '—';
+  $('fileInfoMeta').textContent = '—';
+  $('progressFill').style.width = '0%';
+  $('progressPct').textContent  = '0%';
+  $('progressBytes').textContent = '';
+  $('progressSpeed').textContent = '';
+  $('progressLabel').textContent = 'Preparing upload…';
+  if ($('failTitle')) $('failTitle').textContent = 'Upload Failed';
+  if ($('retryBtn')) $('retryBtn').textContent = '↺ Retry';
+  STAGES.forEach(s => {
+    const e = $(`stage-${s}`);
+    if (e) e.classList.remove('active','done','error');
+  });
+  $('progressWrap').classList.add('sfl-hidden');
+  $('failPanel').classList.add('sfl-hidden');
+  showProgressNumbers(false);
+  $('stepMeta').classList.add('sfl-hidden');
+  $('stepPick').classList.remove('sfl-hidden');
+  $('publishBtn').disabled = false;
+  $('publishBtn').textContent = '🚀 Publish Video';
+}
+
+/* ── Mark upload doc failed ── */
+function markDocFailed(reason) {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  if (_pendingDocId) {
+    updateDoc(doc(db,'videos',_pendingDocId), {
+      status: 'failed',
+      failReason: reason || 'Upload cancelled',
+      updatedAt: serverTimestamp()
+    }).catch(()=>{});
+    _pendingDocId = null;
+  }
+}
+
+/* ── Cancel button ── */
+$('cancelUploadBtn').addEventListener('click', () => {
+  _cancelled = true;
+  _uploading = false;
+  markDocFailed('Cancelled by user');
+  // If an R2 multipart upload was in progress, clean it up
+  if (_r2UploadId && _r2Key) {
+    fetch(`${WORKER_URL}/mpu/abort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId }),
+    }).catch(() => {});
+  }
+  resetUI();
+});
+
+$('failCancelBtn').addEventListener('click', () => {
+  _cancelled = true;
+  markDocFailed('Cancelled by user');
+  if (_r2UploadId && _r2Key) {
+    fetch(`${WORKER_URL}/mpu/abort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId }),
+    }).catch(() => {});
+  }
+  resetUI();
+});
+
+/* ── Retry button ── */
+$('retryBtn').addEventListener('click', () => {
+  $('failPanel').classList.add('sfl-hidden');
+  _cancelled = false;
+  _uploading = false;
+
+  if (_publishRetryReady && _publishRetryMeta) {
+    // Upload + Cloudflare processing already succeeded.
+    // Only retry the Firestore publishing step.
+    retryPublishOnly();
+  } else {
+    // Reset Stream state so we don't try to resume a failed/expired tus URL
+    _tusUploadUrl = null; _tusOffset = 0; _streamId = null;
+    // Reset R2 fallback flag so it is re-evaluated on this attempt
+    // (keeps _r2UploadId/_r2Key/_uploadedParts intact for true resume)
+    _useR2Fallback = false;
+    startUpload();
+  }
+});
+
+/* ─────────────────────────────────────────────────────────
+   retryPublishOnly — called when Cloudflare succeeded but
+   the Firestore write failed.  Skips the entire upload and
+   processing steps; writes directly to Firestore.
+───────────────────────────────────────────────────────── */
+async function retryPublishOnly() {
+  if (!_publishRetryMeta || !_user) return;
+  if (_uploading) return;
+  _uploading = true;
+
+  const uid   = _user.uid;
+  const title = $('videoTitle').value.trim() || _publishRetryMeta.title || 'Untitled';
+
+  $('publishBtn').disabled = true;
+  $('publishBtn').textContent = '⏳ Publishing…';
+  $('progressWrap').classList.remove('sfl-hidden');
+  $('failPanel').classList.add('sfl-hidden');
+
+  // Mark every step up to 'save' as done, then activate 'save'
+  STAGES.slice(0, STAGES.indexOf('save')).forEach(s => {
+    const e = $(`stage-${s}`); if (e) { e.classList.remove('active','error'); e.classList.add('done'); }
+  });
+  setStage('save', 'active');
+  $('progressLabel').textContent = 'Retrying publish…';
+
+  const meta = _publishRetryMeta;
+
+  try {
+    const finalMeta = {
+      title,
+      description: $('videoDesc').value.trim() || meta.description || '',
+      category:    $('videoCategory').value || meta.category || '',
+      tags:        _tags.length ? _tags : (meta.tags || []),
+      visibility:  _visibility || meta.visibility || 'public',
+      cloudflareVideoId: meta.cloudflareVideoId || null,
+      r2Key:       meta.r2Key || null,
+      videoUrl:    meta.videoUrl,
+      thumbnailUrl: meta.thumbnailUrl || '',
+      duration:    meta.duration || null,
+      creatorId:   uid,
+      creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+      creatorAvatar: _userData?.avatar || _user.photoURL || '',
+      views: 0, likes: 0, comments: 0,
+      status: 'published',
+      updatedAt: serverTimestamp(),
+    };
+
+    let docId;
+    console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.log('[PUBLISH] UID:', uid);
+    console.log('[PUBLISH] Collection: videos');
+    console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+    console.log('[PUBLISH] Owner ID matches authenticated UID:', (finalMeta.creatorId === uid) ? 'YES' : 'NO');
+    console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+    console.log('[PUBLISH] VIDEO URL:', meta.videoUrl);
+    if (_pendingDocId) {
+      console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
+      await updateDoc(doc(db,'videos',_pendingDocId), finalMeta);
+      docId = _pendingDocId;
+      console.log('[PUBLISH] Firestore result: SUCCESS (update)');
+    } else {
+      console.log('[PUBLISH] Calling addDoc on collection videos');
+      const nd = await addDoc(collection(db,'videos'), { ...finalMeta, createdAt: serverTimestamp() });
+      docId = nd.id;
+      console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', docId);
+    }
+
+    setStage('done', 'active');
+    $('progressLabel').textContent = 'Published! 🎉';
+    toast('🎉 Video published!');
+    _uploading = false; _pendingDocId = null;
+    _publishRetryReady = false; _publishRetryMeta = null;
+    setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
+
+  } catch(err) {
+    _uploading = false;
+    const errMsg = err?.message || String(err);
+    console.error('[PUBLISH] Firestore error code:', err?.code || '(no code)');
+    console.error('[PUBLISH] ERROR MESSAGE:', errMsg);
+    console.error('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.error('[PUBLISH] UID:', uid);
+    console.error('[PUBLISH] Collection: videos');
+    console.error('[PUBLISH] CLOUDFLARE VIDEO ID:', meta.cloudflareVideoId || '(R2 path)');
+    console.error('[PUBLISH] VIDEO URL:', meta.videoUrl);
+    setStage('save', 'error');
+    $('failTitle').textContent = 'Publishing Failed';
+    $('failMsg').innerHTML =
+      'Video uploaded successfully. We couldn\'t finish publishing it.<br>' +
+      '<small style="opacity:0.75;">Error: ' + errMsg.replace(/</g,'&lt;') + '</small>';
+    $('retryBtn').textContent = '↺ Retry Publishing';
+    $('failPanel').classList.remove('sfl-hidden');
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    // _publishRetryReady stays true so next Retry also skips upload
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   uploadThumbnail — R2 (best-effort, non-blocking)
+   Thumbnail failure never blocks video publishing.
+───────────────────────────────────────────────────────── */
+async function uploadThumbnail(uid, thumbFile) {
+  try {
+    const fd = new FormData();
+    fd.append('file', thumbFile, thumbFile.name || 'thumb.jpg');
+    fd.append('uid', uid);
+    const res = await fetch(WORKER_URL, { method: 'POST', body: fd });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.url || null;
+  } catch(e) {
+    console.warn('[SFL Upload] Thumbnail upload failed (non-critical):', e.message);
+    return null;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   tusUploadChunk — sends one tus chunk directly to
+   Cloudflare Stream's tus endpoint.
+   Uses XMLHttpRequest for real upload progress events.
+   Returns the new confirmed offset on success.
+   Throws Error('CANCELLED') if cancelled.
+   Throws Error with message on network/server failure.
+───────────────────────────────────────────────────────── */
+function tusUploadChunk(uploadUrl, fileSlice, offset, totalSize, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(offset + e.loaded, totalSize);
+    });
+
+    xhr.addEventListener('load', () => {
+      // tus: 204 No Content on success; Location header not used for resumable patch
+      if (xhr.status === 204) {
+        // tus Upload-Offset header tells us how many bytes the server confirmed
+        const newOffset = parseInt(xhr.getResponseHeader('Upload-Offset') || String(offset + fileSlice.size), 10);
+        resolve(newOffset);
+      } else {
+        let msg = `Upload chunk failed (HTTP ${xhr.status})`;
+        try { const d = JSON.parse(xhr.responseText); msg = d.errors?.[0]?.message || d.error || msg; } catch(_) {}
+        reject(new Error(msg));
+      }
+    });
+
+    xhr.addEventListener('error',   () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',   () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout', () => reject(new Error('Chunk upload timed out — retrying…')));
+    xhr.timeout = 0; // no timeout — large files on slow mobile connections can take many minutes
+
+    xhr.open('PATCH', uploadUrl);
+    xhr.setRequestHeader('Content-Type', 'application/offset+octet-stream');
+    xhr.setRequestHeader('Upload-Offset', String(offset));
+    xhr.setRequestHeader('Tus-Resumable', '1.0.0');
+    xhr.send(fileSlice);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   getRemoteOffset — HEAD request to find how many bytes
+   Cloudflare Stream has already received.
+   Used on retry to resume without re-sending data.
+───────────────────────────────────────────────────────── */
+async function getRemoteOffset(uploadUrl) {
+  try {
+    const res = await fetch(uploadUrl, {
+      method: 'HEAD',
+      headers: { 'Tus-Resumable': '1.0.0' },
+    });
+    if (!res.ok) return 0;
+    const offset = parseInt(res.headers.get('Upload-Offset') || '0', 10);
+    return isNaN(offset) ? 0 : offset;
+  } catch(e) {
+    console.warn('[SFL Upload] HEAD offset check failed:', e.message);
+    return 0;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   pollStreamStatus — polls GET /stream/status?id=<streamId>
+   Resolves with { playbackUrl, thumbnailUrl, duration } when
+   Cloudflare reports the video as ready.
+   Rejects after MAX_POLL_ATTEMPTS or an error state.
+   Cancellation is checked each iteration.
+───────────────────────────────────────────────────────── */
+async function pollStreamStatus(streamId) {
+  const POLL_INTERVAL_MS = 5000;
+  const MAX_POLL_ATTEMPTS = 120; // 10 minutes maximum wait
+  let attempts = 0;
+
+  return new Promise((resolve, reject) => {
+    _pollTimer = setInterval(async () => {
+      if (_cancelled) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        reject(new Error('CANCELLED'));
+        return;
+      }
+
+      attempts++;
+      if (attempts > MAX_POLL_ATTEMPTS) {
+        clearInterval(_pollTimer); _pollTimer = null;
+        reject(new Error('Cloudflare video processing timed out after 10 minutes. The video may still be processing — check back later.'));
+        return;
+      }
+
+      try {
+        const res = await fetch(`${WORKER_URL}/stream/status?id=${encodeURIComponent(streamId)}`);
+        if (!res.ok) {
+          // Transient server error — keep polling
+          console.warn(`[SFL Upload] Status poll HTTP ${res.status} — retrying`);
+          return;
+        }
+        const data = await res.json();
+        console.log(`[SFL Upload] Stream status (attempt ${attempts}):`, data.status, data.pctComplete);
+
+        if (data.errorReasonCode) {
+          clearInterval(_pollTimer); _pollTimer = null;
+          reject(new Error(`Cloudflare processing error: ${data.errorReasonText || data.errorReasonCode}`));
+          return;
+        }
+
+        // Update processing progress label
+        if (data.pctComplete != null) {
+          $('progressLabel').textContent = `Processing video… ${data.pctComplete}%`;
+        }
+
+        if (data.readyToStream) {
+          clearInterval(_pollTimer); _pollTimer = null;
+          resolve({
+            playbackUrl:  data.playbackUrl,
+            thumbnailUrl: data.thumbnailUrl,
+            duration:     data.duration,
+          });
+        }
+        // else: still processing — wait for next interval
+      } catch(e) {
+        console.warn('[SFL Upload] Status poll error (retrying):', e.message);
+        // keep polling on transient network errors
+      }
+    }, POLL_INTERVAL_MS);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   R2 fallback: upload one part directly to R2 via a
+   presigned URL.  The Worker generates the URL (signing with
+   the R2 API token server-side) so no credentials reach the
+   browser.  The browser PUTs the part directly to R2 —
+   no Worker CPU time is consumed.
+   Returns { partNumber, etag } on success.
+───────────────────────────────────────────────────────── */
+function r2UploadPartPresigned(presignedUrl, partSlice, partNumber, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        // R2 returns ETag in the response header
+        const etag = xhr.getResponseHeader('ETag') || xhr.getResponseHeader('etag') || '';
+        resolve({ partNumber, etag: etag.replace(/"/g, '') });
+      } else {
+        reject(new Error(`Part upload failed (HTTP ${xhr.status})`));
+      }
+    });
+    xhr.addEventListener('error',  () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',  () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout',() => reject(new Error('Part upload timed out — retrying…')));
+    xhr.timeout = 0;
+    xhr.open('PUT', presignedUrl);
+    xhr.send(partSlice);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   R2 fallback: upload one part via the Worker proxy
+   (used when R2 presigned URL credentials are not set).
+   Slower because data transits the Worker, but always works.
+───────────────────────────────────────────────────────── */
+function r2UploadPartProxy(partSlice, partNumber, key, r2UploadId, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (_cancelled) { reject(new Error('CANCELLED')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const d = JSON.parse(xhr.responseText);
+          resolve({ partNumber: d.partNumber, etag: d.etag });
+        } catch(_) { reject(new Error('Bad response from worker on part upload')); }
+      } else {
+        let msg = `Part upload failed (HTTP ${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch(_) {}
+        reject(new Error(msg));
+      }
+    });
+    xhr.addEventListener('error',  () => reject(new Error('Network error — check your connection and retry')));
+    xhr.addEventListener('abort',  () => reject(new Error('CANCELLED')));
+    xhr.addEventListener('timeout',() => reject(new Error('Part upload timed out — retrying…')));
+    xhr.timeout = 0;
+    const params = new URLSearchParams({ key, r2UploadId, partNumber: String(partNumber) });
+    xhr.open('POST', `${WORKER_URL}/mpu/part?${params}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.send(partSlice);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────
+   checkWorkerReachable — quick GET / to verify the Worker
+   responds before we attempt a large upload.
+   Returns true if reachable, false otherwise.
+───────────────────────────────────────────────────────── */
+async function checkWorkerReachable() {
+  // AbortSignal.timeout is Chrome 103+/FF 100+/Safari 16+ — manual fallback
+  // for older Android WebViews so the signal option never throws a TypeError.
+  let signal;
+  try {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      signal = AbortSignal.timeout(8000);
+    } else {
+      const ac = new AbortController();
+      setTimeout(() => ac.abort(), 8000);
+      signal = ac.signal;
+    }
+  } catch(_) {
+    // AbortController also unavailable — proceed without a timeout signal
+    signal = undefined;
+  }
+  try {
+    const fetchOpts = signal ? { method: 'GET', signal } : { method: 'GET' };
+    const res = await fetch(`${WORKER_URL}/upload-health`, fetchOpts);
+    if (!res.ok) {
+      console.error('[SFL Upload] Health check HTTP', res.status, '— endpoint:', WORKER_URL);
+      return { reachable: false, status: res.status, detail: `HTTP ${res.status}` };
+    }
+    const data = await res.json().catch(() => ({ ok: true }));
+    console.log('[SFL Upload] Health:', JSON.stringify(data));
+    return { reachable: true, r2: data.r2, stream: data.stream };
+  } catch(e) {
+    console.error('[SFL Upload] Worker unreachable:', e.message, '— endpoint:', WORKER_URL);
+    return { reachable: false, status: 0, detail: e.message };
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   MAIN UPLOAD FLOW
+   ─────────────────────────────────────────────────────────
+   Tries Cloudflare Stream first (tus direct upload + HLS playback).
+   If Stream returns 503/quota error, falls back to R2 multipart
+   upload via the Worker proxy path (/mpu/part).
+
+   Stream path:
+     1. POST /stream/upload-url → { uploadURL, streamId }
+     2. tus PATCH directly to Cloudflare (no Worker hop)
+     3. Poll /stream/status until readyToStream
+     4. Firestore: { videoUrl: HLS url, cloudflareVideoId }
+
+   R2 fallback path:
+     1. POST /mpu/create → { r2UploadId, key }
+     2. For each part: POST /mpu/presign → presignedUrl
+        Then PUT directly to R2 (no Worker hop)
+        If presign not configured, fall back to /mpu/part proxy
+     3. POST /mpu/complete → { url }
+     4. Firestore: { videoUrl: R2 CDN url, r2Key }
+───────────────────────────────────────────────────────── */
+async function startUpload() {
+  if (!_user)      { toast('Sign in to upload.'); return; }
+  if (!_videoFile) { toast('Please select a video.'); return; }
+
+  const title = $('videoTitle').value.trim();
+  if (!title) { toast('Please enter a title.'); $('videoTitle').focus(); return; }
+
+  if (_uploading) return; // prevent double-submit
+  _uploading = true;
+  _cancelled = false;
+
+  if (!_sessionId) {
+    _sessionId = `${_user.uid.slice(0,8)}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+  }
+
+  $('publishBtn').disabled = true;
+  $('publishBtn').textContent = '⏳ Uploading…';
+  $('progressWrap').classList.remove('sfl-hidden');
+  $('failPanel').classList.add('sfl-hidden');
+
+  const uid  = _user.uid;
+  const file = _videoFile;
+
+  console.group('[SFL Upload]');
+  console.log('File:', file.name, fmtBytes(file.size), file.type || 'video/mp4');
+  console.log('Session:', _sessionId);
+  console.log('Worker:', WORKER_URL);
+  console.log('Start:', new Date().toISOString());
+
+  setStage('prepare', 'active');
+  $('progressLabel').textContent = 'Checking upload service…';
+
+  // ── Pre-flight: verify the Worker is reachable before uploading ──
+  const health = await checkWorkerReachable();
+  if (!health.reachable) {
+    _uploading = false;
+    console.error('[SFL Upload] Worker unreachable — aborting. detail:', health.detail, 'status:', health.status);
+    console.groupEnd();
+    setStage('prepare', 'error');
+    $('failPanel').classList.remove('sfl-hidden');
+    let healthMsg = 'Shadow Nexus Wave cannot connect to the video upload service.';
+    if (health.status === 0) {
+      healthMsg = 'Cannot reach the upload service. Check your internet connection and tap Retry.';
+    } else if (health.status === 401 || health.status === 403) {
+      healthMsg = 'Authentication error contacting the upload service. Please sign out and sign back in.';
+    } else if (health.status >= 500) {
+      healthMsg = `Upload service error (HTTP ${health.status}). Please tap Retry in a moment.`;
+    } else if (health.status === 404) {
+      healthMsg = `Upload service endpoint not found (HTTP 404). Please contact support.`;
+    }
+    $('failMsg').textContent = healthMsg;
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    return;
+  }
+  console.log('[SFL Upload] UPLOAD_ENDPOINT_REACHED ✓ r2:', health.r2, 'stream:', health.stream);
+
+  $('progressLabel').textContent = 'Preparing upload…';
+  showProgressNumbers(false);
+
+  const uploadStart = Date.now();
+
+  try {
+    const videoDuration = +($('videoPreview').dataset.duration || 0) || null;
+
+    // ═══════════════════════════════════════════════════════════
+    // PATH A — Cloudflare Stream (tus direct upload + HLS)
+    //   Used when Stream quota is available.
+    //   Falls through to PATH B if Stream returns 503.
+    // ═══════════════════════════════════════════════════════════
+    if (!_useR2Fallback) {
+      // ── A1. Get Cloudflare Stream direct-upload URL ──
+      if (!_tusUploadUrl || !_streamId) {
+        console.log('[SFL Upload] Trying Cloudflare Stream…');
+        let urlRes;
+        try {
+          urlRes = await fetch(`${WORKER_URL}/stream/upload-url`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid, title, maxDurationSeconds: 10800 }),
+          });
+        } catch(fetchErr) {
+          // Network / CORS failure reaching the Worker — skip Stream, go straight to R2
+          console.warn('[SFL Upload] Cannot reach upload Worker for Stream URL:', fetchErr.message, '— switching to R2 path');
+          _useR2Fallback = true;
+        }
+        if (urlRes) {
+          const errData = urlRes.ok ? null : await urlRes.json().catch(() => ({}));
+          const isQuotaOrUnavailable =
+            urlRes.status === 503 || urlRes.status === 507 ||
+            (errData?.fallback === true) ||
+            /quota|capacity|storage|minutes|limit/i.test(errData?.error || '');
+
+          if (isQuotaOrUnavailable) {
+            // Stream quota exceeded / not subscribed — switch to R2 path
+            console.warn('[SFL Upload] Cloudflare Stream unavailable:', errData?.error || urlRes.status, '— switching to R2 path');
+            _useR2Fallback = true;
+          } else if (!urlRes.ok) {
+            let msg = `Upload server error ${urlRes.status}`;
+            if (errData?.error) msg = errData.error;
+            throw new Error(msg);
+          } else {
+            const urlData = await urlRes.json();
+            _tusUploadUrl = urlData.uploadURL;
+            _streamId     = urlData.streamId;
+            _tusOffset    = 0;
+            console.log('[SFL Upload] Stream upload URL obtained. streamId:', _streamId);
+          }
+        }
+      } else {
+        // Resuming — confirm server offset
+        _tusOffset = await getRemoteOffset(_tusUploadUrl);
+        console.log('[SFL Upload] Resuming Stream upload. Server offset:', fmtBytes(_tusOffset));
+      }
+    }
+
+    if (!_useR2Fallback && _tusUploadUrl) {
+      // ── A2. Create Firestore doc (once per upload attempt) ──
+      if (!_pendingDocId) {
+        try {
+          const earlyDoc = await addDoc(collection(db,'videos'), {
+            title, description: $('videoDesc').value.trim(),
+            category: $('videoCategory').value || '', tags: _tags,
+            visibility: _visibility, cloudflareVideoId: _streamId,
+            videoUrl: '', thumbnailUrl: '', duration: videoDuration,
+            creatorId: uid,
+            creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+            creatorAvatar: _userData?.avatar || _user.photoURL || '',
+            views: 0, likes: 0, comments: 0, status: 'uploading',
+            createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+          });
+          _pendingDocId = earlyDoc.id;
+          console.log('[SFL Upload] Firestore doc created (status=uploading):', _pendingDocId);
+        } catch(e) {
+          console.warn('[SFL Upload] Early Firestore doc failed (non-fatal):', e.message);
+        }
+      }
+
+      // ── A3. Upload directly to Cloudflare Stream via tus PATCH ──
+      setStage('upload', 'active');
+      showProgressNumbers(true);
+      $('progressLabel').textContent = 'Uploading… 0%';
+
+      const speedSamples = [];
+      let currentOffset = _tusOffset;
+
+      while (currentOffset < file.size) {
+        if (_cancelled) throw new Error('CANCELLED');
+        const chunkEnd  = Math.min(currentOffset + _TUS_CHUNK, file.size);
+        const fileSlice = file.slice(currentOffset, chunkEnd);
+        let newOffset   = currentOffset;
+
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          if (_cancelled) throw new Error('CANCELLED');
+          try {
+            newOffset = await tusUploadChunk(_tusUploadUrl, fileSlice, currentOffset, file.size, (loaded, total) => {
+              const now = Date.now();
+              speedSamples.push({ time: now, bytes: loaded });
+              const cutoff = now - 5000;
+              while (speedSamples.length > 1 && speedSamples[0].time < cutoff) speedSamples.shift();
+              let speedBps = 0;
+              if (speedSamples.length >= 2) {
+                const dt = (speedSamples.at(-1).time - speedSamples[0].time) / 1000;
+                const db = speedSamples.at(-1).bytes - speedSamples[0].bytes;
+                if (dt > 0.2) speedBps = db / dt;
+              }
+              const pct = Math.min(Math.round(loaded / total * 100), 99);
+              updateProgress(pct, loaded, total, speedBps);
+              $('progressLabel').textContent = `Uploading… ${pct}%`;
+            });
+            break;
+          } catch(chunkErr) {
+            if (chunkErr.message === 'CANCELLED') throw chunkErr;
+            if (attempt === 5) throw chunkErr;
+            const waitMs = Math.min(attempt * 3000, 15000);
+            console.warn(`[SFL Upload] tus chunk attempt ${attempt} failed: ${chunkErr.message} — retry in ${waitMs}ms`);
+            $('progressLabel').textContent = 'Connection interrupted — retrying…';
+            await new Promise(r => setTimeout(r, waitMs));
+            const remoteOffset = await getRemoteOffset(_tusUploadUrl);
+            if (remoteOffset > currentOffset) { newOffset = remoteOffset; break; }
+          }
+        }
+        currentOffset = newOffset;
+        _tusOffset    = currentOffset;
+      }
+
+      updateProgress(100, file.size, file.size, 0);
+      showProgressNumbers(false);
+      console.log('[SFL Upload] Stream upload 100%. Elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+
+      // ── A4. Wait for Cloudflare Stream processing ──
+      setStage('process', 'active');
+      $('progressLabel').textContent = 'Processing video…';
+
+      let streamResult;
+      try {
+        streamResult = await pollStreamStatus(_streamId);
+      } catch(pollErr) {
+        if (pollErr.message === 'CANCELLED') throw pollErr;
+        console.warn('[SFL Upload] Processing poll failed:', pollErr.message, '— using fallback URLs');
+        streamResult = {
+          playbackUrl:  `https://videodelivery.net/${_streamId}/manifest/video.m3u8`,
+          thumbnailUrl: `https://videodelivery.net/${_streamId}/thumbnails/thumbnail.jpg`,
+          duration:     videoDuration,
+        };
+      }
+
+      // ── A5. Thumbnail ──
+      let thumbnailUrl = streamResult.thumbnailUrl || '';
+      if (_thumbFile) {
+        const t = await uploadThumbnail(uid, _thumbFile);
+        if (t) thumbnailUrl = t;
+      }
+
+      // ── A6. Publish to Firestore ──
+      setStage('save', 'active');
+      $('progressLabel').textContent = 'Publishing to Shadow Nexus Wave…';
+
+      const streamFinalMeta = {
+        title, description: $('videoDesc').value.trim(),
+        category: $('videoCategory').value || '', tags: _tags,
+        visibility: _visibility, cloudflareVideoId: _streamId,
+        videoUrl: streamResult.playbackUrl, thumbnailUrl,
+        duration: streamResult.duration || videoDuration,
+        creatorId: uid,
+        creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+        creatorAvatar: _userData?.avatar || _user.photoURL || '',
+        views: 0, likes: 0, comments: 0, status: 'published',
+        updatedAt: serverTimestamp(),
+      };
+
+      // Store retry metadata BEFORE writing — if write fails, user can retry without re-uploading
+      _publishRetryReady = true;
+      _publishRetryMeta = {
+        title,
+        description: $('videoDesc').value.trim(),
+        category: $('videoCategory').value || '',
+        tags: [..._tags],
+        visibility: _visibility,
+        cloudflareVideoId: _streamId,
+        r2Key: null,
+        videoUrl: streamResult.playbackUrl,
+        thumbnailUrl,
+        duration: streamResult.duration || videoDuration,
+      };
+
+      console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+      console.log('[PUBLISH] UID:', uid);
+      console.log('[PUBLISH] Collection: videos');
+      console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+      console.log('[PUBLISH] Owner ID matches authenticated UID:', (streamFinalMeta.creatorId === uid) ? 'YES' : 'NO');
+      console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+      console.log('[PUBLISH] cloudflareVideoId:', _streamId);
+      console.log('[PUBLISH] PLAYBACK URL:', streamResult.playbackUrl);
+
+      let docId;
+      if (_pendingDocId) {
+        console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
+        await updateDoc(doc(db,'videos',_pendingDocId), streamFinalMeta);
+        docId = _pendingDocId;
+        console.log('[PUBLISH] Firestore result: SUCCESS (update)');
+      } else {
+        console.log('[PUBLISH] Calling addDoc on collection videos');
+        const nd = await addDoc(collection(db,'videos'), { ...streamFinalMeta, createdAt: serverTimestamp() });
+        docId = nd.id;
+        console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', docId);
+      }
+      console.log('[SFL Upload] FIRESTORE WRITE SUCCESS — docId:', docId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+      console.groupEnd();
+      setStage('done', 'active');
+      $('progressLabel').textContent = 'Published! 🎉';
+      toast('🎉 Video published!');
+      _uploading = false; _pendingDocId = null;
+      _publishRetryReady = false; _publishRetryMeta = null;
+      setTimeout(() => { window.location.href = `sfl-player.html?v=${docId}`; }, 1400);
+      return; // PATH A complete
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PATH B — R2 Multipart Upload (presigned URLs, direct to R2)
+    //   Used when Cloudflare Stream is not available.
+    //   Browser uploads parts directly to R2 via presigned PUT URLs.
+    //   Falls back to Worker-proxied /mpu/part if presign not configured.
+    // ═══════════════════════════════════════════════════════════
+    console.log('[SFL Upload] Using R2 multipart upload path.');
+
+    // ── B1. Create R2 MPU session (once, reused on retry) ──
+    if (!_r2UploadId || !_r2Key) {
+      const createRes = await fetch(`${WORKER_URL}/mpu/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, fileName: file.name, fileType: file.type || 'video/mp4', fileSize: file.size }),
+      });
+      if (!createRes.ok) {
+        let msg = `Upload server error ${createRes.status}`;
+        try { msg = (await createRes.json()).error || msg; } catch(_) {}
+        throw new Error(msg);
+      }
+      const createData = await createRes.json();
+      _r2UploadId = createData.r2UploadId;
+      _r2Key      = createData.key;
+      _uploadedParts = [];
+      console.log('[SFL Upload] R2 MPU created. key:', _r2Key);
+    } else {
+      console.log('[SFL Upload] Resuming R2 MPU. parts done:', _uploadedParts.length);
+    }
+
+    // ── B2. Create Firestore doc ──
+    if (!_pendingDocId) {
+      try {
+        const earlyDoc = await addDoc(collection(db,'videos'), {
+          title, description: $('videoDesc').value.trim(),
+          category: $('videoCategory').value || '', tags: _tags,
+          visibility: _visibility, r2Key: _r2Key,
+          videoUrl: '', thumbnailUrl: '', duration: videoDuration,
+          creatorId: uid,
+          creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+          creatorAvatar: _userData?.avatar || _user.photoURL || '',
+          views: 0, likes: 0, comments: 0, status: 'uploading',
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        });
+        _pendingDocId = earlyDoc.id;
+        console.log('[SFL Upload] Firestore doc created (R2 path):', _pendingDocId);
+      } catch(e) {
+        console.warn('[SFL Upload] Firestore doc creation failed (non-fatal):', e.message);
+      }
+    }
+
+    // ── B3. Upload parts ──
+    setStage('upload', 'active');
+    showProgressNumbers(true);
+    $('progressLabel').textContent = 'Uploading… 0%';
+
+    const totalParts = Math.ceil(file.size / PART_SIZE);
+    const doneParts  = new Set(_uploadedParts.map(p => p.partNumber));
+    const r2SpeedSamples = [];
+    let r2UploadedBytes = _uploadedParts.length * PART_SIZE;
+    r2UploadedBytes = Math.min(r2UploadedBytes, file.size);
+
+    // Check once whether presigned URLs are available
+    let r2PresignAvailable = true;
+
+    for (let i = 0; i < totalParts; i++) {
+      const partNumber = i + 1;
+      if (doneParts.has(partNumber)) continue;
+      if (_cancelled) throw new Error('CANCELLED');
+
+      const start = i * PART_SIZE;
+      const end   = Math.min(start + PART_SIZE, file.size);
+      const slice = file.slice(start, end);
+      let partResult;
+      let partPrev = 0;
+
+      const onPartProgress = (loaded, total_) => {
+        const delta = loaded - partPrev;
+        if (delta <= 0) return;
+        partPrev = loaded;
+        r2UploadedBytes += delta;
+        const now = Date.now();
+        r2SpeedSamples.push({ time: now, bytes: r2UploadedBytes });
+        const cutoff = now - 5000;
+        while (r2SpeedSamples.length > 1 && r2SpeedSamples[0].time < cutoff) r2SpeedSamples.shift();
+        let speedBps = 0;
+        if (r2SpeedSamples.length >= 2) {
+          const dt = (r2SpeedSamples.at(-1).time - r2SpeedSamples[0].time) / 1000;
+          const db = r2SpeedSamples.at(-1).bytes - r2SpeedSamples[0].bytes;
+          if (dt > 0.2) speedBps = db / dt;
+        }
+        const pct = Math.min(Math.round(r2UploadedBytes / file.size * 100), 99);
+        updateProgress(pct, r2UploadedBytes, file.size, speedBps);
+        $('progressLabel').textContent = `Uploading… ${pct}%`;
+      };
+
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        if (_cancelled) throw new Error('CANCELLED');
+        try {
+          if (r2PresignAvailable) {
+            // Try presigned URL path first
+            const presignRes = await fetch(`${WORKER_URL}/mpu/presign`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId, partNumber }),
+            });
+            if (presignRes.status === 503) {
+              const pd = await presignRes.json().catch(() => ({}));
+              if (pd.fallback) {
+                console.log('[SFL Upload] Presign not configured — switching to proxy path');
+                r2PresignAvailable = false;
+              }
+            }
+            if (r2PresignAvailable && presignRes.ok) {
+              const { presignedUrl } = await presignRes.json();
+              partResult = await r2UploadPartPresigned(presignedUrl, slice, partNumber, onPartProgress);
+            } else if (!r2PresignAvailable || !presignRes.ok) {
+              // Fall through to proxy
+              partResult = await r2UploadPartProxy(slice, partNumber, _r2Key, _r2UploadId, onPartProgress);
+            }
+          } else {
+            partResult = await r2UploadPartProxy(slice, partNumber, _r2Key, _r2UploadId, onPartProgress);
+          }
+          break;
+        } catch(partErr) {
+          if (partErr.message === 'CANCELLED') throw partErr;
+          if (attempt === 5) throw partErr;
+          const waitMs = Math.min(attempt * 3000, 15000);
+          console.warn(`[SFL Upload] Part ${partNumber} attempt ${attempt} failed: ${partErr.message} — retry in ${waitMs}ms`);
+          $('progressLabel').textContent = 'Connection interrupted — retrying…';
+          await new Promise(r => setTimeout(r, waitMs));
+          partPrev = 0;
+        }
+      }
+
+      _uploadedParts.push(partResult);
+      doneParts.add(partNumber);
+      r2UploadedBytes = Math.min(r2UploadedBytes, file.size);
+      console.log(`[SFL Upload] Part ${partNumber}/${totalParts} committed (etag: ${partResult.etag})`);
+    }
+
+    // ── B4. Complete the R2 MPU ──
+    setStage('process', 'active');
+    updateProgress(100, file.size, file.size, 0);
+    showProgressNumbers(false);
+    $('progressLabel').textContent = 'Finalising upload…';
+
+    const completeRes = await fetch(`${WORKER_URL}/mpu/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: _r2Key, r2UploadId: _r2UploadId, parts: _uploadedParts }),
+    });
+    if (!completeRes.ok) {
+      let msg = `Finalize failed (${completeRes.status})`;
+      try { msg = (await completeRes.json()).error || msg; } catch(_) {}
+      throw new Error(msg);
+    }
+    const { url: r2VideoUrl } = await completeRes.json();
+    console.log('[SFL Upload] R2 MPU complete. URL:', r2VideoUrl);
+    console.log('[SFL Upload] Elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+
+    // ── B5. Thumbnail ──
+    let r2ThumbnailUrl = '';
+    if (_thumbFile) {
+      r2ThumbnailUrl = (await uploadThumbnail(uid, _thumbFile)) || '';
+    }
+
+    // ── B6. Publish to Firestore ──
+    setStage('save', 'active');
+    $('progressLabel').textContent = 'Publishing to Shadow Nexus Wave…';
+
+    const r2FinalMeta = {
+      title, description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '', tags: _tags,
+      visibility: _visibility, r2Key: _r2Key,
+      videoUrl: r2VideoUrl, thumbnailUrl: r2ThumbnailUrl,
+      duration: videoDuration,
+      creatorId: uid,
+      creatorName:   _userData?.displayName || _userData?.username || _user.displayName || 'Creator',
+      creatorAvatar: _userData?.avatar || _user.photoURL || '',
+      views: 0, likes: 0, comments: 0, status: 'published',
+      updatedAt: serverTimestamp(),
+    };
+
+    // Store retry metadata BEFORE writing — if write fails, user can retry without re-uploading
+    _publishRetryReady = true;
+    _publishRetryMeta = {
+      title,
+      description: $('videoDesc').value.trim(),
+      category: $('videoCategory').value || '',
+      tags: [..._tags],
+      visibility: _visibility,
+      cloudflareVideoId: null,
+      r2Key: _r2Key,
+      videoUrl: r2VideoUrl,
+      thumbnailUrl: r2ThumbnailUrl,
+      duration: videoDuration,
+    };
+
+    console.log('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.log('[PUBLISH] UID:', uid);
+    console.log('[PUBLISH] Collection: videos');
+    console.log('[PUBLISH] Document ID:', _pendingDocId || '(addDoc — auto-generated)');
+    console.log('[PUBLISH] Owner ID matches authenticated UID:', (r2FinalMeta.creatorId === uid) ? 'YES' : 'NO');
+    console.log('[PUBLISH] Operation:', _pendingDocId ? 'update' : 'create');
+    console.log('[PUBLISH] r2Key:', _r2Key);
+    console.log('[PUBLISH] VIDEO URL:', r2VideoUrl);
+
+    let r2DocId;
+    if (_pendingDocId) {
+      console.log('[PUBLISH] Calling updateDoc on videos/' + _pendingDocId);
+      await updateDoc(doc(db,'videos',_pendingDocId), r2FinalMeta);
+      r2DocId = _pendingDocId;
+      console.log('[PUBLISH] Firestore result: SUCCESS (update)');
+    } else {
+      console.log('[PUBLISH] Calling addDoc on collection videos');
+      const nd = await addDoc(collection(db,'videos'), { ...r2FinalMeta, createdAt: serverTimestamp() });
+      r2DocId = nd.id;
+      console.log('[PUBLISH] Firestore result: SUCCESS (create) — docId:', r2DocId);
+    }
+
+    console.log('[SFL Upload] FIRESTORE WRITE SUCCESS (R2) — docId:', r2DocId, 'elapsed:', ((Date.now()-uploadStart)/1000).toFixed(1)+'s');
+    console.groupEnd();
+    setStage('done', 'active');
+    $('progressLabel').textContent = 'Published! 🎉';
+    toast('🎉 Video published!');
+    _uploading = false; _pendingDocId = null;
+    _publishRetryReady = false; _publishRetryMeta = null;
+    setTimeout(() => { window.location.href = `sfl-player.html?v=${r2DocId}`; }, 1400);
+
+  } catch(err) {
+    _uploading = false;
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    const rawMsg = err?.message || String(err);
+
+    console.error('[PUBLISH] ═══ UPLOAD/PUBLISH ERROR ═══');
+    console.error('[PUBLISH] Firestore error code:', err?.code || '(no code)');
+    console.error('[PUBLISH] ERROR MESSAGE:', rawMsg);
+    console.error('[PUBLISH] Firebase user authenticated:', _user ? 'YES' : 'NO');
+    console.error('[PUBLISH] UID:', uid || _user?.uid || '(unknown)');
+    console.error('[PUBLISH] Collection: videos');
+    console.error('[PUBLISH] CLOUDFLARE VIDEO ID:', _streamId || '(R2 path)');
+    console.error('[PUBLISH] PENDING FIRESTORE DOC:', _pendingDocId || '(none)');
+    console.error('[PUBLISH] PUBLISH RETRY READY:', _publishRetryReady);
+    console.groupEnd();
+
+    if (err.message === 'CANCELLED') return; // cancel handler already reset UI
+
+    // Determine which stage to mark as errored:
+    // If _publishRetryReady is true, the error happened at the Firestore write (stage-save).
+    // If the video was fully uploaded + processed but Firestore failed, mark 'save'.
+    // Otherwise mark 'upload' (upload or processing stage failed).
+    let errStage;
+    if (_publishRetryReady) {
+      errStage = 'save';
+    } else if (_streamId && _tusOffset >= (_videoFile?.size || 0)) {
+      // Upload finished, error was in processing or Firestore
+      errStage = 'process';
+    } else {
+      errStage = 'upload';
+    }
+    setStage(errStage, 'error');
+    $('failPanel').classList.remove('sfl-hidden');
+
+    const rawMsgStr = rawMsg;
+    console.error('[SFL Upload] DIAGNOSTIC — stage:', errStage, '/ raw error:', rawMsgStr);
+
+    if (_publishRetryReady) {
+      // Cloudflare upload succeeded — only the Firestore write failed
+      if ($('failTitle')) $('failTitle').textContent = 'Publishing Failed';
+      $('failMsg').innerHTML =
+        'Video uploaded successfully. We couldn\'t finish publishing it.<br>' +
+        '<small style="opacity:0.75;">Error: ' + rawMsgStr.replace(/</g,'&lt;') + '</small>';
+      $('retryBtn').textContent = '↺ Retry Publishing';
+      toast('Publishing failed — tap Retry Publishing.');
+    } else {
+      if ($('failTitle')) $('failTitle').textContent = 'Upload Failed';
+      $('retryBtn').textContent = '↺ Retry';
+      let userMsg = rawMsgStr;
+      if (/Failed to fetch|NetworkError|network error|Load failed/i.test(rawMsgStr)) {
+        userMsg = 'Shadow Nexus Wave cannot connect to the upload service. This is a network or CORS issue — check your internet connection and tap Retry.';
+      } else if (rawMsgStr.includes('503') || rawMsgStr.includes('not configured')) {
+        userMsg = 'Upload service is temporarily unavailable. Please try again later.';
+      } else if (rawMsgStr.includes('401') || rawMsgStr.includes('403')) {
+        userMsg = 'Authentication error. Please sign out and sign back in, then retry.';
+      } else if (/Network error|connection/i.test(rawMsgStr)) {
+        userMsg = 'Your connection was interrupted. Tap Retry to resume from where you left off.';
+      }
+      $('failMsg').textContent = userMsg;
+      toast('Upload failed — tap Retry to try again.');
+    }
+
+    $('publishBtn').disabled = false;
+    $('publishBtn').textContent = '🚀 Publish Video';
+    showProgressNumbers(false);
+
+    // Only attempt to mark doc as failed if the error was NOT a Firestore permission error
+    // (otherwise the mark-failed write will also fail and obscure the original error)
+    if (_pendingDocId && !_publishRetryReady) {
+      updateDoc(doc(db,'videos',_pendingDocId), {
+        status: 'failed',
+        failReason: rawMsgStr,
+        updatedAt: serverTimestamp()
+      }).catch(fsErr => console.warn('[SFL Upload] Could not mark doc as failed:', fsErr.message));
+    }
+  }
+}
+
+/* ── Publish button ── */
+$('publishBtn').addEventListener('click', () => startUpload());
+</script>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

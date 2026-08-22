@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sign In — Shadow Nexus Wave</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.login-page {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 16px;
+}
+.login-card {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-xl);
+  padding: 36px 32px;
+  width: 100%; max-width: 420px;
+  box-shadow: var(--sfl-glow-sm), 0 20px 60px rgba(0,0,0,0.7);
+  animation: sflFadeUp 0.3s ease;
+}
+.login-logo {
+  text-align: center; margin-bottom: 28px;
+}
+.login-logo-title {
+  font-size: 16px; font-weight: 900; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--sfl-flame-hot);
+  text-shadow: 0 0 16px rgba(0,212,255,0.55);
+}
+.login-logo-sub { font-size: 11px; color: rgba(0,174,239,0.5); letter-spacing: 0.8px; margin-top: 4px; }
+
+.login-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--sfl-border);
+  margin-bottom: 22px;
+}
+.login-tab {
+  flex: 1; padding: 9px 0; text-align: center;
+  font-size: 13px; font-weight: 700;
+  color: var(--sfl-text-muted);
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.login-tab.active { color: var(--sfl-blue); border-bottom-color: var(--sfl-blue); }
+
+.login-error {
+  background: rgba(255,50,50,0.12);
+  border: 1px solid rgba(255,50,50,0.35);
+  border-radius: var(--sfl-r-sm);
+  padding: 10px 14px;
+  font-size: 13px; color: #ff7788;
+  margin-bottom: 14px;
+  display: none;
+}
+.login-success {
+  background: rgba(0,174,239,0.1);
+  border: 1px solid rgba(0,174,239,0.35);
+  border-radius: var(--sfl-r-sm);
+  padding: 10px 14px;
+  font-size: 13px; color: var(--sfl-blue);
+  margin-bottom: 14px;
+  display: none;
+}
+
+.login-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 16px 0; color: var(--sfl-text-faint); font-size: 12px;
+}
+.login-divider::before, .login-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--sfl-border);
+}
+
+/* Avatar picker */
+.avatar-pick-row {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
+}
+.avatar-pick-preview {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--sfl-bg-hover);
+  border: 2px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; overflow: hidden; flex-shrink: 0;
+  cursor: pointer;
+}
+.avatar-pick-preview img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.avatar-pick-info { flex: 1; }
+.avatar-pick-label { font-size: 12px; color: var(--sfl-text-muted); margin-bottom: 5px; }
+.avatar-pick-btn {
+  font-size: 12px; color: var(--sfl-blue); cursor: pointer;
+  background: none; border: 1px solid var(--sfl-border); border-radius: var(--sfl-r-sm);
+  padding: 4px 10px; transition: background 0.15s;
+}
+.avatar-pick-btn:hover { background: var(--sfl-bg-hover); }
+
+@media (max-width: 480px) {
+  .login-card { padding: 28px 20px; }
+}
+
+/* ── Shadow Nexus Social bridge button ── */
+.snx-social-btn {
+  width: 100%;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  margin-top: 10px;
+  background: rgba(0,212,255,0.07);
+  border: 1px solid rgba(0,212,255,0.28);
+  color: var(--sfl-flame-hot);
+}
+.snx-social-btn:hover {
+  background: rgba(0,212,255,0.14);
+}
+
+/* ── Social login sub-panel ── */
+.social-bridge-panel {
+  margin-top: 18px;
+  padding: 18px 16px 14px;
+  background: rgba(0,212,255,0.05);
+  border: 1px solid rgba(0,212,255,0.22);
+  border-radius: var(--sfl-r-lg, 12px);
+  animation: sflFadeUp 0.2s ease;
+}
+.social-bridge-panel h3 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--sfl-flame-hot);
+  text-align: center;
+}
+.social-bridge-close {
+  float: right;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--sfl-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: -2px;
+}
+.social-bridge-close:hover { color: var(--sfl-text-base, #fff); }
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<div class="login-page">
+  <div class="login-card">
+
+    <div class="login-logo">
+      <div style="font-size:36px;margin-bottom:10px;">🌑⚡🌊</div>
+      <div class="login-logo-title">Shadow Nexus Wave</div>
+      <div class="login-logo-sub">Video · Live · Connect</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="login-tabs">
+      <div class="login-tab active" id="tabSignIn">Sign In</div>
+      <div class="login-tab" id="tabRegister">Create Account</div>
+    </div>
+
+    <!-- Error / Success messages -->
+    <div class="login-error" id="loginError"></div>
+    <div class="login-success" id="loginSuccess"></div>
+
+    <!-- Sign In form -->
+    <form id="formSignIn" autocomplete="on" novalidate>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="siEmail">Email</label>
+        <input class="sfl-input" id="siEmail" type="email" placeholder="you@example.com"
+          autocomplete="email" required>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="siPassword">Password</label>
+        <input class="sfl-input" id="siPassword" type="password" placeholder="Your password"
+          autocomplete="current-password" required>
+      </div>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="btnSignIn"
+        type="submit" style="width:100%;margin-top:4px;">
+        Sign In
+      </button>
+      <div style="text-align:center;margin-top:12px;">
+        <span style="font-size:12px;color:var(--sfl-text-muted);cursor:pointer;" id="forgotLink">
+          Forgot password?
+        </span>
+      </div>
+    </form>
+
+    <!-- Register form (hidden) -->
+    <form id="formRegister" autocomplete="on" novalidate class="sfl-hidden">
+
+      <!-- Profile picture picker -->
+      <div class="avatar-pick-row">
+        <div class="avatar-pick-preview" id="avatarPreview" title="Click to choose photo">👤</div>
+        <div class="avatar-pick-info">
+          <div class="avatar-pick-label">Profile Picture (optional)</div>
+          <button type="button" class="avatar-pick-btn" id="avatarPickBtn">Choose Photo</button>
+        </div>
+      </div>
+      <input type="file" id="avatarFileInput" accept="image/*" style="display:none;">
+
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="regName">Display Name</label>
+        <input class="sfl-input" id="regName" type="text" placeholder="Your name"
+          maxlength="40" required>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="regUsername">Username</label>
+        <input class="sfl-input" id="regUsername" type="text" placeholder="yourhandle (letters, numbers, _)"
+          maxlength="30" autocomplete="off">
+        <div style="font-size:11px;color:var(--sfl-text-faint);margin-top:4px;">Optional — you can set this later in Settings.</div>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="regEmail">Email</label>
+        <input class="sfl-input" id="regEmail" type="email" placeholder="you@example.com"
+          autocomplete="email" required>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="regPassword">Password</label>
+        <input class="sfl-input" id="regPassword" type="password" placeholder="At least 6 characters"
+          autocomplete="new-password" minlength="6" required>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="regBio">Bio <span style="color:var(--sfl-text-faint);font-weight:400;">(optional)</span></label>
+        <textarea class="sfl-input" id="regBio" placeholder="Tell people about yourself…"
+          maxlength="200" rows="3" style="resize:vertical;"></textarea>
+      </div>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="btnRegister"
+        type="submit" style="width:100%;margin-top:4px;">
+        Create Account
+      </button>
+    </form>
+
+    <!-- Google sign-in -->
+    <div class="login-divider">or</div>
+    <button class="sfl-btn sfl-btn-ghost" id="btnGoogle" type="button"
+      style="width:100%;justify-content:center;gap:10px;font-size:14px;">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.5-1.45-.79-3-.79-4.59s.29-3.14.79-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.97 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <!-- Shadow Nexus Social bridge -->
+    <button class="sfl-btn snx-social-btn" id="btnSocialBridge" type="button">
+      🌑 Log in with Shadow Nexus Social
+    </button>
+
+    <!-- Social bridge login panel (hidden until button clicked) -->
+    <div class="social-bridge-panel sfl-hidden" id="socialBridgePanel">
+      <h3>
+        <button class="social-bridge-close" id="socialBridgeClose" type="button"
+          aria-label="Close Shadow Nexus Social login">✕</button>
+        Shadow Nexus Social Login
+      </h3>
+      <form id="formSocialBridge" novalidate autocomplete="on">
+        <div class="sfl-form-group">
+          <label class="sfl-label" for="sbEmail">Email</label>
+          <input class="sfl-input" id="sbEmail" type="email"
+            placeholder="your@social-email.com"
+            autocomplete="email" required>
+        </div>
+        <div class="sfl-form-group">
+          <label class="sfl-label" for="sbPassword">Password</label>
+          <input class="sfl-input" id="sbPassword" type="password"
+            placeholder="Shadow Nexus Social password"
+            autocomplete="current-password" required>
+        </div>
+        <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="btnSocialBridgeSubmit"
+          type="submit" style="width:100%;margin-top:4px;">
+          Log In
+        </button>
+      </form>
+    </div>
+
+    <div style="text-align:center;margin-top:20px;font-size:11px;color:var(--sfl-text-faint);">
+      By signing in you agree to the Shadow Nexus Wave terms of service.
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile,
+  signInWithCustomToken
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:'shadow-nexus-wave',
+  storageBucket:'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId:'68850298302',
+  appId:'1:68850298302:web:603bbb8539079903cb1def'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// R2 Worker endpoint — same as used by sfl-settings.html
+const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+
+const $ = id => document.getElementById(id);
+const params   = new URLSearchParams(location.search);
+const redirect = params.get('next') || 'sfl-home.html';
+
+/* ── Avatar file state ── */
+let _avatarFile = null;
+let _avatarDataURL = null;
+
+/* ── Already signed in → redirect ── */
+onAuthStateChanged(auth, user => {
+  if(user) window.location.href = redirect;
+});
+
+/* ── Tab switching ── */
+$('tabSignIn').addEventListener('click', () => showTab('signin'));
+$('tabRegister').addEventListener('click', () => showTab('register'));
+
+// Pre-select register tab if ?mode=register
+if(params.get('mode') === 'register') showTab('register');
+
+function showTab(tab) {
+  $('tabSignIn').classList.toggle('active', tab === 'signin');
+  $('tabRegister').classList.toggle('active', tab === 'register');
+  $('formSignIn').classList.toggle('sfl-hidden', tab !== 'signin');
+  $('formRegister').classList.toggle('sfl-hidden', tab !== 'register');
+  clearMessages();
+}
+
+function showError(msg) {
+  $('loginError').textContent = msg;
+  $('loginError').style.display = 'block';
+  $('loginSuccess').style.display = 'none';
+}
+function showSuccess(msg) {
+  $('loginSuccess').textContent = msg;
+  $('loginSuccess').style.display = 'block';
+  $('loginError').style.display = 'none';
+}
+function clearMessages() {
+  $('loginError').style.display = 'none';
+  $('loginSuccess').style.display = 'none';
+}
+
+function friendlyError(err) {
+  const codes = {
+    'auth/user-not-found':      'No account found with that email.',
+    'auth/wrong-password':      'Incorrect password.',
+    'auth/invalid-email':       'Please enter a valid email address.',
+    'auth/too-many-requests':   'Too many attempts. Please wait and try again.',
+    'auth/email-already-in-use':'An account with this email already exists.',
+    'auth/weak-password':       'Password must be at least 6 characters.',
+    'auth/network-request-failed': 'Network error. Check your connection.',
+    'auth/popup-closed-by-user':'Sign-in cancelled.',
+    'auth/invalid-credential':  'Incorrect email or password.',
+  };
+  return codes[err.code] || err.message || 'An error occurred. Please try again.';
+}
+
+/* ── Avatar picker ── */
+$('avatarPickBtn').addEventListener('click', () => $('avatarFileInput').click());
+$('avatarPreview').addEventListener('click', () => $('avatarFileInput').click());
+
+$('avatarFileInput').addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showError('Profile picture must be under 5 MB.'); return; }
+  _avatarFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _avatarDataURL = ev.target.result;
+    const preview = $('avatarPreview');
+    preview.innerHTML = `<img src="${_avatarDataURL}" alt="Preview">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+/* Upload avatar to Cloudflare R2 Worker — mirrors sfl-settings.html pattern */
+async function uploadAvatar(uid, file) {
+  return new Promise(resolve => {
+    const fd = new FormData();
+    fd.append('file', file, file.name || 'avatar.jpg');
+    fd.append('uid', uid);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', R2_WORKER_URL);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data.url || '');
+        } catch(_) { resolve(''); }
+      } else { resolve(''); }
+    };
+    xhr.onerror = () => resolve('');
+    xhr.ontimeout = () => resolve('');
+    xhr.timeout = 30000;
+    xhr.send(fd);
+  });
+}
+
+/* Validate username format */
+function validUsername(u) {
+  return /^[a-zA-Z0-9_]{2,30}$/.test(u);
+}
+
+/* ── Sign in ── */
+$('formSignIn').addEventListener('submit', async e => {
+  e.preventDefault();
+  clearMessages();
+  const email = $('siEmail').value.trim();
+  const pass  = $('siPassword').value;
+  if(!email || !pass) { showError('Please enter your email and password.'); return; }
+  const btn = $('btnSignIn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    // onAuthStateChanged will redirect
+  } catch(e) {
+    showError(friendlyError(e));
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+});
+
+/* ── Register ── */
+$('formRegister').addEventListener('submit', async e => {
+  e.preventDefault();
+  clearMessages();
+  const name     = $('regName').value.trim();
+  const usernameRaw = $('regUsername').value.trim();
+  const email    = $('regEmail').value.trim();
+  const pass     = $('regPassword').value;
+  const bio      = $('regBio').value.trim();
+
+  if(!name) { showError('Please enter a display name.'); return; }
+  if(!email) { showError('Please enter your email.'); return; }
+  if(pass.length < 6) { showError('Password must be at least 6 characters.'); return; }
+  if(usernameRaw && !validUsername(usernameRaw)) {
+    showError('Username can only contain letters, numbers, and underscores (2–30 characters).');
+    return;
+  }
+
+  const btn = $('btnRegister');
+  btn.disabled = true; btn.textContent = 'Creating account…';
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const uid  = cred.user.uid;
+
+    // Upload avatar if selected
+    let avatarUrl = '';
+    if (_avatarFile) {
+      btn.textContent = 'Uploading photo…';
+      avatarUrl = await uploadAvatar(uid, _avatarFile);
+    }
+
+    // Update Firebase Auth profile
+    await updateProfile(cred.user, {
+      displayName: name,
+      photoURL: avatarUrl || null,
+    });
+
+    // Create user document in Firestore (Shadow Nexus Wave profile structure)
+    const userRef  = doc(db, 'users', uid);
+    const existing = await getDoc(userRef);
+    if(!existing.exists()) {
+      await setDoc(userRef, {
+        uid,
+        displayName:    name,
+        username:       usernameRaw.toLowerCase() || '',
+        email,
+        avatar:         avatarUrl,
+        bio,
+        role:           'member',
+        followers:      [],
+        following:      [],
+        followerCount:  0,
+        followingCount: 0,
+        isLive:         false,
+        liveRoomId:     null,
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
+      });
+    }
+    // onAuthStateChanged will redirect
+  } catch(e) {
+    showError(friendlyError(e));
+    btn.disabled = false; btn.textContent = 'Create Account';
+  }
+});
+
+/* ── Google ── */
+$('btnGoogle').addEventListener('click', async () => {
+  clearMessages();
+  $('btnGoogle').disabled = true;
+  try {
+    const provider = new GoogleAuthProvider();
+    const cred = await signInWithPopup(auth, provider);
+    // Ensure user doc exists
+    const uid = cred.user.uid;
+    const userRef = doc(db, 'users', uid);
+    const existing = await getDoc(userRef);
+    if(!existing.exists()) {
+      await setDoc(userRef, {
+        uid,
+        displayName:    cred.user.displayName || '',
+        username:       '',
+        email:          cred.user.email || '',
+        avatar:         cred.user.photoURL || '',
+        bio:            '',
+        role:           'member',
+        followers:      [],
+        following:      [],
+        followerCount:  0,
+        followingCount: 0,
+        isLive:         false,
+        liveRoomId:     null,
+        createdAt:      serverTimestamp(),
+        updatedAt:      serverTimestamp(),
+      });
+    }
+    // onAuthStateChanged will redirect
+  } catch(e) {
+    showError(friendlyError(e));
+    $('btnGoogle').disabled = false;
+  }
+});
+
+/* ── Forgot password ── */
+$('forgotLink').addEventListener('click', async () => {
+  const email = $('siEmail').value.trim();
+  if(!email) { showError('Enter your email address above first.'); return; }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showSuccess('Password reset email sent. Check your inbox.');
+  } catch(e) {
+    showError(friendlyError(e));
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shadow Nexus Social → Wave Account Bridge
+//
+//  Flow:
+//    1. User clicks "Log in with Shadow Nexus Social"
+//    2. Social login panel slides open
+//    3. User enters Social email + password
+//    4. POST /auth/social-bridge on the Wave Cloudflare Worker (server-side only)
+//         Worker verifies credentials against Social Firebase (never client-side)
+//         Worker returns { customToken, waveUid, email }
+//         Social credentials are NEVER returned to the browser
+//    5. signInWithCustomToken(auth, customToken) — creates a Wave Firebase session
+//    6. Firestore users/{waveUid}: create or update the Wave profile
+//         - If the doc doesn't exist: create it with Social profile info
+//         - If it exists and is already linked to this Social account: sign in
+//         - If it exists but belongs to a different account: show conflict error
+//    7. Redirect to the Wave app
+//
+//  Security guarantees:
+//    - Social email+password are only ever POSTed to the Wave Worker over HTTPS
+//    - The Worker never returns the Social password or Social ID token
+//    - The Social credentials are not written to Firestore, localStorage, logs, or URLs
+//    - The Wave UID is deterministic: "snx_social_{socialLocalId}" — server-assigned
+//    - We never trust a socialUserId supplied by the browser
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Wave Worker URL — the secure bridge endpoint lives here
+const WAVE_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+
+/* ── Social bridge panel toggle ── */
+$('btnSocialBridge').addEventListener('click', () => {
+  $('socialBridgePanel').classList.remove('sfl-hidden');
+  $('btnSocialBridge').style.display = 'none';
+  clearMessages();
+  $('sbEmail').focus();
+});
+$('socialBridgeClose').addEventListener('click', () => {
+  $('socialBridgePanel').classList.add('sfl-hidden');
+  $('btnSocialBridge').style.display = '';
+  $('sbEmail').value = '';
+  $('sbPassword').value = '';
+  clearMessages();
+});
+
+/* ── Social bridge submit ── */
+$('formSocialBridge').addEventListener('submit', async e => {
+  e.preventDefault();
+  clearMessages();
+
+  const email    = $('sbEmail').value.trim();
+  const password = $('sbPassword').value;
+  if (!email || !password) {
+    showError('Please enter your Shadow Nexus Social email and password.');
+    return;
+  }
+
+  const btn = $('btnSocialBridgeSubmit');
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+
+  try {
+    // ── Step 1: Call the Wave Worker bridge (server-side Social auth) ──────
+    let bridgeData;
+    try {
+      const res = await fetch(`${WAVE_WORKER_URL}/auth/social-bridge`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Only email+password are sent — never stored anywhere by the bridge
+        body:    JSON.stringify({ email, password }),
+      });
+      bridgeData = await res.json();
+      if (!res.ok || !bridgeData.customToken) {
+        // Map server error codes to user-facing messages
+        const msg = bridgeData?.error || '';
+        if (res.status === 429) {
+          showError('Too many sign-in attempts. Please wait a moment and try again.');
+        } else if (res.status === 503) {
+          showError('Shadow Nexus Social login is temporarily unavailable. Please try again later.');
+        } else if (res.status === 502) {
+          showError('Unable to connect to Shadow Nexus Social right now. Please try again.');
+        } else if (msg.toLowerCase().includes('disabled')) {
+          showError('Your Shadow Nexus Social account has been disabled.');
+        } else {
+          // Generic message — does not reveal whether the email exists
+          showError('Shadow Nexus Social login failed. Please check your email and password.');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Log In';
+        return;
+      }
+    } catch (_) {
+      showError('Unable to connect to Shadow Nexus Social right now. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Log In';
+      return;
+    }
+
+    // ── Step 2: Sign into Wave Firebase with the custom token ──────────────
+    // The custom token was minted by the Worker for UID = "snx_social_{socialLocalId}"
+    // It is a Wave Firebase credential — it has NO access to Social Firebase.
+    btn.textContent = 'Signing in to Wave…';
+    let waveUser;
+    try {
+      const cred = await signInWithCustomToken(auth, bridgeData.customToken);
+      waveUser = cred.user;
+    } catch (authErr) {
+      showError('Your Shadow Nexus Social account was verified, but we couldn\'t link your Wave profile. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Log In';
+      return;
+    }
+
+    // ── Step 3: Create or update the Wave Firestore profile ───────────────
+    // waveUid = "snx_social_{socialLocalId}" — server-assigned, never trusted from browser
+    btn.textContent = 'Linking profile…';
+    const waveUid  = waveUser.uid;  // confirmed server-assigned value from custom token
+    const userRef  = doc(db, 'users', waveUid);
+    const existing = await getDoc(userRef);
+
+    // ── The 4 Social-controlled profile fields ────────────────────────────
+    // These are always written from the bridge response — Social is the source of truth.
+    // They are never sourced from the browser, from Wave-side user input, or from
+    // the Wave Firebase Auth user object (which has no profile for custom-token users).
+    const sp = bridgeData.socialProfile || {};
+    const socialDisplayName = sp.displayName || bridgeData.email?.split('@')[0] || '';
+    const socialUsername    = sp.username    || socialDisplayName.toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
+    const socialAvatar      = sp.avatar      || '';
+    const socialBio         = sp.bio         || '';
+
+    if (existing.exists()) {
+      const data = existing.data();
+      // If the doc already has a shadowNexusSocialUserId that is DIFFERENT from the
+      // one now logging in — conflict (a different Social account already claimed this Wave UID,
+      // which cannot happen given deterministic UIDs, but guard defensively anyway).
+      if (data.shadowNexusSocialUserId && data.shadowNexusSocialUserId !== waveUid.replace('snx_social_', '')) {
+        // Sign out immediately to avoid leaving a partial session
+        await auth.signOut?.();
+        showError('This Shadow Nexus Social account is already linked to another Shadow Nexus Wave account.');
+        btn.disabled = false;
+        btn.textContent = 'Log In';
+        return;
+      }
+      // Existing linked profile — sync the 4 Social-controlled fields on every login.
+      // Wave-specific data (followers, credits, live history, etc.) is NOT touched.
+      await updateDoc(userRef, {
+        // ── Social-controlled fields (always refreshed from Social) ──
+        displayName:               socialDisplayName,
+        username:                  socialUsername,
+        avatar:                    socialAvatar,
+        bio:                       socialBio,
+        // ── Link metadata ──
+        linkedToShadowNexusSocial: true,
+        linkedAt:                  serverTimestamp(),
+        updatedAt:                 serverTimestamp(),
+        ...(bridgeData.email ? { email: bridgeData.email } : {}),
+      });
+    } else {
+      // No Wave profile yet — create the full profile with Social data as the seed.
+      // Wave-specific fields start at their defaults.
+      await setDoc(userRef, {
+        uid:             waveUid,
+        // ── Social-controlled fields ──
+        displayName:     socialDisplayName,
+        username:        socialUsername,
+        email:           bridgeData.email || '',
+        avatar:          socialAvatar,
+        bio:             socialBio,
+        // ── Wave-specific defaults ──
+        role:            'member',
+        followers:       [],
+        following:       [],
+        followerCount:   0,
+        followingCount:  0,
+        isLive:          false,
+        liveRoomId:      null,
+        // ── Linking fields ──
+        shadowNexusSocialUserId:   waveUid.replace('snx_social_', ''),
+        linkedToShadowNexusSocial: true,
+        linkedAt:                  serverTimestamp(),
+        createdAt:                 serverTimestamp(),
+        updatedAt:                 serverTimestamp(),
+      });
+    }
+
+    // ── Done — onAuthStateChanged will redirect ────────────────────────────
+    // (no explicit navigation needed; the existing onAuthStateChanged handler fires)
+
+  } catch (unexpected) {
+    showError('Your Shadow Nexus Social account was verified, but we couldn\'t link your Wave profile. Please try again.');
+    btn.disabled = false;
+    btn.textContent = 'Log In';
+  }
+});
+</script>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

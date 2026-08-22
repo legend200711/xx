@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Profile — Shadow Nexus Wave</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+.profile-page { max-width: 960px; margin: 0 auto; padding: 0 0 60px; }
+
+/* Cover banner */
+.profile-cover {
+  height: 200px; width: 100%;
+  background: linear-gradient(135deg, #061830 0%, #0d2444 40%, #0a1c35 70%, #060d18 100%);
+  position: relative; overflow: hidden;
+  flex-shrink: 0;
+}
+.profile-cover::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 80% at 50% 120%, rgba(0,174,239,0.18) 0%, transparent 60%);
+}
+.profile-cover-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, transparent 60%, rgba(6,13,24,0.85) 100%);
+}
+
+/* Avatar row */
+.profile-avatar-row {
+  display: flex; align-items: flex-end;
+  gap: 16px;
+  padding: 0 24px;
+  margin-top: -52px;
+  position: relative; z-index: 10;
+  margin-bottom: 16px;
+}
+.profile-avatar {
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  border: 3px solid var(--sfl-bg);
+  box-shadow: var(--sfl-glow-sm);
+  background: var(--sfl-bg-card);
+  object-fit: cover;
+  flex-shrink: 0;
+  animation: sflBluePulse 3s infinite;
+}
+.profile-avatar.live {
+  border-color: var(--sfl-live);
+  animation: sflLivePulse 2s infinite;
+}
+.profile-avatar-placeholder {
+  width: 96px; height: 96px; border-radius: 50%;
+  border: 3px solid var(--sfl-bg);
+  background: var(--sfl-bg-card);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px; flex-shrink: 0;
+}
+.profile-avatar-actions { flex: 1; display: flex; justify-content: flex-end; gap: 10px; padding-bottom: 4px; flex-wrap: wrap; }
+
+/* Profile info */
+.profile-info { padding: 0 24px 16px; }
+.profile-display-name { font-size: 22px; font-weight: 900; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.profile-username { font-size: 14px; color: var(--sfl-text-muted); margin-top: 3px; }
+.profile-bio { font-size: 14px; color: var(--sfl-text-label); margin-top: 8px; line-height: 1.6; max-width: 600px; }
+
+/* Live badge */
+.profile-live-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--sfl-live);
+  color: #fff; font-size: 12px; font-weight: 800;
+  padding: 4px 12px 4px 8px;
+  border-radius: var(--sfl-r-full);
+  cursor: pointer; text-decoration: none;
+  animation: sflLivePulse 2s infinite;
+  letter-spacing: 0.5px;
+}
+.profile-live-dot { width: 8px; height: 8px; background: #fff; border-radius: 50%; animation: sflLiveDot 1s infinite; }
+
+/* Stats row */
+.profile-stats {
+  display: flex; gap: 28px; flex-wrap: wrap;
+  padding: 12px 24px 16px;
+  border-top: 1px solid var(--sfl-border);
+  border-bottom: 1px solid var(--sfl-border);
+}
+.profile-stat { text-align: center; cursor: pointer; }
+.profile-stat-num { font-size: 17px; font-weight: 800; color: var(--sfl-text); }
+.profile-stat-label { font-size: 11px; color: var(--sfl-text-muted); margin-top: 2px; }
+.profile-stat:hover .profile-stat-num { color: var(--sfl-blue); }
+
+/* Profile tabs */
+.profile-tabs {
+  display: flex; border-bottom: 1px solid var(--sfl-border);
+  padding: 0 24px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.profile-tabs::-webkit-scrollbar { display: none; }
+.profile-tab {
+  padding: 12px 18px;
+  font-size: 13px; font-weight: 600;
+  color: var(--sfl-text-muted);
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  transition: color var(--sfl-t), border-color var(--sfl-t);
+  white-space: nowrap; user-select: none;
+}
+.profile-tab:hover { color: var(--sfl-text); }
+.profile-tab.active { color: var(--sfl-blue); border-bottom-color: var(--sfl-blue); }
+
+/* Profile content area */
+.profile-content { padding: 20px 24px; }
+
+/* Follow/Unfollow button states */
+#btnFollow.is-following {
+  background: transparent;
+  border-color: var(--sfl-border-hot);
+  color: var(--sfl-blue);
+}
+#btnFollow.is-following:hover {
+  background: rgba(255,50,50,0.08);
+  border-color: rgba(255,68,102,0.5);
+  color: #ff4466;
+}
+
+/* Follower/Following modal */
+.follow-modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.72);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  animation: sflFadeIn 0.18s ease;
+}
+.follow-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-xl);
+  width: 100%; max-width: 400px;
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  animation: sflFadeUp 0.2s ease;
+}
+.follow-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--sfl-border);
+  flex-shrink: 0;
+}
+.follow-modal-title { font-size: 15px; font-weight: 800; }
+.follow-modal-close {
+  width: 30px; height: 30px;
+  background: var(--sfl-bg-hover);
+  border: 1px solid var(--sfl-border);
+  border-radius: 50%; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+  color: var(--sfl-text-muted); transition: background 0.15s;
+}
+.follow-modal-close:hover { background: var(--sfl-bg-card); color: var(--sfl-text); }
+.follow-modal-body { overflow-y: auto; flex: 1; padding: 10px 0; }
+.follow-modal-loader { padding: 32px; text-align: center; color: var(--sfl-text-muted); }
+.follow-modal-empty { padding: 32px 20px; text-align: center; color: var(--sfl-text-muted); font-size: 14px; }
+
+/* Person row in modal */
+.follow-person-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px;
+  cursor: pointer; transition: background 0.12s;
+}
+.follow-person-row:hover { background: var(--sfl-bg-hover); }
+.follow-person-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--sfl-bg-card);
+  object-fit: cover; flex-shrink: 0;
+  border: 1px solid var(--sfl-border);
+}
+.follow-person-avatar-placeholder {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.follow-person-info { flex: 1; min-width: 0; }
+.follow-person-name { font-size: 13px; font-weight: 700; color: var(--sfl-text); }
+.follow-person-handle { font-size: 12px; color: var(--sfl-text-muted); margin-top: 1px; }
+.follow-person-btn { flex-shrink: 0; }
+
+@media (max-width: 768px) {
+  .profile-page { padding-top: var(--sfl-nav-h); }
+  .profile-cover { height: 150px; }
+  .profile-avatar-row { padding: 0 14px; margin-top: -46px; }
+  .profile-avatar { width: 82px; height: 82px; }
+  .profile-avatar-placeholder { width: 82px; height: 82px; font-size: 28px; }
+  .profile-info { padding: 0 14px 14px; }
+  .profile-stats { padding: 12px 14px 14px; gap: 20px; }
+  .profile-tabs { padding: 0 14px; }
+  .profile-content { padding: 16px 14px; }
+  .profile-display-name { font-size: 18px; }
+}
+@media (max-width: 480px) {
+  .profile-stats { gap: 14px; }
+  .profile-stat-num { font-size: 15px; }
+}
+/* ── Delete button on video cards ── */
+.sfl-card-delete-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+  background: rgba(192,57,43,0.88); color: #fff;
+  border: none; border-radius: var(--sfl-r-sm);
+  font-size: 11px; font-weight: 700; padding: 4px 9px;
+  cursor: pointer; line-height: 1.4;
+  opacity: 0; transition: opacity var(--sfl-t);
+  pointer-events: none;
+}
+.sfl-video-card:hover .sfl-card-delete-btn,
+.sfl-video-card:focus-within .sfl-card-delete-btn {
+  opacity: 1; pointer-events: auto;
+}
+.sfl-video-card { position: relative; }
+/* Delete confirmation modal */
+.sfl-del-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.sfl-del-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+}
+.sfl-del-modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.sfl-del-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; color: var(--sfl-text); }
+.sfl-del-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
+.sfl-del-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer"></div>
+<div id="sfl-toast" role="status"></div>
+
+<!-- Mobile top bar -->
+<header class="sfl-topbar" aria-label="Top navigation">
+  <a href="sfl-home.html" style="font-size:18px;text-decoration:none;color:var(--sfl-text);">←</a>
+  <div class="sfl-topbar-title" id="topbarName">Profile</div>
+  <div></div>
+</header>
+
+<!-- Desktop sidebar -->
+<aside class="sfl-sidebar" aria-label="Main navigation">
+  <div class="sfl-logo">
+    <a href="sfl-home.html" style="text-decoration:none;">
+      <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
+      <div class="sfl-logo-sub">Video · Live · Connect</div>
+    </a>
+  </div>
+  <nav class="sfl-sidebar-nav">
+    <a href="sfl-home.html"   class="sfl-nav-item"><span class="sfl-nav-icon">🏠</span> Home</a>
+    <a href="sfl-search.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔍</span> Discover</a>
+    <a href="live.html"       class="sfl-nav-item"><span class="sfl-nav-icon">📡</span> Live</a>
+    <a href="sfl-upload.html" class="sfl-nav-item"><span class="sfl-nav-icon">📤</span> Upload</a>
+    <a href="sfl-notifications.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔔</span> Notifications</a>
+    <a href="sfl-profile.html" class="sfl-nav-item active"><span class="sfl-nav-icon">👤</span> Profile</a>
+  </nav>
+  <div class="sfl-sidebar-footer">
+    <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+    <button class="sfl-nav-item" id="sidebarLogout"><span class="sfl-nav-icon">🚪</span> Sign Out</button>
+  </div>
+</aside>
+
+<div class="sfl-layout">
+  <main class="sfl-main" role="main">
+
+    <!-- Loading -->
+    <div class="sfl-loader-wrap" id="profileLoader" style="min-height:60vh;">
+      <div class="sfl-spinner"></div>
+      <span>Loading profile…</span>
+    </div>
+
+    <!-- Profile (shown after load) -->
+    <div class="profile-page sfl-hidden" id="profilePage">
+
+      <!-- Cover -->
+      <div class="profile-cover" id="profileCover">
+        <div class="profile-cover-overlay"></div>
+      </div>
+
+      <!-- Avatar + actions -->
+      <div class="profile-avatar-row">
+        <div id="profileAvatarWrap">
+          <img class="profile-avatar" id="profileAvatar" src="" alt="Profile photo" style="display:none;">
+          <div class="profile-avatar-placeholder" id="profileAvatarPlaceholder">👤</div>
+        </div>
+        <div class="profile-avatar-actions">
+          <a href="live.html" class="profile-live-badge sfl-hidden" id="liveNowBadge" aria-label="Watching live stream">
+            <span class="profile-live-dot"></span>LIVE NOW
+          </a>
+          <!-- Follow shown on other users' profiles -->
+          <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnFollow" style="display:none;" aria-label="Follow this creator">Follow</button>
+          <!-- Own profile buttons -->
+          <a href="sfl-upload.html" class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnUpload" style="display:none;">📤 Upload</a>
+          <a href="sfl-settings.html" class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnEditProfile" style="display:none;">✏️ Edit Profile</a>
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div class="profile-info">
+        <div class="profile-display-name" id="profileName">—</div>
+        <div class="profile-username" id="profileUsername"></div>
+        <div class="profile-bio" id="profileBio"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="profile-stats">
+        <div class="profile-stat" id="statVideos">
+          <div class="profile-stat-num" id="statVideosNum">0</div>
+          <div class="profile-stat-label">Videos</div>
+        </div>
+        <div class="profile-stat" id="statFollowers" role="button" tabindex="0" aria-label="View followers" title="View followers">
+          <div class="profile-stat-num" id="statFollowersNum">0</div>
+          <div class="profile-stat-label">Followers</div>
+        </div>
+        <div class="profile-stat" id="statFollowing" role="button" tabindex="0" aria-label="View following" title="View following">
+          <div class="profile-stat-num" id="statFollowingNum">0</div>
+          <div class="profile-stat-label">Following</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-num" id="statViews">0</div>
+          <div class="profile-stat-label">Total Views</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="profile-tabs" role="tablist">
+        <div class="profile-tab active" data-tab="videos" role="tab" tabindex="0">Videos</div>
+        <div class="profile-tab" data-tab="live" role="tab" tabindex="0">📡 Live</div>
+        <div class="profile-tab" data-tab="liked" role="tab" tabindex="0">❤️ Liked</div>
+      </div>
+
+      <!-- Tab content -->
+      <div class="profile-content">
+        <div class="sfl-video-grid" id="profileVideoGrid">
+          <div class="sfl-loader-wrap" id="profileGridLoader" style="grid-column:1/-1;">
+            <div class="sfl-spinner"></div>
+          </div>
+        </div>
+        <div class="sfl-empty sfl-hidden" id="profileGridEmpty">
+          <div class="sfl-empty-icon">🎬</div>
+          <div class="sfl-empty-title" id="profileEmptyTitle">No videos yet</div>
+          <div class="sfl-empty-sub" id="profileEmptySub">Upload your first video to get started.</div>
+        </div>
+      </div>
+
+    </div><!-- /profile-page -->
+
+    <!-- Not found -->
+    <div class="sfl-empty sfl-hidden" id="profileNotFound">
+      <div class="sfl-empty-icon">👤</div>
+      <div class="sfl-empty-title">Profile not found</div>
+      <div class="sfl-empty-sub">This user doesn't exist or their account is private.</div>
+      <div style="margin-top:16px;"><a href="sfl-home.html" class="sfl-btn sfl-btn-primary">Back to Home</a></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="sfl-bottom-nav" aria-label="Mobile navigation">
+  <a href="sfl-home.html" class="sfl-bn-item"><span class="sfl-bn-icon">🏠</span><span>Home</span></a>
+  <a href="sfl-search.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔍</span><span>Discover</span></a>
+  <a href="sfl-upload.html" class="sfl-bn-item"><span class="sfl-bn-icon">📤</span><span>Upload</span></a>
+  <a href="sfl-notifications.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔔</span><span>Alerts</span></a>
+  <a href="sfl-profile.html" class="sfl-bn-item active"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
+</nav>
+
+<!-- Follower / Following modal -->
+<div id="followModal" class="follow-modal-overlay" style="display:none;" role="dialog" aria-modal="true">
+  <div class="follow-modal">
+    <div class="follow-modal-head">
+      <div class="follow-modal-title" id="followModalTitle">Followers</div>
+      <button class="follow-modal-close" id="followModalClose" aria-label="Close">✕</button>
+    </div>
+    <div class="follow-modal-body" id="followModalBody">
+      <div class="follow-modal-loader">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signOut }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import {
+  getFirestore, doc, getDoc, getDocs, collection, query, where, orderBy, limit,
+  updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, deleteDoc
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:'shadow-nexus-wave',
+  storageBucket:'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId:'68850298302',
+  appId:'1:68850298302:web:603bbb8539079903cb1def'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+const toast = (msg, dur=3200) => {
+  const t = $('sfl-toast'); t.textContent = msg; t.classList.add('visible');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('visible'), dur);
+};
+
+const params = new URLSearchParams(location.search);
+let _targetUid = params.get('uid');
+let _user = null, _userData = null, _targetData = null;
+let _following = false, _activeTab = 'videos';
+let _pendingDeleteId = null, _pendingDeleteData = null;
+
+/* ─────────────────────────────────────────────────────────────
+   Utility
+───────────────────────────────────────────────────────────── */
+function fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+  return String(n || 0);
+}
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60)    return 'just now';
+  if (s < 3600)  return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+function fmtTime(s) {
+  if (!s) return '';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  if (h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Load profile
+───────────────────────────────────────────────────────────── */
+async function loadProfile() {
+  if (!_targetUid) { showNotFound(); return; }
+  try {
+    const snap = await getDoc(doc(db, 'users', _targetUid));
+    if (!snap.exists()) { showNotFound(); return; }
+    _targetData = snap.data();
+    renderProfile(_targetData);
+    await loadVideos('videos');
+  } catch(e) {
+    console.error('loadProfile:', e);
+    showNotFound();
+  }
+}
+
+function showNotFound() {
+  $('profileLoader').classList.add('sfl-hidden');
+  $('profileNotFound').classList.remove('sfl-hidden');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Render profile
+───────────────────────────────────────────────────────────── */
+function renderProfile(data) {
+  $('profileLoader').classList.add('sfl-hidden');
+  $('profilePage').classList.remove('sfl-hidden');
+
+  const name = data.displayName || data.username || 'Creator';
+  document.title = `${name} — Shadow Nexus Wave`;
+  $('topbarName').textContent = name;
+  $('profileName').textContent = name;
+  $('profileUsername').textContent = data.username ? `@${data.username}` : '';
+  $('profileBio').textContent = data.bio || '';
+
+  // Avatar
+  if (data.avatar) {
+    $('profileAvatar').src = data.avatar;
+    $('profileAvatar').style.display = '';
+    $('profileAvatarPlaceholder').style.display = 'none';
+    $('profileAvatar').onerror = () => {
+      $('profileAvatar').style.display = 'none';
+      $('profileAvatarPlaceholder').style.display = '';
+    };
+  }
+
+  // Cover image
+  if (data.coverPhoto) {
+    $('profileCover').style.backgroundImage = `url(${data.coverPhoto})`;
+    $('profileCover').style.backgroundSize = 'cover';
+    $('profileCover').style.backgroundPosition = 'center';
+  }
+
+  // Stats
+  const followers = Array.isArray(data.followers) ? data.followers.length : (data.followerCount || 0);
+  const following  = Array.isArray(data.following)  ? data.following.length  : (data.followingCount || 0);
+  $('statFollowersNum').textContent = fmtNum(followers);
+  $('statFollowingNum').textContent = fmtNum(following);
+
+  // Live badge
+  if (data.isLive && data.liveRoomId) {
+    $('liveNowBadge').classList.remove('sfl-hidden');
+    $('liveNowBadge').href = `live.html?room=${data.liveRoomId}`;
+    $('profileAvatar').classList.add('live');
+  }
+
+  const isOwnProfile = _user && _user.uid === _targetUid;
+
+  if (isOwnProfile) {
+    // Own profile — show Upload + Edit Profile, never Follow
+    $('btnUpload').style.display = '';
+    $('btnEditProfile').style.display = '';
+    $('btnFollow').style.display = 'none';
+  } else {
+    // Another user's profile — show Follow
+    $('btnUpload').style.display = 'none';
+    $('btnEditProfile').style.display = 'none';
+    $('btnFollow').style.display = '';
+    // Determine follow state from target's followers array
+    _following = !!(
+      _user &&
+      Array.isArray(data.followers) &&
+      data.followers.includes(_user.uid)
+    );
+    updateFollowBtn();
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Follow button
+───────────────────────────────────────────────────────────── */
+function updateFollowBtn() {
+  const btn = $('btnFollow');
+  if (_following) {
+    btn.textContent = '✓ Following';
+    btn.className = 'sfl-btn sfl-btn-sm is-following';
+    btn.setAttribute('aria-label', 'Following — click to unfollow');
+    btn.title = 'Click to unfollow';
+  } else {
+    btn.textContent = 'Follow';
+    btn.className = 'sfl-btn sfl-btn-primary sfl-btn-sm';
+    btn.setAttribute('aria-label', 'Follow this creator');
+    btn.title = '';
+  }
+}
+
+$('btnFollow').addEventListener('click', async () => {
+  if (!_user) { toast('Sign in to follow creators.'); return; }
+  // Prevent self-follow (belt-and-suspenders)
+  if (_user.uid === _targetUid) return;
+
+  const btn = $('btnFollow');
+  btn.disabled = true;
+
+  try {
+    const targetRef = doc(db, 'users', _targetUid);
+    const myRef     = doc(db, 'users', _user.uid);
+
+    if (_following) {
+      /* ── UNFOLLOW ── */
+      await updateDoc(targetRef, { followers: arrayRemove(_user.uid) });
+      await updateDoc(myRef,     { following: arrayRemove(_targetUid) });
+      _following = false;
+    } else {
+      /* ── FOLLOW ── */
+      await updateDoc(targetRef, { followers: arrayUnion(_user.uid) });
+      await updateDoc(myRef,     { following: arrayUnion(_targetUid) });
+      _following = true;
+
+      // Send follow notification to the followed user
+      await sendFollowNotification();
+    }
+
+    updateFollowBtn();
+
+    // Refresh follower count from live data
+    const fresh = await getDoc(targetRef);
+    if (fresh.exists()) {
+      const d   = fresh.data();
+      const cnt = Array.isArray(d.followers) ? d.followers.length : 0;
+      $('statFollowersNum').textContent = fmtNum(cnt);
+    }
+  } catch(e) {
+    console.error('follow error:', e);
+    toast('Error updating follow.');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* Send a follow notification to the target user */
+async function sendFollowNotification() {
+  if (!_user || !_targetUid) return;
+  try {
+    const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
+    const myAvatar = _userData?.avatar || _user.photoURL || '';
+    await addDoc(collection(db, 'notifications', _targetUid, 'items'), {
+      type:       'follow',
+      fromUid:    _user.uid,
+      fromName:   myName,
+      fromAvatar: myAvatar,
+      fromProfile: `sfl-profile.html?uid=${_user.uid}`,
+      message:    `${myName} started following you.`,
+      read:       false,
+      ts:         serverTimestamp(),
+      createdAt:  Date.now(),
+    });
+  } catch(e) {
+    // Notification failure is non-critical; don't surface to user
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Followers / Following modal
+───────────────────────────────────────────────────────────── */
+async function openFollowModal(type) {
+  // type: 'followers' | 'following'
+  $('followModalTitle').textContent = type === 'followers' ? 'Followers' : 'Following';
+  $('followModalBody').innerHTML = '<div class="follow-modal-loader">Loading…</div>';
+  $('followModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  try {
+    // Get the list of UIDs from target's doc
+    const snap   = await getDoc(doc(db, 'users', _targetUid));
+    if (!snap.exists()) { $('followModalBody').innerHTML = '<div class="follow-modal-empty">No data found.</div>'; return; }
+    const data   = snap.data();
+    const uidList = Array.isArray(data[type]) ? data[type] : [];
+
+    if (!uidList.length) {
+      $('followModalBody').innerHTML = `<div class="follow-modal-empty">${
+        type === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'
+      }</div>`;
+      return;
+    }
+
+    // Fetch user docs in batches of 30 (Firestore 'in' limit)
+    const batches = [];
+    for (let i = 0; i < uidList.length; i += 30) {
+      batches.push(uidList.slice(i, i + 30));
+    }
+
+    const userMap = {};
+    for (const batch of batches) {
+      const q    = query(collection(db, 'users'), where('uid', 'in', batch));
+      const docs = await getDocs(q);
+      docs.forEach(d => { userMap[d.id] = d.data(); });
+    }
+
+    // Build rows
+    const body = $('followModalBody');
+    body.innerHTML = '';
+
+    // Determine which UIDs the current user already follows (for modal follow buttons)
+    const myFollowingSet = new Set(
+      Array.isArray(_userData?.following) ? _userData.following : []
+    );
+
+    for (const uid of uidList) {
+      const u = userMap[uid] || {};
+      const isMe   = _user && uid === _user.uid;
+      const isFollowing = myFollowingSet.has(uid);
+      const row = document.createElement('div');
+      row.className = 'follow-person-row';
+      row.dataset.uid = uid;
+
+      const avatarHTML = u.avatar
+        ? `<img class="follow-person-avatar" src="${u.avatar}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\'follow-person-avatar-placeholder\\'>👤</div>'">`
+        : `<div class="follow-person-avatar-placeholder">👤</div>`;
+
+      const followBtnHTML = isMe
+        ? ''
+        : `<button class="sfl-btn sfl-btn-sm ${isFollowing ? 'is-following sfl-btn-outline' : 'sfl-btn-primary'} modal-follow-btn"
+             data-uid="${uid}" data-following="${isFollowing}"
+             style="min-width:80px;">
+             ${isFollowing ? '✓ Following' : 'Follow'}
+           </button>`;
+
+      row.innerHTML = `
+        ${avatarHTML}
+        <div class="follow-person-info">
+          <div class="follow-person-name">${u.displayName || u.username || 'Unknown'}</div>
+          <div class="follow-person-handle">${u.username ? `@${u.username}` : ''}</div>
+        </div>
+        <div class="follow-person-btn">${followBtnHTML}</div>
+      `;
+
+      // Navigate to profile on row click (not on button)
+      row.addEventListener('click', e => {
+        if (e.target.closest('.modal-follow-btn')) return;
+        closeFollowModal();
+        window.location.href = `sfl-profile.html?uid=${uid}`;
+      });
+
+      body.appendChild(row);
+    }
+
+    // Wire modal follow buttons
+    body.querySelectorAll('.modal-follow-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!_user) { toast('Sign in to follow.'); return; }
+        const targetUid   = btn.dataset.uid;
+        const wasFollowing = btn.dataset.following === 'true';
+        btn.disabled = true;
+        try {
+          const tRef = doc(db, 'users', targetUid);
+          const mRef = doc(db, 'users', _user.uid);
+          if (wasFollowing) {
+            await updateDoc(tRef, { followers: arrayRemove(_user.uid) });
+            await updateDoc(mRef, { following: arrayRemove(targetUid) });
+            btn.textContent = 'Follow';
+            btn.className = 'sfl-btn sfl-btn-sm sfl-btn-primary modal-follow-btn';
+            btn.dataset.following = 'false';
+            myFollowingSet.delete(targetUid);
+          } else {
+            await updateDoc(tRef, { followers: arrayUnion(_user.uid) });
+            await updateDoc(mRef, { following: arrayUnion(targetUid) });
+            btn.textContent = '✓ Following';
+            btn.className = 'sfl-btn sfl-btn-sm is-following sfl-btn-outline modal-follow-btn';
+            btn.dataset.following = 'true';
+            myFollowingSet.add(targetUid);
+            // Notify the followed user
+            if (_user && targetUid !== _user.uid) {
+              const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
+              const myAvatar = _userData?.avatar || _user.photoURL || '';
+              addDoc(collection(db, 'notifications', targetUid, 'items'), {
+                type: 'follow', fromUid: _user.uid, fromName: myName, fromAvatar: myAvatar,
+                fromProfile: `sfl-profile.html?uid=${_user.uid}`,
+                message: `${myName} started following you.`,
+                read: false, ts: serverTimestamp(), createdAt: Date.now(),
+              }).catch(() => {});
+            }
+          }
+          // Also refresh main page follow button if this is the profile we're viewing
+          if (targetUid === _targetUid) {
+            _following = !wasFollowing;
+            updateFollowBtn();
+          }
+        } catch(err) {
+          toast('Error updating follow.');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+  } catch(e) {
+    console.error('openFollowModal:', e);
+    $('followModalBody').innerHTML = '<div class="follow-modal-empty">Could not load list.</div>';
+  }
+}
+
+function closeFollowModal() {
+  $('followModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+$('followModalClose').addEventListener('click', closeFollowModal);
+$('followModal').addEventListener('click', e => {
+  if (e.target === $('followModal')) closeFollowModal();
+});
+
+// Keyboard close
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('followModal').style.display !== 'none') closeFollowModal();
+});
+
+// Stat click handlers for Followers / Following
+$('statFollowers').addEventListener('click', () => openFollowModal('followers'));
+$('statFollowers').addEventListener('keydown', e => { if (e.key === 'Enter') openFollowModal('followers'); });
+$('statFollowing').addEventListener('click', () => openFollowModal('following'));
+$('statFollowing').addEventListener('keydown', e => { if (e.key === 'Enter') openFollowModal('following'); });
+
+/* ─────────────────────────────────────────────────────────────
+   Build video card
+───────────────────────────────────────────────────────────── */
+function buildCard(id, data, showDelete = false) {
+  const a = document.createElement('a');
+  a.href  = `sfl-player.html?v=${id}`;
+  a.className = 'sfl-video-card sfl-fade-up';
+  const thumb = data.thumbnailUrl
+    ? `<img src="${data.thumbnailUrl}" alt="${data.title || 'Video'}" loading="lazy">`
+    : `<div class="sfl-video-thumb-placeholder">🎬</div>`;
+  const dur = data.duration ? `<div class="sfl-video-duration">${fmtTime(data.duration)}</div>` : '';
+  const delBtn = showDelete
+    ? `<button class="sfl-card-delete-btn" data-vid="${id}" aria-label="Delete video">🗑 DELETE</button>`
+    : '';
+  a.innerHTML = `
+    ${delBtn}
+    <div class="sfl-video-thumb">
+      ${thumb}
+      <div class="sfl-video-play-overlay"><div class="sfl-video-play-btn">▶</div></div>
+      ${dur}
+    </div>
+    <div class="sfl-video-meta" style="padding:10px 12px 12px;">
+      <div class="sfl-video-title">${data.title || 'Untitled'}</div>
+      <div class="sfl-video-stats">
+        <span>${fmtNum(data.views || 0)} views</span>
+        <span>${timeAgo(data.createdAt)}</span>
+      </div>
+    </div>
+  `;
+  if (showDelete) {
+    const btn = a.querySelector('.sfl-card-delete-btn');
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _pendingDeleteId   = id;
+      _pendingDeleteData = data;
+      $('profileDeleteModal').classList.remove('sfl-hidden');
+    });
+  }
+  return a;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Load videos for tab
+───────────────────────────────────────────────────────────── */
+async function loadVideos(tab) {
+  _activeTab = tab;
+  const grid   = $('profileVideoGrid');
+  const loader = $('profileGridLoader');
+  const empty  = $('profileGridEmpty');
+  grid.innerHTML = '';
+  empty.classList.add('sfl-hidden');
+  loader.classList.remove('sfl-hidden');
+  grid.appendChild(loader);
+
+  try {
+    let docs = [];
+
+    if (tab === 'videos') {
+      const isOwnProfile = _user && _user.uid === _targetUid;
+      const constraints  = [
+        where('creatorId', '==', _targetUid),
+        ...(!isOwnProfile ? [where('status', '==', 'published')] : []),
+        ...(!isOwnProfile ? [where('visibility', '==', 'public')] : []),
+        orderBy('createdAt', 'desc'),
+        limit(40),
+      ];
+      const snap = await getDocs(query(collection(db, 'videos'), ...constraints));
+      docs = snap.docs;
+      // Tally total views
+      let totalViews = 0;
+      docs.forEach(d => { totalViews += (d.data().views || 0); });
+      $('statViews').textContent   = fmtNum(totalViews);
+      $('statVideosNum').textContent = fmtNum(docs.length);
+
+    } else if (tab === 'liked') {
+      if (!_user || _user.uid !== _targetUid) {
+        loader.classList.add('sfl-hidden');
+        empty.classList.remove('sfl-hidden');
+        $('profileEmptyTitle').textContent = 'Liked videos are private.';
+        $('profileEmptySub').textContent   = '';
+        return;
+      }
+      const snap = await getDocs(query(
+        collection(db, 'videos'),
+        where('likedBy', 'array-contains', _user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(40)
+      ));
+      docs = snap.docs;
+
+    } else if (tab === 'live') {
+      loader.classList.add('sfl-hidden');
+      empty.classList.remove('sfl-hidden');
+      $('profileEmptyTitle').textContent = 'No past streams yet';
+      $('profileEmptySub').textContent   = 'Live stream history coming soon.';
+      return;
+    }
+
+    loader.classList.add('sfl-hidden');
+    grid.innerHTML = '';
+    if (!docs.length) {
+      empty.classList.remove('sfl-hidden');
+      $('profileEmptyTitle').textContent = tab === 'videos' ? 'No videos yet' : 'Nothing here yet';
+      $('profileEmptySub').textContent   = (_user && _user.uid === _targetUid) ? 'Upload your first video!' : '';
+      return;
+    }
+    const isOwnVideosTab = tab === 'videos' && _user && _user.uid === _targetUid;
+    docs.forEach(d => grid.appendChild(buildCard(d.id, d.data(), isOwnVideosTab)));
+  } catch(e) {
+    loader.classList.add('sfl-hidden');
+    console.error('loadVideos:', e);
+    empty.classList.remove('sfl-hidden');
+    $('profileEmptyTitle').textContent = 'Could not load videos.';
+    $('profileEmptySub').textContent   = '';
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Tab switching
+───────────────────────────────────────────────────────────── */
+document.querySelectorAll('.profile-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    loadVideos(tab.dataset.tab);
+  });
+  tab.addEventListener('keydown', e => { if (e.key === 'Enter') tab.click(); });
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Sign out
+───────────────────────────────────────────────────────────── */
+$('sidebarLogout')?.addEventListener('click', async () => {
+  await signOut(auth).catch(() => {});
+  window.location.href = 'sfl-login.html';
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Auth state
+───────────────────────────────────────────────────────────── */
+onAuthStateChanged(auth, async user => {
+  _user = user;
+  if (user) {
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      if (snap.exists()) _userData = snap.data();
+    } catch(e) {}
+  }
+  // If no uid param, show current user's profile
+  if (!_targetUid) {
+    if (!user) { window.location.href = 'sfl-login.html'; return; }
+    _targetUid = user.uid;
+  }
+  loadProfile();
+});
+
+/* ─────────────────────────────────────────────────────────────
+   Video Delete (profile page)
+───────────────────────────────────────────────────────────── */
+$('profileDeleteCancel').addEventListener('click', () => {
+  $('profileDeleteModal').classList.add('sfl-hidden');
+  _pendingDeleteId = null; _pendingDeleteData = null;
+});
+$('profileDeleteModal').addEventListener('click', e => {
+  if (e.target === $('profileDeleteModal')) {
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    _pendingDeleteId = null; _pendingDeleteData = null;
+  }
+});
+
+$('profileDeleteConfirm').addEventListener('click', async () => {
+  const liveUser = auth.currentUser;
+  if (!liveUser || !_pendingDeleteId) return;
+
+  // ── Ownership check ──────────────────────────────────────────────────────
+  console.log('[DELETE] AUTH UID:', liveUser.uid);
+  console.log('[DELETE] VIDEO OWNER ID (creatorId):', _pendingDeleteData?.creatorId);
+  console.log('[DELETE] OWNER MATCH:', liveUser.uid === _pendingDeleteData?.creatorId);
+  console.log('[DELETE] FIRESTORE PATH: videos/' + _pendingDeleteId);
+
+  if (!_pendingDeleteData || _pendingDeleteData.creatorId !== liveUser.uid) {
+    console.warn('[DELETE] BLOCKED — creatorId mismatch. auth:', liveUser.uid, 'doc:', _pendingDeleteData?.creatorId);
+    toast('You can only delete your own videos.');
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    return;
+  }
+
+  const btn = $('profileDeleteConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  const vidId   = _pendingDeleteId;
+  const vidData = _pendingDeleteData;
+
+  try {
+    // Force-refresh the token so it is never stale
+    const idToken = await liveUser.getIdToken(/* forceRefresh */ true);
+
+    // Delete Cloudflare Stream video if applicable
+    const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
+    if (streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
+        });
+        if (!wRes.ok) {
+          const e2 = await wRes.json().catch(() => ({}));
+          console.error('[DELETE] Stream delete failed:', e2.error);
+        }
+      } catch(e) { console.error('[DELETE] Stream delete network error:', e.message); }
+    }
+
+    // Delete R2 video file if applicable
+    const r2Key = vidData.r2Key || vidData.storageKey || null;
+    if (r2Key && !streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),
+        });
+        if (!wRes.ok) {
+          const e2 = await wRes.json().catch(() => ({}));
+          console.error('[DELETE] R2 delete failed:', e2.error);
+        }
+      } catch(e) { console.error('[DELETE] R2 delete network error:', e.message); }
+    }
+
+    // Delete Firestore document
+    // Rule: allow delete: if isOwner(resource.data.creatorId) || isFounder()
+    console.log('[DELETE] DELETE OPERATION: deleteDoc videos/' + vidId);
+    await deleteDoc(doc(db, 'videos', vidId));
+
+    // Remove the card from the DOM immediately
+    const card = document.querySelector(`.sfl-video-card .sfl-card-delete-btn[data-vid="${vidId}"]`)?.closest('.sfl-video-card');
+    card?.remove();
+
+    $('profileDeleteModal').classList.add('sfl-hidden');
+    _pendingDeleteId = null; _pendingDeleteData = null;
+    toast('Video deleted.');
+
+    // Refresh stats
+    loadVideos(_activeTab);
+  } catch(e) {
+    console.error('DELETE ERROR: Firestore deleteDoc failed');
+    console.error('ERROR CODE:', e.code || '(none)');
+    console.error('ERROR MESSAGE:', e.message || String(e));
+    console.error('FIREBASE USER UID:', liveUser.uid);
+    console.error('VIDEO OWNER ID (creatorId):', vidData?.creatorId);
+    console.error('VIDEO DOCUMENT PATH: videos/' + vidId);
+    console.error('FIRESTORE COLLECTION: videos');
+    console.error('DELETE OPERATION: deleteDoc(doc(db, "videos", vidId))');
+    toast('Unable to delete. Check console for error details.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'DELETE';
+  }
+});
+</script>
+
+<!-- Delete confirmation modal (profile page) -->
+<div class="sfl-del-overlay sfl-hidden" id="profileDeleteModal" role="dialog" aria-modal="true" aria-labelledby="profileDeleteTitle">
+  <div class="sfl-del-modal">
+    <div class="sfl-del-modal-icon">🗑️</div>
+    <div class="sfl-del-modal-title" id="profileDeleteTitle">Delete this video?</div>
+    <div class="sfl-del-modal-body">This action cannot be undone.</div>
+    <div class="sfl-del-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="profileDeleteCancel">Cancel</button>
+      <button class="sfl-btn" id="profileDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
+    </div>
+  </div>
+</div>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

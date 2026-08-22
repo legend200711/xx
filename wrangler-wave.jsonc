@@ -1,0 +1,99 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  wrangler-wave.jsonc — Shadow Nexus Wave Cloudflare Worker configuration
+  //
+  //  Worker name : shadow-nexus-wave
+  //  R2 bucket   : legend2  (Wave-only, separate from Social "legend")
+  //  Firebase    : shadow-nexus-wave  (NOT horr-a08f4)
+  //
+  //  ⚠️  DO NOT use this config with the Social worker (yellow-term-11e6).
+  //  ⚠️  DO NOT bind this to the Social R2 bucket (legend).
+  //
+  //  Deploy commands:
+  //    npx wrangler deploy --config wrangler-wave.jsonc
+  //    npx wrangler dev   --config wrangler-wave.jsonc
+  //
+  //  Secrets (set once, never stored here):
+  //    npx wrangler secret put FIREBASE_WEB_API_KEY        --config wrangler-wave.jsonc
+  //    npx wrangler secret put CLOUDFLARE_ACCOUNT_ID       --config wrangler-wave.jsonc
+  //    npx wrangler secret put CLOUDFLARE_API_TOKEN        --config wrangler-wave.jsonc
+  //    npx wrangler secret put R2_ACCESS_KEY_ID            --config wrangler-wave.jsonc
+  //    npx wrangler secret put R2_SECRET_ACCESS_KEY        --config wrangler-wave.jsonc
+  //    npx wrangler secret put LIVEKIT_API_KEY             --config wrangler-wave.jsonc
+  //    npx wrangler secret put LIVEKIT_API_SECRET          --config wrangler-wave.jsonc
+  //
+  //  ── Social→Wave Authentication Bridge secrets (POST /auth/social-bridge) ──
+  //
+  //    npx wrangler secret put SOCIAL_FIREBASE_WEB_API_KEY --config wrangler-wave.jsonc
+  //    npx wrangler secret put WAVE_SA_CLIENT_EMAIL        --config wrangler-wave.jsonc
+  //    npx wrangler secret put WAVE_SA_PRIVATE_KEY         --config wrangler-wave.jsonc
+  //
+  //  SOCIAL_FIREBASE_WEB_API_KEY
+  //    = AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y  (Social project horr-a08f4 Web API key)
+  //    This is a public client key (same key the Social browser client uses).
+  //    It is used server-side only to call the Social Identity Toolkit REST API.
+  //    It NEVER grants admin access to Social Firestore or Social Auth admin.
+  //    DO NOT use the Social Firebase Admin SDK service account key here.
+  //
+  //  WAVE_SA_CLIENT_EMAIL  — Wave Firebase service account email
+  //    Get from: Firebase Console → shadow-nexus-wave → Project Settings →
+  //              Service Accounts → Generate new private key → JSON field "client_email"
+  //    Example: firebase-adminsdk-xxxxx@shadow-nexus-wave.iam.gserviceaccount.com
+  //
+  //  WAVE_SA_PRIVATE_KEY   — Wave Firebase service account private key (PKCS8 PEM)
+  //    Get from: same JSON file, field "private_key"
+  //    The value includes "-----BEGIN PRIVATE KEY-----" and "-----END PRIVATE KEY-----".
+  //    When setting via wrangler secret put, paste the full PEM including newlines.
+  //    (wrangler reads from stdin so multiline values are supported)
+  //
+  //  These three secrets power /auth/social-bridge ONLY.
+  //  They do NOT grant Wave any access to Social's Firestore, Auth admin,
+  //  Storage, or any other Social resource.
+  //
+  //  FIREBASE_WEB_API_KEY = AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE
+  //    (the Wave Firebase project's Web API key — NOT the Social key)
+  //  CLOUDFLARE_API_TOKEN needs: Cloudflare Stream: Edit
+  //  R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY: R2 API token for legend2 bucket
+  // ═══════════════════════════════════════════════════════════════════════
+
+  "name":               "shadow-nexus-wave",
+  "main":               "wave-worker.js",
+  "compatibility_date": "2024-01-01",
+  "account_id":         "f276c4406b82d3c1e35efed1ef486235",
+
+  // ── R2 binding — Wave bucket only (legend2) ─────────────────────────────
+  // NEVER change bucket_name to "legend" (that is Shadow Nexus Social's bucket).
+  "r2_buckets": [
+    {
+      "binding":     "BUCKET",
+      "bucket_name": "legend2"
+    }
+  ],
+
+  // ── Non-secret vars ──────────────────────────────────────────────────────
+  "vars": {
+    // Which Firebase project this worker serves — used in token verification
+    "FIREBASE_PROJECT_ID": "shadow-nexus-wave",
+
+    // Wave R2 bucket name (used in presigned URL generation)
+    "BUCKET_NAME": "legend2",
+
+    // LiveKit cloud URL (same LiveKit cloud, separate rooms/token namespace)
+    "LIVEKIT_URL": "wss://chris-oxi8fwap.livekit.cloud"
+  }
+
+  // ── Secrets (set via wrangler secret put --config wrangler-wave.jsonc) ──
+  //
+  //   FIREBASE_WEB_API_KEY   — Wave Firebase Web API key (AIzaSyBO4IIDLMp-...)
+  //   CLOUDFLARE_ACCOUNT_ID  — Cloudflare account ID (for Stream API)
+  //   CLOUDFLARE_API_TOKEN   — Cloudflare API token (Stream: Edit permission)
+  //   R2_ACCESS_KEY_ID       — R2 API token Access Key ID (legend2 bucket)
+  //   R2_SECRET_ACCESS_KEY   — R2 API token Secret Access Key (legend2 bucket)
+  //   LIVEKIT_API_KEY        — LiveKit API key
+  //   LIVEKIT_API_SECRET     — LiveKit API secret
+  //
+  //  Tokens are NEVER returned to the browser.
+  //  Do NOT share secrets with the Social worker (yellow-term-11e6).
+}

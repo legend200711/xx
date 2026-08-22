@@ -1,0 +1,149 @@
+rules_version = '2';
+
+//
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shadow Nexus Wave — Firebase Storage Security Rules
+//  Firebase project: shadow-nexus-wave
+//  Bucket: shadow-nexus-wave.firebasestorage.app
+//
+//  DO NOT deploy these rules to Shadow Nexus Social (horr-a08f4)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Storage paths:
+//   videos/{uid}/{videoId}/video.{ext}   — uploaded video files
+//   thumbnails/{uid}/{fileName}           — video thumbnail images
+//   profile-images/{uid}/{fileName}       — user profile images
+//   covers/{uid}/{fileName}               — user cover images
+//   stories/{uid}/{fileName}              — story media
+//   posts/{uid}/{fileName}                — feed post media
+//   avatars/{uid}/{fileName}              — legacy avatar path (read-only)
+//
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Shared helpers ──────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isNonAnonymous() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isValidVideoType() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Max video size: 2 GB
+    function isWithinVideoSizeLimit() {
+      return request.resource.size <= 2 * 1024 * 1024 * 1024;
+    }
+
+    // Max image size: 10 MB
+    function isWithinImageSizeLimit() {
+      return request.resource.size <= 10 * 1024 * 1024;
+    }
+
+    // ── Videos ──────────────────────────────────────────────────────────
+    //
+    //   videos/{uid}/{videoId}/video.{ext}
+    //   videos/{uid}/{filename}
+    //
+    // Only the authenticated owner may upload. Anyone may read.
+
+    match /videos/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidVideoType()
+        && isWithinVideoSizeLimit();
+      allow update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidVideoType()
+        && isWithinVideoSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Thumbnails ──────────────────────────────────────────────────────
+
+    match /thumbnails/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Avatars (legacy path) ──────────────────────────────────────────
+
+    match /avatars/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Profile images ───────────────────────────────────────────────────
+
+    match /profile-images/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Cover images ─────────────────────────────────────────────────────
+
+    match /covers/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && isNonAnonymous()
+        && isValidImageType()
+        && isWithinImageSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Stories ───────────────────────────────────────────────────────────
+
+    match /stories/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(uid)
+        && isNonAnonymous()
+        && (isValidImageType() || isValidVideoType())
+        && isWithinVideoSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+    // ── Posts (feed post media) ────────────────────────────────────────────
+
+    match /posts/{uid}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && isNonAnonymous()
+        && (isValidImageType() || isValidVideoType())
+        && isWithinVideoSizeLimit();
+      allow delete: if isOwner(uid) && isNonAnonymous();
+    }
+
+  }
+}

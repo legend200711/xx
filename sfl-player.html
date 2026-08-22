@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Watch — Shadow Nexus Wave</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="stylesheet" href="sfl-theme.css">
+<style>
+/* ── Player layout ── */
+.player-page { max-width: 1180px; margin: 0 auto; padding: 0 20px 60px; }
+.player-grid {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
+}
+
+/* Video player */
+.player-wrap {
+  background: #000;
+  border-radius: var(--sfl-r-md);
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 16/9;
+  width: 100%;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.8);
+}
+.player-wrap video {
+  width: 100%; height: 100%;
+  display: block;
+  background: #000;
+}
+
+/* Player controls overlay */
+.player-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 35%, transparent 65%, rgba(0,0,0,0.4) 100%);
+  display: flex; flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.player-wrap:hover .player-overlay,
+.player-wrap.show-controls .player-overlay { opacity: 1; pointer-events: all; }
+
+.player-ctrl-bar {
+  padding: 10px 14px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.player-progress-row { display: flex; align-items: center; gap: 8px; }
+.player-progress {
+  flex: 1; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.3);
+  cursor: pointer; position: relative;
+  transition: height 0.15s;
+}
+.player-progress:hover { height: 6px; }
+.player-progress-fill {
+  height: 100%; background: var(--sfl-blue);
+  border-radius: 2px; pointer-events: none;
+  position: relative;
+}
+.player-progress-fill::after {
+  content: '';
+  position: absolute; right: -5px; top: 50%;
+  transform: translateY(-50%);
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--sfl-blue-bright);
+  box-shadow: 0 0 8px rgba(0,174,239,0.7);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.player-progress:hover .player-progress-fill::after { opacity: 1; }
+.player-time { font-size: 12px; color: rgba(255,255,255,0.9); white-space: nowrap; }
+
+.player-btns {
+  display: flex; align-items: center; gap: 10px;
+}
+.player-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: none; cursor: pointer; color: #fff;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  backdrop-filter: blur(4px);
+  flex-shrink: 0;
+}
+.player-btn:hover { background: rgba(255,255,255,0.28); }
+.player-btn:active { transform: scale(0.9); }
+.player-btn-vol { gap: 6px; width: auto; padding: 0 10px; border-radius: 18px; font-size: 14px; }
+.player-volume-slider {
+  width: 70px; height: 4px; cursor: pointer;
+  accent-color: var(--sfl-blue);
+}
+.player-spacer { flex: 1; }
+
+/* Loading / error states */
+.player-loading {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+  z-index: 5;
+}
+.player-error {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: #000; text-align: center; gap: 12px;
+  padding: 20px;
+  z-index: 5; display: none;
+}
+
+/* Video info section */
+.video-info { padding: 16px 0; }
+.video-title-row {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px;
+  margin-bottom: 12px;
+}
+.video-title {
+  font-size: 18px; font-weight: 800;
+  line-height: 1.35; flex: 1;
+}
+.video-stats {
+  display: flex; align-items: center; gap: 16px;
+  font-size: 13px; color: var(--sfl-text-muted);
+  flex-wrap: wrap; margin-bottom: 16px;
+}
+.video-actions {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.video-action-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--sfl-r-full);
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  color: var(--sfl-text-label);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background var(--sfl-t), border-color var(--sfl-t), color var(--sfl-t);
+  white-space: nowrap;
+}
+.video-action-btn:hover { background: var(--sfl-bg-hover); border-color: var(--sfl-border-hot); color: var(--sfl-text); }
+.video-action-btn.liked { color: #ff4466; border-color: rgba(255,68,102,0.45); background: rgba(255,68,102,0.1); }
+.video-action-btn.following { color: var(--sfl-blue); border-color: var(--sfl-border-hot); }
+.video-action-btn.danger { color: #ff4455; border-color: rgba(255,68,85,0.35); }
+.video-action-btn.danger:hover { background: rgba(255,68,85,0.12); border-color: rgba(255,68,85,0.65); color: #ff4455; }
+/* Delete confirmation modal */
+.sfl-del-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(4,10,20,0.82);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.sfl-del-modal {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border-hot);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px 22px;
+  max-width: 380px; width: 100%;
+  box-shadow: var(--sfl-shadow);
+}
+.sfl-del-modal-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.sfl-del-modal-title { font-size: 17px; font-weight: 800; text-align: center; margin-bottom: 10px; color: var(--sfl-text); }
+.sfl-del-modal-body { font-size: 13px; color: var(--sfl-text-label); text-align: center; line-height: 1.6; margin-bottom: 22px; }
+.sfl-del-modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* Creator card */
+.creator-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  margin-bottom: 16px;
+}
+.creator-info { flex: 1; min-width: 0; }
+.creator-name { font-size: 15px; font-weight: 700; cursor: pointer; }
+.creator-name:hover { color: var(--sfl-blue); }
+.creator-subs { font-size: 12px; color: var(--sfl-text-muted); margin-top: 2px; }
+
+/* Description */
+.video-desc {
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  padding: 14px 16px;
+  font-size: 13px; line-height: 1.65;
+  color: var(--sfl-text-label);
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.video-desc.expanded { cursor: default; }
+.video-desc-truncated { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.video-desc.expanded .video-desc-truncated { display: block; }
+.video-desc-toggle { color: var(--sfl-blue); font-size: 12px; font-weight: 600; margin-top: 6px; cursor: pointer; }
+
+/* Comments */
+.comments-section { margin-top: 16px; }
+.comments-head { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+.comment-input-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin-bottom: 18px;
+}
+.comment-input { flex: 1; resize: none; min-height: 42px; padding: 10px 14px; }
+.comment-item {
+  display: flex; gap: 10px; margin-bottom: 14px;
+  animation: sflFadeUp 0.2s ease;
+}
+.comment-content { flex: 1; min-width: 0; }
+.comment-author { font-size: 13px; font-weight: 700; }
+.comment-text { font-size: 13px; color: var(--sfl-text-label); margin-top: 3px; line-height: 1.5; word-break: break-word; }
+.comment-meta { font-size: 11px; color: var(--sfl-text-faint); margin-top: 4px; }
+
+/* Sidebar: Related videos */
+.related-section { position: sticky; top: 20px; }
+.related-head { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+.related-card {
+  display: flex; gap: 10px;
+  margin-bottom: 12px;
+  text-decoration: none;
+  border-radius: var(--sfl-r-sm);
+  transition: background var(--sfl-t);
+  padding: 6px;
+  cursor: pointer;
+}
+.related-card:hover { background: var(--sfl-bg-hover); }
+.related-thumb {
+  position: relative;
+  width: 120px; height: 68px;
+  border-radius: var(--sfl-r-sm);
+  overflow: hidden; flex-shrink: 0;
+  background: var(--sfl-bg-card);
+}
+.related-thumb img { width:100%;height:100%;object-fit:cover; }
+.related-thumb-placeholder { width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--sfl-text-faint); }
+.related-dur { position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,0.78);font-size:10px;font-weight:700;color:#fff;padding:1px 5px;border-radius:3px; }
+.related-info { flex:1;min-width:0; }
+.related-title { font-size:12px;font-weight:600;color:var(--sfl-text);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden; }
+.related-creator { font-size:11px;color:var(--sfl-text-muted);margin-top:3px; }
+.related-stats { font-size:11px;color:var(--sfl-text-faint);margin-top:2px; }
+
+@media (max-width: 900px) {
+  .player-grid { grid-template-columns: 1fr; }
+  .related-section { position: static; }
+}
+@media (max-width: 768px) {
+  .player-page { padding: 0 0 calc(58px + 16px); padding-top: calc(60px); }
+  .player-wrap { border-radius: 0; }
+  .video-info { padding: 12px 12px 0; }
+  .video-title { font-size: 15px; }
+}
+</style>
+</head>
+<body class="sfl-body">
+<div class="sfl-bg-layer" style="opacity:0.4;"></div>
+<div id="sfl-toast" role="status"></div>
+
+<!-- Mobile top bar -->
+<header class="sfl-topbar" aria-label="Top navigation">
+  <a href="sfl-home.html" style="font-size:18px;text-decoration:none;color:var(--sfl-text);">←</a>
+  <div class="sfl-topbar-title">🌑⚡ SHADOW NEXUS WAVE</div>
+  <div></div>
+</header>
+
+<!-- Desktop sidebar -->
+<aside class="sfl-sidebar" aria-label="Main navigation">
+  <div class="sfl-logo">
+    <a href="sfl-home.html" style="text-decoration:none;">
+      <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
+      <div class="sfl-logo-sub">Video · Live · Connect</div>
+    </a>
+  </div>
+  <nav class="sfl-sidebar-nav">
+    <a href="sfl-home.html"   class="sfl-nav-item"><span class="sfl-nav-icon">🏠</span> Home</a>
+    <a href="sfl-search.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔍</span> Discover</a>
+    <a href="live.html"       class="sfl-nav-item"><span class="sfl-nav-icon">📡</span> Live</a>
+    <a href="sfl-upload.html" class="sfl-nav-item"><span class="sfl-nav-icon">📤</span> Upload</a>
+    <a href="sfl-notifications.html" class="sfl-nav-item"><span class="sfl-nav-icon">🔔</span> Notifications</a>
+    <a href="sfl-profile.html" class="sfl-nav-item"><span class="sfl-nav-icon">👤</span> Profile</a>
+  </nav>
+  <div class="sfl-sidebar-footer">
+    <a href="sfl-settings.html" class="sfl-nav-item"><span class="sfl-nav-icon">⚙️</span> Settings</a>
+  </div>
+</aside>
+
+<div class="sfl-layout">
+  <main class="sfl-main" role="main">
+    <div class="player-page">
+
+      <!-- Loading state -->
+      <div id="pageLoader" class="sfl-loader-wrap" style="min-height:60vh;">
+        <div class="sfl-spinner"></div>
+        <span>Loading video…</span>
+      </div>
+
+      <!-- Player grid (hidden until loaded) -->
+      <div id="playerGrid" class="player-grid sfl-hidden">
+
+        <!-- Left column: player + info + comments -->
+        <div>
+          <!-- Video player -->
+          <div class="player-wrap" id="playerWrap" tabindex="0">
+            <video id="mainVideo" preload="auto" playsinline
+              aria-label="Video player"></video>
+
+            <!-- Loading spinner inside player -->
+            <div class="player-loading" id="playerLoading">
+              <div class="sfl-spinner"></div>
+            </div>
+
+            <!-- Error state -->
+            <div class="player-error" id="playerError">
+              <div style="font-size:40px;">⚠️</div>
+              <div style="font-weight:700;">Unable to play video</div>
+              <div style="font-size:13px;color:var(--sfl-text-muted);">This video may have been removed or is unavailable.</div>
+            </div>
+
+            <!-- Controls overlay -->
+            <div class="player-overlay" id="playerOverlay">
+              <div class="player-ctrl-bar">
+                <!-- Progress bar -->
+                <div class="player-progress-row">
+                  <div class="player-progress" id="playerProgress" role="slider" aria-label="Seek video">
+                    <div class="player-progress-fill" id="playerProgressFill" style="width:0%"></div>
+                  </div>
+                  <span class="player-time" id="playerTime">0:00 / 0:00</span>
+                </div>
+                <!-- Buttons -->
+                <div class="player-btns">
+                  <button class="player-btn" id="btnPlayPause" aria-label="Play/Pause">▶</button>
+                  <button class="player-btn player-btn-vol" id="btnMute" aria-label="Toggle mute">
+                    🔊
+                    <input type="range" class="player-volume-slider" id="volSlider" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+                  </button>
+                  <div class="player-spacer"></div>
+                  <button class="player-btn" id="btnFullscreen" aria-label="Fullscreen">⛶</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Video info -->
+          <div class="video-info">
+            <div class="video-title-row">
+              <div class="video-title" id="videoTitle">Loading…</div>
+            </div>
+            <div class="video-stats">
+              <span id="videoViews">0 views</span>
+              <span>•</span>
+              <span id="videoDate">—</span>
+              <span id="videoCatBadge"></span>
+            </div>
+            <div class="video-actions" id="videoActions">
+              <button class="video-action-btn" id="btnLike" aria-label="Like video">❤️ <span id="likeCount">0</span></button>
+              <button class="video-action-btn" id="btnShare" aria-label="Share video">📤 Share</button>
+              <a href="#" class="video-action-btn" id="btnWatchCreator">📡 Watch Live</a>
+              <button class="video-action-btn danger sfl-hidden" id="btnDeleteVideo" aria-label="Delete video">🗑 DELETE</button>
+            </div>
+          </div>
+
+          <!-- Creator card -->
+          <div class="creator-card" id="creatorCard">
+            <img class="sfl-avatar sfl-avatar-lg" id="creatorAvatar" src="" alt="">
+            <div class="creator-info">
+              <a href="#" class="creator-name" id="creatorName" style="text-decoration:none;color:inherit;">Creator</a>
+              <div class="creator-subs" id="creatorSubs"></div>
+            </div>
+            <button class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnFollow">Follow</button>
+          </div>
+
+          <!-- Description -->
+          <div class="video-desc" id="videoDesc">
+            <div class="video-desc-truncated" id="videoDescText"></div>
+            <div class="video-desc-toggle" id="descToggle" style="display:none;">Show more</div>
+          </div>
+
+          <!-- Comments -->
+          <div class="comments-section">
+            <div class="comments-head"><span id="commentCountLabel">0</span> Comments</div>
+            <div class="comment-input-row" id="commentInputRow">
+              <img class="sfl-avatar sfl-avatar-sm" id="myAvatar" src="" alt="">
+              <textarea class="sfl-input comment-input" id="commentInput"
+                placeholder="Add a comment…" rows="2" maxlength="500"></textarea>
+              <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="btnComment">Post</button>
+            </div>
+            <div id="commentsContainer"></div>
+            <div class="sfl-loader-wrap sfl-hidden" id="commentsLoader">
+              <div class="sfl-spinner"></div>
+            </div>
+            <div class="sfl-empty sfl-hidden" id="commentsEmpty">
+              <div class="sfl-empty-icon">💬</div>
+              <div class="sfl-empty-title">No comments yet</div>
+              <div class="sfl-empty-sub">Be the first to comment!</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column: related videos -->
+        <aside class="related-section" aria-label="Related videos">
+          <div class="related-head">Up Next</div>
+          <div id="relatedContainer">
+            <div class="sfl-loader-wrap" id="relatedLoader">
+              <div class="sfl-spinner"></div>
+            </div>
+          </div>
+        </aside>
+
+      </div><!-- /playerGrid -->
+
+      <!-- Not found -->
+      <div class="sfl-empty sfl-hidden" id="videoNotFound">
+        <div class="sfl-empty-icon">🎬</div>
+        <div class="sfl-empty-title">Video not found</div>
+        <div class="sfl-empty-sub">This video may have been removed or made private.</div>
+        <div style="margin-top:16px;"><a href="sfl-home.html" class="sfl-btn sfl-btn-primary">Back to Home</a></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Mobile bottom nav -->
+<nav class="sfl-bottom-nav" aria-label="Mobile navigation">
+  <a href="sfl-home.html" class="sfl-bn-item"><span class="sfl-bn-icon">🏠</span><span>Home</span></a>
+  <a href="sfl-search.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔍</span><span>Discover</span></a>
+  <a href="sfl-upload.html" class="sfl-bn-item"><span class="sfl-bn-icon">📤</span><span>Upload</span></a>
+  <a href="sfl-notifications.html" class="sfl-bn-item"><span class="sfl-bn-icon">🔔</span><span>Alerts</span></a>
+  <a href="sfl-profile.html" class="sfl-bn-item"><span class="sfl-bn-icon">👤</span><span>Profile</span></a>
+</nav>
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { getAuth, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import {
+  getFirestore, doc, getDoc, collection, addDoc, query, orderBy, limit, getDocs,
+  onSnapshot, updateDoc, increment, serverTimestamp, where, arrayUnion, arrayRemove,
+  deleteDoc
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+
+// Track creator UID for follow operations
+let _creatorUid = null;
+
+const FIREBASE_CONFIG = {
+  apiKey:'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:'shadow-nexus-wave',
+  storageBucket:'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId:'68850298302',
+  appId:'1:68850298302:web:603bbb8539079903cb1def'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+const toast = (msg,dur=3200) => {
+  const t=$('sfl-toast');t.textContent=msg;t.classList.add('visible');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('visible'),dur);
+};
+const params   = new URLSearchParams(location.search);
+const videoId  = params.get('v');
+let _user = null, _userData = null, _videoData = null;
+let _liked = false, _following = false, _viewCounted = false;
+
+/* ── Time formatting ── */
+function fmtTime(s) {
+  if (isNaN(s)) return '0:00';
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);
+  if(h) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(n>=1e3)return(n/1e3).toFixed(1).replace(/\.0$/,'')+'K';return String(n);}
+function timeAgo(ts){if(!ts)return'';const d=ts.toDate?ts.toDate():new Date(ts);const s=(Date.now()-d.getTime())/1000;if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`;}
+
+/* ── HLS.js loader — only loaded on browsers without native HLS support ──
+   Cloudflare Stream delivers HLS (m3u8). Safari handles this natively.
+   Chrome / Firefox / Android need hls.js. We load it once on demand.
+───────────────────────────────────────────────────────────────────────── */
+let _hlsInstance = null;
+async function loadHls(videoEl, src) {
+  try {
+    // Dynamic import: only fetches hls.js if we actually need it
+    const { default: Hls } = await import('https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.mjs');
+    if (!Hls.isSupported()) {
+      // Fallback: assign directly and let the browser try
+      videoEl.src = src;
+      videoEl.load();
+      return;
+    }
+    if (_hlsInstance) { _hlsInstance.destroy(); _hlsInstance = null; }
+    const hls = new Hls({ enableWorker: false, lowLatencyMode: false });
+    _hlsInstance = hls;
+    hls.loadSource(src);
+    hls.attachMedia(videoEl);
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      if (data.fatal) {
+        console.error('[SFL Player] HLS fatal error:', data.type, data.details);
+        $('playerLoading').style.display = 'none';
+        $('playerError').style.display = 'flex';
+      }
+    });
+  } catch(e) {
+    console.warn('[SFL Player] hls.js load failed — falling back to direct src:', e.message);
+    videoEl.src = src;
+    videoEl.load();
+  }
+}
+
+/* ── Video player ── */
+const video = $('mainVideo');
+const wrap  = $('playerWrap');
+let controlsTimer;
+
+function showControls() {
+  wrap.classList.add('show-controls');
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(() => { if(!video.paused) wrap.classList.remove('show-controls'); }, 3000);
+}
+wrap.addEventListener('mousemove', showControls);
+wrap.addEventListener('touchstart', showControls, { passive: true });
+wrap.addEventListener('click', () => { video.paused ? video.play() : video.pause(); });
+wrap.addEventListener('keydown', e => {
+  if(e.key===' '||e.key==='k'){e.preventDefault();video.paused?video.play():video.pause();}
+  if(e.key==='ArrowRight'){video.currentTime=Math.min(video.duration,video.currentTime+10);}
+  if(e.key==='ArrowLeft'){video.currentTime=Math.max(0,video.currentTime-10);}
+  if(e.key==='m'){video.muted=!video.muted;}
+  if(e.key==='f'){toggleFS();}
+});
+
+/* Play/Pause button */
+$('btnPlayPause').addEventListener('click', e => {
+  e.stopPropagation();
+  video.paused ? video.play() : video.pause();
+});
+video.addEventListener('play',  () => { $('btnPlayPause').textContent='⏸'; wrap.classList.add('show-controls'); });
+video.addEventListener('pause', () => { $('btnPlayPause').textContent='▶'; wrap.classList.add('show-controls'); });
+video.addEventListener('waiting', () => $('playerLoading').style.display='flex');
+video.addEventListener('canplay', () => $('playerLoading').style.display='none');
+
+/* Progress */
+video.addEventListener('timeupdate', () => {
+  if(!video.duration) return;
+  const pct = (video.currentTime / video.duration) * 100;
+  $('playerProgressFill').style.width = pct + '%';
+  $('playerTime').textContent = `${fmtTime(video.currentTime)} / ${fmtTime(video.duration)}`;
+  // Count view at 10% playback
+  if(!_viewCounted && pct > 10 && _videoData) {
+    _viewCounted = true;
+    updateDoc(doc(db,'videos',videoId), { views: increment(1) }).catch(()=>{});
+  }
+});
+$('playerProgress').addEventListener('click', e => {
+  const rect = $('playerProgress').getBoundingClientRect();
+  const pct  = (e.clientX - rect.left) / rect.width;
+  video.currentTime = pct * video.duration;
+});
+
+/* Volume */
+const volSlider = $('volSlider');
+volSlider.addEventListener('input', e => { e.stopPropagation(); video.volume = +volSlider.value; video.muted = +volSlider.value === 0; });
+volSlider.addEventListener('click', e => e.stopPropagation());
+$('btnMute').addEventListener('click', e => {
+  e.stopPropagation();
+  video.muted = !video.muted;
+  $('btnMute').firstChild.textContent = video.muted ? '🔇' : '🔊';
+});
+
+/* Fullscreen */
+function toggleFS() {
+  if(document.fullscreenElement) document.exitFullscreen();
+  else wrap.requestFullscreen().catch(()=>{});
+}
+$('btnFullscreen').addEventListener('click', e => { e.stopPropagation(); toggleFS(); });
+
+/* Error */
+video.addEventListener('error', () => {
+  $('playerLoading').style.display='none';
+  $('playerError').style.display='flex';
+});
+
+/* ── Load video data ── */
+async function loadVideo() {
+  if(!videoId) { showNotFound(); return; }
+  try {
+    const snap = await getDoc(doc(db,'videos',videoId));
+    if(!snap.exists()) { showNotFound(); return; }
+    _videoData = snap.data();
+    renderVideo(_videoData);
+    loadRelated(_videoData.category, _videoData.creatorId);
+    loadComments();
+    loadCreatorProfile(_videoData.creatorId);
+  } catch(e) {
+    console.error('loadVideo:', e);
+    showNotFound();
+  }
+}
+
+function showNotFound() {
+  $('pageLoader').classList.add('sfl-hidden');
+  $('videoNotFound').classList.remove('sfl-hidden');
+}
+
+function renderVideo(data) {
+  $('pageLoader').classList.add('sfl-hidden');
+  $('playerGrid').classList.remove('sfl-hidden');
+
+  // Title & meta
+  document.title = `${data.title || 'Video'} — Shadow Nexus Wave`;
+  $('videoTitle').textContent = data.title || 'Untitled';
+  $('videoViews').textContent = `${fmtNum(data.views||0)} views`;
+  $('videoDate').textContent  = data.createdAt ? timeAgo(data.createdAt) : '';
+  if(data.category) $('videoCatBadge').innerHTML = `<span style="background:var(--sfl-bg-active);border:1px solid var(--sfl-border-hot);border-radius:var(--sfl-r-full);padding:2px 10px;font-size:11px;color:var(--sfl-blue);">${data.category}</span>`;
+
+  // Like count
+  $('likeCount').textContent = fmtNum(data.likes||0);
+
+  // ── Video source ──
+  // Cloudflare Stream serves HLS (.m3u8). Native HLS works on Safari/iOS.
+  // For Chrome/Firefox/Android we use hls.js (loaded dynamically only when needed).
+  // Legacy R2 direct URLs (mp4, webm) are assigned directly and work everywhere.
+  if (data.status === 'processing' || data.status === 'uploading') {
+    $('playerLoading').style.display = 'flex';
+    $('playerLoading').querySelector('.sfl-spinner')?.remove();
+    $('playerLoading').innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:32px;margin-bottom:12px;">⚙️</div><div style="font-size:15px;font-weight:600;color:#fff;">Processing video…</div><div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px;">This video is being processed by Cloudflare.<br>Please check back in a few minutes.</div></div>';
+  } else if (data.videoUrl) {
+    const src = data.videoUrl;
+    const isHls = src.includes('.m3u8') || src.includes('cloudflarestream.com');
+    if (isHls && !video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Non-Safari: load hls.js dynamically
+      loadHls(video, src);
+    } else {
+      // Safari/iOS: native HLS support, or plain MP4/WebM
+      video.src = src;
+      video.load();
+    }
+  } else {
+    $('playerError').style.display = 'flex';
+    $('playerLoading').style.display = 'none';
+  }
+
+  // Description
+  const desc = data.description || '';
+  if(desc) {
+    $('videoDescText').textContent = desc;
+    if(desc.length > 200) {
+      $('descToggle').style.display='block';
+      $('videoDesc').addEventListener('click', () => {
+        $('videoDesc').classList.toggle('expanded');
+        $('descToggle').textContent = $('videoDesc').classList.contains('expanded') ? 'Show less' : 'Show more';
+      });
+    }
+  } else {
+    $('videoDesc').style.display = 'none';
+  }
+
+  // Watch creator live button
+  $('btnWatchCreator').href = `live.html?host=${data.creatorId}`;
+}
+
+/* ── Load creator ── */
+async function loadCreatorProfile(uid) {
+  if (!uid) return;
+  _creatorUid = uid;
+
+  // Hide Follow if viewing own video
+  if (_user && uid === _user.uid) {
+    $('creatorCard').querySelector('#btnFollow')?.remove();
+  }
+
+  try {
+    const snap = await getDoc(doc(db,'users',uid));
+    if (!snap.exists()) return;
+    const u = snap.data();
+    $('creatorAvatar').src = u.avatar || '';
+    $('creatorAvatar').style.display = u.avatar ? '' : 'none';
+    $('creatorName').textContent = u.displayName || u.username || 'Creator';
+    $('creatorName').href = `sfl-profile.html?uid=${uid}`;
+    const followers = Array.isArray(u.followers) ? u.followers.length : (u.followerCount || 0);
+    $('creatorSubs').textContent = `${fmtNum(followers)} followers`;
+
+    // Check if current user follows this creator
+    if (_user && Array.isArray(u.followers)) {
+      _following = u.followers.includes(_user.uid);
+      updateFollowBtn();
+    }
+
+    // Hide follow button on own video
+    if (_user && uid === _user.uid) {
+      const btn = document.getElementById('btnFollow');
+      if (btn) btn.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+function updateFollowBtn() {
+  const btn = document.getElementById('btnFollow');
+  if (!btn) return;
+  btn.textContent = _following ? '✓ Following' : 'Follow';
+  btn.className   = `sfl-btn sfl-btn-sm ${_following ? 'sfl-btn-outline video-action-btn following' : 'sfl-btn-primary'}`;
+  btn.title       = _following ? 'Click to unfollow' : '';
+}
+
+document.getElementById('btnFollow').addEventListener('click', async () => {
+  if (!_user) { toast('Sign in to follow creators.'); return; }
+  const creatorId = _creatorUid || _videoData?.creatorId;
+  if (!creatorId) return;
+  // Prevent self-follow
+  if (creatorId === _user.uid) return;
+
+  const btn = document.getElementById('btnFollow');
+  btn.disabled = true;
+
+  const creatorRef = doc(db, 'users', creatorId);
+  const myRef      = doc(db, 'users', _user.uid);
+  try {
+    if (_following) {
+      await updateDoc(creatorRef, { followers: arrayRemove(_user.uid) });
+      await updateDoc(myRef,      { following: arrayRemove(creatorId) });
+      _following = false;
+    } else {
+      await updateDoc(creatorRef, { followers: arrayUnion(_user.uid) });
+      await updateDoc(myRef,      { following: arrayUnion(creatorId) });
+      _following = true;
+
+      // Send follow notification
+      const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
+      const myAvatar = _userData?.avatar || _user.photoURL || '';
+      addDoc(collection(db, 'notifications', creatorId, 'items'), {
+        type:        'follow',
+        fromUid:     _user.uid,
+        fromName:    myName,
+        fromAvatar:  myAvatar,
+        fromProfile: `sfl-profile.html?uid=${_user.uid}`,
+        message:     `${myName} started following you.`,
+        read:        false,
+        ts:          serverTimestamp(),
+        createdAt:   Date.now(),
+      }).catch(() => {});
+    }
+    updateFollowBtn();
+  } catch(e) {
+    toast('Error updating follow.');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ── Like ── */
+$('btnLike').addEventListener('click', async () => {
+  if(!_user) { toast('Sign in to like videos.'); return; }
+  const videoRef = doc(db,'videos',videoId);
+  try {
+    if(_liked) {
+      await updateDoc(videoRef, { likes: increment(-1), likedBy: arrayRemove(_user.uid) });
+      _liked = false;
+    } else {
+      await updateDoc(videoRef, { likes: increment(1), likedBy: arrayUnion(_user.uid) });
+      _liked = true;
+    }
+    $('btnLike').classList.toggle('liked', _liked);
+    $('likeCount').textContent = fmtNum((_videoData.likes||0) + (_liked?1:-1));
+  } catch(e) { toast('Error updating like.'); }
+});
+
+/* ── Share ── */
+$('btnShare').addEventListener('click', async () => {
+  const url = location.href;
+  if(navigator.share) {
+    navigator.share({ title: _videoData?.title||'Video', url }).catch(()=>{});
+  } else {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied!');
+  }
+});
+
+/* ── Comments ── */
+function loadComments() {
+  const container = $('commentsContainer');
+  const loader    = $('commentsLoader');
+  const empty     = $('commentsEmpty');
+  loader.classList.remove('sfl-hidden');
+
+  const q = query(
+    collection(db,'videos',videoId,'comments'),
+    orderBy('createdAt','desc'), limit(50)
+  );
+  onSnapshot(q, snap => {
+    loader.classList.add('sfl-hidden');
+    container.innerHTML = '';
+    $('commentCountLabel').textContent = fmtNum(snap.size);
+    if(snap.empty) { empty.classList.remove('sfl-hidden'); return; }
+    empty.classList.add('sfl-hidden');
+    snap.docs.forEach(d => container.appendChild(buildComment(d.id, d.data())));
+  }, () => { loader.classList.add('sfl-hidden'); });
+}
+
+function buildComment(id, data) {
+  const div = document.createElement('div');
+  div.className = 'comment-item';
+  const avatar = data.authorAvatar
+    ? `<img src="${data.authorAvatar}" class="sfl-avatar sfl-avatar-sm" alt="" loading="lazy">`
+    : `<div class="sfl-avatar sfl-avatar-sm" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
+  div.innerHTML = `
+    ${avatar}
+    <div class="comment-content">
+      <div class="comment-author">${data.authorName||'User'}</div>
+      <div class="comment-text">${escHtml(data.text||'')}</div>
+      <div class="comment-meta">${timeAgo(data.createdAt)}</div>
+    </div>
+  `;
+  return div;
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+$('btnComment').addEventListener('click', async () => {
+  if(!_user) { toast('Sign in to comment.'); return; }
+  const text = $('commentInput').value.trim();
+  if(!text) return;
+  $('btnComment').disabled = true;
+  try {
+    await addDoc(collection(db,'videos',videoId,'comments'), {
+      authorId:     _user.uid,
+      authorName:   _userData?.displayName || _userData?.username || _user.displayName || 'User',
+      authorAvatar: _userData?.avatar || _user.photoURL || '',
+      text,
+      createdAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db,'videos',videoId), { comments: increment(1) });
+    $('commentInput').value = '';
+  } catch(e) { toast('Error posting comment.'); }
+  finally { $('btnComment').disabled = false; }
+});
+
+/* ── Related videos ── */
+async function loadRelated(category, creatorId) {
+  const container = $('relatedContainer');
+  const loader    = $('relatedLoader');
+  try {
+    // First try same creator, then same category
+    let q = query(
+      collection(db,'videos'),
+      where('creatorId','==',creatorId),
+      where('status','==','published'),
+      where('visibility','==','public'),
+      orderBy('createdAt','desc'), limit(8)
+    );
+    let snap = await getDocs(q);
+    let docs = snap.docs.filter(d => d.id !== videoId);
+    if(docs.length < 4 && category) {
+      const q2 = query(
+        collection(db,'videos'),
+        where('status','==','published'),
+        where('category','==',category),
+        where('visibility','==','public'),
+        orderBy('views','desc'), limit(12)
+      );
+      const snap2 = await getDocs(q2);
+      snap2.docs.forEach(d => { if(d.id !== videoId && !docs.find(x=>x.id===d.id)) docs.push(d); });
+    }
+    loader.classList.add('sfl-hidden');
+    container.innerHTML = '';
+    if(!docs.length) { container.innerHTML = '<div style="font-size:13px;color:var(--sfl-text-faint);padding:10px 0;">No related videos.</div>'; return; }
+    docs.slice(0,12).forEach(d => {
+      const data = d.data();
+      const dur  = data.duration ? fmtTime(data.duration) : '';
+      const a    = document.createElement('a');
+      a.href = `sfl-player.html?v=${d.id}`;
+      a.className = 'related-card';
+      a.innerHTML = `
+        <div class="related-thumb">
+          ${data.thumbnailUrl ? `<img src="${data.thumbnailUrl}" alt="" loading="lazy">` : `<div class="related-thumb-placeholder">🎬</div>`}
+          ${dur ? `<div class="related-dur">${dur}</div>` : ''}
+        </div>
+        <div class="related-info">
+          <div class="related-title">${data.title||'Untitled'}</div>
+          <div class="related-creator">${data.creatorName||''}</div>
+          <div class="related-stats">${fmtNum(data.views||0)} views</div>
+        </div>
+      `;
+      container.appendChild(a);
+    });
+  } catch(e) { loader.classList.add('sfl-hidden'); }
+}
+
+/* ── Auth ── */
+onAuthStateChanged(auth, async user => {
+  _user = user;
+  if(user) {
+    try {
+      const snap = await getDoc(doc(db,'users',user.uid));
+      if(snap.exists()) _userData = snap.data();
+    } catch(e) {}
+    $('myAvatar').src = _userData?.avatar || user.photoURL || '';
+    $('myAvatar').style.display = (_userData?.avatar || user.photoURL) ? '' : 'none';
+    $('commentInputRow').style.display = 'flex';
+  } else {
+    $('commentInputRow').style.display = 'none';
+  }
+  // loadVideo will populate _videoData, then we check liked state after
+  await loadVideo();
+  if(user && _videoData?.likedBy?.includes(user.uid)) {
+    _liked = true;
+    $('btnLike').classList.add('liked');
+  }
+  // Show DELETE button only to the video owner (frontend hint; backend enforces)
+  if (user && _videoData?.creatorId === user.uid) {
+    $('btnDeleteVideo').classList.remove('sfl-hidden');
+  }
+});
+
+/* ── Video Delete ── */
+$('btnDeleteVideo').addEventListener('click', () => {
+  if (!_user) { toast('Sign in to delete videos.'); return; }
+  // Show confirmation modal
+  $('deleteConfirmModal').classList.remove('sfl-hidden');
+});
+
+$('btnDeleteCancel').addEventListener('click', () => {
+  $('deleteConfirmModal').classList.add('sfl-hidden');
+});
+
+// Close on overlay click
+$('deleteConfirmModal').addEventListener('click', e => {
+  if (e.target === $('deleteConfirmModal')) $('deleteConfirmModal').classList.add('sfl-hidden');
+});
+
+$('btnDeleteConfirm').addEventListener('click', async () => {
+  // Re-read the live auth state — session may have expired since page load
+  const liveUser = auth.currentUser;
+  if (!liveUser) { toast('Not signed in.'); return; }
+  if (!_videoData) { toast('Video data not loaded.'); return; }
+
+  // ── Ownership check ──────────────────────────────────────────────────────
+  // Compare auth.currentUser.uid against the document's creatorId field.
+  // The Firestore rule `allow delete: if isOwner(resource.data.creatorId)`
+  // performs the same comparison server-side.
+  console.log('[DELETE] AUTH UID:', liveUser.uid);
+  console.log('[DELETE] VIDEO OWNER ID (creatorId):', _videoData.creatorId);
+  console.log('[DELETE] OWNER MATCH:', liveUser.uid === _videoData.creatorId);
+  console.log('[DELETE] FIRESTORE PATH: videos/' + videoId);
+
+  if (_videoData.creatorId !== liveUser.uid) {
+    console.warn('[DELETE] BLOCKED — creatorId mismatch. auth:', liveUser.uid, 'doc:', _videoData.creatorId);
+    toast('You can only delete your own videos.');
+    $('deleteConfirmModal').classList.add('sfl-hidden');
+    return;
+  }
+
+  const btn = $('btnDeleteConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  try {
+    // 1. Force-refresh the Firebase ID token so it is never stale
+    const idToken = await liveUser.getIdToken(/* forceRefresh */ true);
+
+    // 2. Delete Cloudflare Stream video (if this is a Stream-hosted video)
+    const streamId = _videoData.streamId || _videoData.cloudflareStreamId || null;
+    let cfStreamStatus = 'skipped';
+    if (streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
+        });
+        if (wRes.ok) {
+          cfStreamStatus = 'deleted';
+        } else {
+          const errData = await wRes.json().catch(() => ({}));
+          cfStreamStatus = `failed:${wRes.status}:${errData.error || ''}`;
+          // Log but don't block — Firestore delete must still proceed
+          console.error('[DELETE] CLOUDFLARE DELETE STATUS:', cfStreamStatus);
+        }
+      } catch(e) {
+        cfStreamStatus = `network-error:${e.message}`;
+        console.error('[DELETE] Cloudflare stream delete network error:', e.message);
+      }
+    }
+
+    // 3. Delete R2-hosted video file (if stored in R2)
+    const r2Key = _videoData.r2Key || _videoData.storageKey || null;
+    let cfR2Status = 'skipped';
+    if (r2Key && !streamId) {
+      try {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),
+        });
+        if (wRes.ok) {
+          cfR2Status = 'deleted';
+        } else {
+          const errData = await wRes.json().catch(() => ({}));
+          cfR2Status = `failed:${wRes.status}:${errData.error || ''}`;
+          console.error('[DELETE] R2 delete failed:', cfR2Status);
+        }
+      } catch(e) {
+        cfR2Status = `network-error:${e.message}`;
+        console.error('[DELETE] R2 delete network error:', e.message);
+      }
+    }
+
+    console.log('[DELETE] CLOUDFLARE DELETE STATUS:', streamId ? cfStreamStatus : cfR2Status);
+
+    // 4. Delete the Firestore video document
+    // Firestore rule: allow delete: if isOwner(resource.data.creatorId) || isFounder()
+    // isOwner checks: request.auth.uid == resource.data.creatorId
+    console.log('[DELETE] DELETE OPERATION: deleteDoc videos/' + videoId);
+    await deleteDoc(doc(db, 'videos', videoId));
+
+    // 5. Success — redirect to home feed
+    $('deleteConfirmModal').classList.add('sfl-hidden');
+    toast('Video deleted.');
+    setTimeout(() => { window.location.href = 'sfl-home.html'; }, 1200);
+  } catch(e) {
+    // ── Capture the exact Firestore error ────────────────────────────────
+    console.error('DELETE ERROR: Firestore deleteDoc failed');
+    console.error('ERROR CODE:', e.code || '(none)');
+    console.error('ERROR MESSAGE:', e.message || String(e));
+    console.error('FIREBASE USER UID:', liveUser.uid);
+    console.error('VIDEO OWNER ID (creatorId):', _videoData?.creatorId);
+    console.error('VIDEO DOCUMENT PATH: videos/' + videoId);
+    console.error('FIRESTORE COLLECTION: videos');
+    console.error('DELETE OPERATION: deleteDoc(doc(db, "videos", videoId))');
+    toast('Unable to delete. Check console for error details.');
+    btn.disabled = false;
+    btn.textContent = 'DELETE';
+  }
+});
+</script>
+
+<!-- Delete confirmation modal -->
+<div class="sfl-del-overlay sfl-hidden" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+  <div class="sfl-del-modal">
+    <div class="sfl-del-modal-icon">🗑️</div>
+    <div class="sfl-del-modal-title" id="deleteModalTitle">Delete this video?</div>
+    <div class="sfl-del-modal-body">This action cannot be undone.</div>
+    <div class="sfl-del-modal-actions">
+      <button class="sfl-btn sfl-btn-outline" id="btnDeleteCancel">Cancel</button>
+      <button class="sfl-btn" id="btnDeleteConfirm" style="background:#c0392b;color:#fff;border-color:#c0392b;">DELETE</button>
+    </div>
+  </div>
+</div>
+
+<script src="pwa-install.js" defer></script>
+</body>
+</html>

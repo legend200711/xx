@@ -1,0 +1,66 @@
+{
+  "//": [
+    "═══════════════════════════════════════════════════════════════════════",
+    " firebase-wave.json — Shadow Nexus Wave Firebase configuration",
+    " Firebase project: shadow-nexus-wave",
+    " DO NOT use this file for Shadow Nexus Social (horr-a08f4)",
+    "═══════════════════════════════════════════════════════════════════════",
+    " Usage:",
+    "   firebase deploy --only firestore:rules --project wave",
+    "   firebase deploy --only firestore:indexes --project wave",
+    "   firebase deploy --only storage --project wave",
+    "   firebase deploy --only hosting --project wave",
+    " Or use the helper script: ./deploy-wave.sh"
+  ],
+  "firestore": {
+    "rules": "firestore-wave.rules",
+    "indexes": "firestore-wave.indexes.json"
+  },
+  "database": {
+    "rules": "database-wave.rules.json"
+  },
+  "storage": {
+    "rules": "storage-wave.rules"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firebase-wave.json",
+      "firestore.rules",
+      "firestore-wave.rules",
+      "database.rules.json",
+      "database-wave.rules.json",
+      "storage.rules",
+      "storage-wave.rules",
+      ".firebaserc",
+      ".git/**",
+      ".idea/**",
+      ".wrangler/**",
+      "node_modules/**",
+      "push_to_github.ps1",
+      "generate_icons.py",
+      "generate_icons_snw.py",
+      "wrangler.jsonc",
+      "wrangler.toml",
+      "deploy-firestore-rules.sh",
+      "deploy-storage.sh"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "cleanUrls": false,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "**/*.@(js|mjs|html|css|png|jpg|webp|svg|ico|json|woff2)",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      }
+    ]
+  }
+}

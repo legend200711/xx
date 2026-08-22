@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shadow Nexus Wave — Watch. Stream. Connect.</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060d18">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shadow Nexus Wave">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<meta name="description" content="Shadow Nexus Wave — Watch live streams, upload videos, and connect with creators.">
+
+<!-- Open Graph -->
+<meta property="og:title" content="Shadow Nexus Wave">
+<meta property="og:description" content="Watch live streams and videos. Connect with creators.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://shadownexussocial.online/icon-512.png">
+
+<link rel="stylesheet" href="sfl-theme.css">
+
+<style>
+/* ── Homepage-specific styles ── */
+.sfl-hero-banner {
+  background: linear-gradient(135deg, rgba(0,80,160,0.18) 0%, rgba(0,30,80,0.12) 100%);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-lg);
+  padding: 28px 24px;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.sfl-hero-banner::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 70% 80% at 80% 50%, rgba(0,140,220,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.sfl-hero-title {
+  font-size: 22px; font-weight: 900;
+  color: #fff;
+  animation: sflGlow 3s ease-in-out infinite;
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+.sfl-hero-sub {
+  font-size: 13px; color: var(--sfl-text-label);
+  margin-top: 6px; line-height: 1.55;
+  max-width: 400px;
+}
+.sfl-hero-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+/* Category pills */
+.sfl-cat-strip {
+  display: flex; gap: 8px;
+  overflow-x: auto; padding-bottom: 4px;
+  scrollbar-width: none;
+  margin-bottom: 24px;
+}
+.sfl-cat-strip::-webkit-scrollbar { display: none; }
+.sfl-cat-pill {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: var(--sfl-r-full);
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  color: var(--sfl-text-label);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background var(--sfl-t), border-color var(--sfl-t), color var(--sfl-t);
+  white-space: nowrap;
+}
+.sfl-cat-pill:hover { border-color: var(--sfl-border-hot); color: var(--sfl-text); }
+.sfl-cat-pill.active { background: var(--sfl-bg-active); border-color: var(--sfl-border-hot); color: var(--sfl-blue); }
+
+/* Feed tabs */
+.sfl-feed-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--sfl-border);
+  margin-bottom: 20px;
+}
+.sfl-feed-tab {
+  padding: 10px 18px;
+  font-size: 13px; font-weight: 600;
+  color: var(--sfl-text-muted);
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  transition: color var(--sfl-t), border-color var(--sfl-t);
+  white-space: nowrap;
+  user-select: none;
+}
+.sfl-feed-tab:hover { color: var(--sfl-text); }
+.sfl-feed-tab.active { color: var(--sfl-blue); border-bottom-color: var(--sfl-blue); }
+
+/* Notification bell */
+.sfl-notif-bell {
+  position: relative;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--sfl-bg-card);
+  border: 1px solid var(--sfl-border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 18px;
+  transition: background var(--sfl-t), border-color var(--sfl-t);
+  text-decoration: none;
+}
+.sfl-notif-bell:hover { background: var(--sfl-bg-hover); border-color: var(--sfl-border-hot); }
+.sfl-notif-count {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 16px; height: 16px;
+  background: var(--sfl-live);
+  border-radius: var(--sfl-r-full);
+  font-size: 9px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px;
+  border: 2px solid var(--sfl-bg);
+}
+
+/* Create menu */
+.sfl-create-dropdown {
+  position: fixed; z-index: 500;
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-lg);
+  min-width: 200px;
+  box-shadow: var(--sfl-shadow), var(--sfl-glow-sm);
+  animation: sflFadeUp 0.18s ease;
+  overflow: hidden;
+}
+.sfl-create-opt {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px;
+  cursor: pointer; text-decoration: none;
+  color: var(--sfl-text-label);
+  font-size: 14px; font-weight: 500;
+  transition: background var(--sfl-t), color var(--sfl-t);
+  border-bottom: 1px solid var(--sfl-border);
+}
+.sfl-create-opt:last-child { border-bottom: none; }
+.sfl-create-opt:hover { background: var(--sfl-bg-hover); color: var(--sfl-text); }
+.sfl-create-opt-icon { font-size: 20px; }
+.sfl-create-opt-info { flex: 1; }
+.sfl-create-opt-label { font-size: 14px; font-weight: 600; color: var(--sfl-text); }
+.sfl-create-opt-sub { font-size: 11px; color: var(--sfl-text-muted); margin-top: 1px; }
+
+/* Section wrapper */
+.sfl-section { margin-bottom: 32px; }
+
+/* No-live fallback row */
+.sfl-live-empty-card {
+  background: var(--sfl-bg-card);
+  border: 1px dashed var(--sfl-border);
+  border-radius: var(--sfl-r-md);
+  padding: 20px 24px;
+  text-align: center;
+  color: var(--sfl-text-muted);
+  font-size: 13px;
+}
+
+/* Auth wall */
+.sfl-auth-wall {
+  background: var(--sfl-bg-panel);
+  border: 1px solid var(--sfl-border);
+  border-radius: var(--sfl-r-lg);
+  padding: 32px 24px;
+  text-align: center;
+  margin-bottom: 24px;
+  animation: sflFadeUp 0.3s ease;
+}
+.sfl-auth-wall h2 { font-size: 20px; font-weight: 800; margin-bottom: 10px; color: var(--sfl-blue); }
+.sfl-auth-wall p  { font-size: 14px; color: var(--sfl-text-label); margin-bottom: 20px; line-height: 1.6; }
+
+@media (max-width: 600px) {
+  .sfl-hero-banner { flex-direction: column; align-items: flex-start; padding: 20px 16px; }
+  .sfl-hero-title  { font-size: 18px; }
+}
+</style>
+</head>
+<body class="sfl-body">
+
+<!-- Background atmosphere -->
+<div class="sfl-bg-layer"></div>
+
+<!-- Floating particles (injected by JS) -->
+<div id="sfl-particles" aria-hidden="true"></div>
+
+<!-- Toast -->
+<div id="sfl-toast" role="status"></div>
+
+<!-- ═══════════════════════════════════════════
+     DESKTOP SIDEBAR
+     ═══════════════════════════════════════════ -->
+<aside class="sfl-sidebar" id="sflSidebar" aria-label="Main navigation">
+  <div class="sfl-logo">
+    <div class="sfl-logo-text">🌑⚡ SHADOW NEXUS WAVE</div>
+    <div class="sfl-logo-sub">Video · Live · Connect</div>
+  </div>
+  <nav class="sfl-sidebar-nav">
+    <a href="index.html" class="sfl-nav-item active">
+      <span class="sfl-nav-icon">🏠</span> Home
+    </a>
+    <a href="sfl-search.html" class="sfl-nav-item">
+      <span class="sfl-nav-icon">🔍</span> Discover
+    </a>
+    <a href="live.html" class="sfl-nav-item">
+      <span class="sfl-nav-icon">📡</span> Live
+    </a>
+    <a href="index.html#following" class="sfl-nav-item">
+      <span class="sfl-nav-icon">👥</span> Following
+    </a>
+    <a href="index.html#trending" class="sfl-nav-item">
+      <span class="sfl-nav-icon">🔥</span> Trending
+    </a>
+    <div style="height:8px"></div>
+    <button class="sfl-nav-item sfl-nav-golive" id="sidebarGoLive">
+      <span class="sfl-nav-icon">🔴</span> Go Live
+    </button>
+    <a href="sfl-upload.html" class="sfl-nav-item">
+      <span class="sfl-nav-icon">📤</span> Upload Video
+    </a>
+    <div style="height:8px"></div>
+    <a href="sfl-notifications.html" class="sfl-nav-item" id="sidebarNotifBtn">
+      <span class="sfl-nav-icon">🔔</span> Notifications
+      <span class="sfl-nav-badge sfl-hidden" id="sidebarNotifCount">0</span>
+    </a>
+    <a href="sfl-profile.html" class="sfl-nav-item" id="sidebarProfileBtn">
+      <span class="sfl-nav-icon">👤</span> Profile
+    </a>
+  </nav>
+  <div class="sfl-sidebar-footer">
+    <a href="sfl-settings.html" class="sfl-nav-item">
+      <span class="sfl-nav-icon">⚙️</span> Settings
+    </a>
+    <button class="sfl-nav-item" id="sidebarLogout">
+      <span class="sfl-nav-icon">🚪</span> Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════
+     MOBILE TOP BAR
+     ═══════════════════════════════════════════ -->
+<header class="sfl-topbar" aria-label="Top navigation">
+  <div class="sfl-topbar-title">🌑⚡ SHADOW NEXUS WAVE</div>
+  <div class="sfl-topbar-actions">
+    <a href="sfl-search.html" class="sfl-notif-bell" aria-label="Search" style="font-size:16px;">🔍</a>
+    <a href="sfl-notifications.html" class="sfl-notif-bell" id="topbarNotifBtn" aria-label="Notifications">
+      🔔
+      <span class="sfl-notif-count sfl-hidden" id="topbarNotifCount">0</span>
+    </a>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════
+     MAIN CONTENT
+     ═══════════════════════════════════════════ -->
+<div class="sfl-layout">
+  <main class="sfl-main" role="main">
+    <div class="sfl-content">
+
+      <!-- Hero banner (shown when not logged in) -->
+      <div class="sfl-auth-wall sfl-hidden" id="authWall">
+        <h2>🌑⚡ Welcome to Shadow Nexus Wave</h2>
+        <p>Watch live streams, upload videos, and connect with creators.<br>
+           Sign in to your Shadow Nexus Wave account to get started.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <a href="sfl-profile.html" class="sfl-btn sfl-btn-primary sfl-btn-lg">Sign In</a>
+          <a href="sfl-profile.html" class="sfl-btn sfl-btn-outline sfl-btn-lg">Create Account</a>
+        </div>
+      </div>
+
+      <!-- Category filter strip -->
+      <div class="sfl-cat-strip" id="catStrip" role="list" aria-label="Browse categories">
+        <div class="sfl-cat-pill active" data-cat="all" role="listitem" tabindex="0">All</div>
+        <div class="sfl-cat-pill" data-cat="gaming" role="listitem" tabindex="0">🎮 Gaming</div>
+        <div class="sfl-cat-pill" data-cat="music" role="listitem" tabindex="0">🎵 Music</div>
+        <div class="sfl-cat-pill" data-cat="art" role="listitem" tabindex="0">🎨 Art</div>
+        <div class="sfl-cat-pill" data-cat="tech" role="listitem" tabindex="0">💻 Tech</div>
+        <div class="sfl-cat-pill" data-cat="sports" role="listitem" tabindex="0">⚽ Sports</div>
+        <div class="sfl-cat-pill" data-cat="education" role="listitem" tabindex="0">📚 Education</div>
+        <div class="sfl-cat-pill" data-cat="lifestyle" role="listitem" tabindex="0">✨ Lifestyle</div>
+        <div class="sfl-cat-pill" data-cat="comedy" role="listitem" tabindex="0">😂 Comedy</div>
+        <div class="sfl-cat-pill" data-cat="news" role="listitem" tabindex="0">📰 News</div>
+      </div>
+
+      <!-- ── LIVE NOW ── -->
+      <section class="sfl-section" id="liveNowSection">
+        <div class="sfl-section-head">
+          <div class="sfl-section-title">
+            <span class="sfl-live-dot"></span>
+            LIVE NOW
+          </div>
+          <a href="live.html" class="sfl-section-see-all">See all</a>
+        </div>
+        <div class="sfl-live-row" id="liveNowRow" aria-label="Live streams">
+          <!-- Cards injected by JS -->
+          <div class="sfl-live-empty-card" id="liveNowEmpty" style="width:100%;">
+            No one is live right now — <a href="live.html" style="color:var(--sfl-blue);">be the first!</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Feed Tabs (Recommended / Following / Trending) ── -->
+      <div class="sfl-feed-tabs" id="feedTabs" role="tablist">
+        <div class="sfl-feed-tab active" data-tab="recommended" role="tab" tabindex="0">Recommended</div>
+        <div class="sfl-feed-tab" data-tab="following" role="tab" tabindex="0">Following</div>
+        <div class="sfl-feed-tab" data-tab="trending" role="tab" tabindex="0">🔥 Trending</div>
+      </div>
+
+      <!-- Video feed section -->
+      <section class="sfl-section" id="videoFeedSection">
+        <div class="sfl-video-grid" id="videoGrid" aria-label="Videos">
+          <!-- Skeleton placeholders while loading -->
+          <div class="sfl-loader-wrap" id="videoGridLoader" style="grid-column:1/-1;">
+            <div class="sfl-spinner"></div>
+            <span>Loading videos…</span>
+          </div>
+        </div>
+        <div class="sfl-empty sfl-hidden" id="videoGridEmpty">
+          <div class="sfl-empty-icon">🎬</div>
+          <div class="sfl-empty-title">No videos here yet</div>
+          <div class="sfl-empty-sub">Be the first to upload a video or follow some creators.</div>
+          <div style="margin-top:16px;">
+            <a href="sfl-upload.html" class="sfl-btn sfl-btn-primary">Upload Video</a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MOBILE BOTTOM NAV
+     ═══════════════════════════════════════════ -->
+<nav class="sfl-bottom-nav" aria-label="Mobile navigation">
+  <a href="index.html" class="sfl-bn-item active" aria-label="Home">
+    <span class="sfl-bn-icon">🏠</span>
+    <span>Home</span>
+  </a>
+  <a href="sfl-search.html" class="sfl-bn-item" aria-label="Discover">
+    <span class="sfl-bn-icon">🔍</span>
+    <span>Discover</span>
+  </a>
+  <a href="#" class="sfl-bn-item" aria-label="Create" id="mobileCreateBtn"
+     style="flex-direction:column;align-items:center;justify-content:center;">
+    <div class="sfl-bn-create">＋</div>
+  </a>
+  <a href="sfl-notifications.html" class="sfl-bn-item" aria-label="Notifications" id="mobileNotifBtn">
+    <span class="sfl-bn-icon">🔔</span>
+    <span>Alerts</span>
+    <span class="sfl-bn-badge sfl-hidden" id="mobileNotifCount">0</span>
+  </a>
+  <a href="sfl-profile.html" class="sfl-bn-item" aria-label="Profile" id="mobileProfileBtn">
+    <span class="sfl-bn-icon">👤</span>
+    <span>Profile</span>
+  </a>
+</nav>
+
+<!-- Create menu dropdown (shared desktop + mobile) -->
+<div class="sfl-create-dropdown sfl-hidden" id="createDropdown" role="menu">
+  <a href="sfl-upload.html" class="sfl-create-opt" role="menuitem">
+    <span class="sfl-create-opt-icon">📤</span>
+    <div class="sfl-create-opt-info">
+      <div class="sfl-create-opt-label">Upload Video</div>
+      <div class="sfl-create-opt-sub">Share a video with the world</div>
+    </div>
+  </a>
+  <a href="live.html" class="sfl-create-opt" role="menuitem" id="createGoLive">
+    <span class="sfl-create-opt-icon">🔴</span>
+    <div class="sfl-create-opt-info">
+      <div class="sfl-create-opt-label">Go Live</div>
+      <div class="sfl-create-opt-sub">Start a live stream</div>
+    </div>
+  </a>
+</div>
+
+<!-- Firebase SDKs (same project — do NOT change) -->
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signOut }
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+import {
+  getFirestore, collection, query, where, orderBy, limit,
+  getDocs, onSnapshot, doc, getDoc, Timestamp
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+
+/* ── Reuse existing Firebase config ── */
+const FIREBASE_CONFIG = {
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def'
+};
+
+const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+/* ── Globals ── */
+let _user = null;
+let _userData = null;
+let _activeTab = 'recommended';
+let _activeCategory = 'all';
+let _liveUnsub = null;
+let _videoUnsub = null;
+
+/* ══════════════════════════════
+   Utility helpers
+   ══════════════════════════════ */
+const $ = id => document.getElementById(id);
+const toast = (msg, dur=3000) => {
+  const t = $('sfl-toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('visible'), dur);
+};
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+}
+
+function fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'') + 'K';
+  return String(n);
+}
+
+function fmtDuration(secs) {
+  if (!secs) return '';
+  const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = secs%60;
+  if (h) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function spawnParticles() {
+  const c = $('sfl-particles');
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement('div');
+    p.className = 'sfl-particle';
+    p.style.cssText = `left:${Math.random()*100}vw;bottom:${Math.random()*-20}px;`
+      + `--dur:${12+Math.random()*12}s;--delay:${Math.random()*14}s;`;
+    c.appendChild(p);
+  }
+}
+
+/* ══════════════════════════════
+   Build video card HTML
+   ══════════════════════════════ */
+function buildVideoCard(id, data) {
+  const thumb = data.thumbnailUrl
+    ? `<img src="${data.thumbnailUrl}" alt="${data.title || 'Video'}" loading="lazy">`
+    : `<div class="sfl-video-thumb-placeholder">🎬</div>`;
+  const dur = data.duration ? `<div class="sfl-video-duration">${fmtDuration(data.duration)}</div>` : '';
+  const views  = data.views  != null ? `${fmtNum(data.views)} views` : '';
+  const likes  = data.likes  != null ? `❤ ${fmtNum(data.likes)}` : '';
+  const upload = data.createdAt ? timeAgo(data.createdAt) : '';
+  const avatar = data.creatorAvatar
+    ? `<img src="${data.creatorAvatar}" class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" alt="" loading="lazy">`
+    : `<div class="sfl-video-creator-avatar sfl-avatar sfl-avatar-sm" style="font-size:14px;display:flex;align-items:center;justify-content:center;">👤</div>`;
+
+  const a = document.createElement('a');
+  a.href = `sfl-player.html?v=${encodeURIComponent(id)}`;
+  a.className = 'sfl-video-card sfl-fade-up';
+  a.setAttribute('aria-label', data.title || 'Untitled video');
+  a.innerHTML = `
+    <div class="sfl-video-thumb">
+      ${thumb}
+      <div class="sfl-video-play-overlay">
+        <div class="sfl-video-play-btn">▶</div>
+      </div>
+      ${dur}
+    </div>
+    <div class="sfl-video-info">
+      ${avatar}
+      <div class="sfl-video-meta">
+        <div class="sfl-video-title">${data.title || 'Untitled'}</div>
+        <div class="sfl-video-creator-name sfl-truncate">${data.creatorName || 'Creator'}</div>
+        <div class="sfl-video-stats">
+          ${views ? `<span>${views}</span>` : ''}
+          ${likes ? `<span>${likes}</span>` : ''}
+          ${upload ? `<span>${upload}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  return a;
+}
+
+/* ══════════════════════════════
+   Build live card HTML
+   ══════════════════════════════ */
+function buildLiveCard(roomId, room) {
+  const avatar = room.hostAvatar
+    ? `<img src="${room.hostAvatar}" class="sfl-live-avatar" alt="" loading="lazy">`
+    : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
+  const viewers = room.viewerCount != null ? fmtNum(room.viewerCount) : '0';
+  const a = document.createElement('a');
+  a.href = `live.html?room=${encodeURIComponent(roomId)}`;
+  a.className = 'sfl-live-card';
+  a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
+  a.innerHTML = `
+    <div class="sfl-live-thumb">
+      <div class="sfl-live-thumb-placeholder">📡</div>
+      <div class="sfl-live-badge">LIVE</div>
+      <div class="sfl-live-viewers">👁 ${viewers}</div>
+    </div>
+    <div class="sfl-live-info">
+      <div class="sfl-live-info-row">
+        ${avatar}
+        <span class="sfl-live-creator sfl-truncate">${room.hostName || 'Creator'}</span>
+      </div>
+      <div class="sfl-live-title">${room.title || 'Live stream'}</div>
+      ${room.category ? `<div class="sfl-live-category">${room.category}</div>` : ''}
+    </div>
+  `;
+  return a;
+}
+
+/* ══════════════════════════════
+   Render video grid
+   ══════════════════════════════ */
+function renderVideos(docs) {
+  const grid   = $('videoGrid');
+  const loader = $('videoGridLoader');
+  const empty  = $('videoGridEmpty');
+  loader.classList.add('sfl-hidden');
+  grid.innerHTML = '';
+  if (!docs.length) {
+    empty.classList.remove('sfl-hidden');
+    return;
+  }
+  empty.classList.add('sfl-hidden');
+  docs.forEach(d => grid.appendChild(buildVideoCard(d.id, d.data())));
+}
+
+/* ══════════════════════════════
+   Load videos by tab
+   ══════════════════════════════ */
+async function loadVideos(tab, category) {
+  const grid   = $('videoGrid');
+  const loader = $('videoGridLoader');
+  const empty  = $('videoGridEmpty');
+  grid.innerHTML = '';
+  empty.classList.add('sfl-hidden');
+  loader.classList.remove('sfl-hidden');
+  grid.appendChild(loader);
+
+  try {
+    let q;
+    const videosRef = collection(db, 'videos');
+
+    if (tab === 'following' && _user) {
+      // Get followed users' videos
+      const following = _userData?.following || [];
+      if (!following.length) {
+        renderVideos([]);
+        return;
+      }
+      // Firestore 'in' max 30 items
+      const batch = following.slice(0,30);
+      q = query(videosRef,
+        where('creatorId','in', batch),
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('createdAt','desc'), limit(30));
+    } else if (tab === 'trending') {
+      q = query(videosRef,
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('views','desc'), limit(40));
+    } else {
+      // Recommended (newest public)
+      q = query(videosRef,
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('createdAt','desc'), limit(40));
+    }
+
+    let snap = await getDocs(q);
+    let docs = snap.docs;
+
+    // Filter by category if not 'all'
+    if (category !== 'all') {
+      docs = docs.filter(d => d.data().category === category);
+    }
+
+    renderVideos(docs);
+  } catch(e) {
+    loader.classList.add('sfl-hidden');
+    console.error('loadVideos:', e);
+    // Show graceful empty state instead of crashing
+    renderVideos([]);
+  }
+}
+
+/* ══════════════════════════════
+   Load live rooms
+   ══════════════════════════════ */
+function loadLiveRooms() {
+  const row   = $('liveNowRow');
+  const empty = $('liveNowEmpty');
+
+  if (_liveUnsub) { _liveUnsub(); _liveUnsub = null; }
+
+  const q = query(
+    collection(db,'liveRooms'),
+    where('status','==','live'),
+    orderBy('viewerCount','desc'),
+    limit(20)
+  );
+
+  _liveUnsub = onSnapshot(q, snap => {
+    // Remove old cards but keep empty placeholder
+    row.querySelectorAll('.sfl-live-card').forEach(c => c.remove());
+    if (snap.empty) {
+      empty.classList.remove('sfl-hidden');
+      return;
+    }
+    empty.classList.add('sfl-hidden');
+    snap.docs.forEach(d => row.insertBefore(buildLiveCard(d.id, d.data()), empty));
+  }, () => {
+    empty.classList.remove('sfl-hidden');
+  });
+}
+
+/* ══════════════════════════════
+   Notification count
+   ══════════════════════════════ */
+async function loadNotifCount(uid) {
+  try {
+    const snap = await getDocs(
+      query(collection(db,'notifications',uid,'items'),
+        where('read','==',false), limit(99))
+    );
+    const n = snap.size;
+    const els = ['sidebarNotifCount','topbarNotifCount','mobileNotifCount'];
+    const badges = ['sidebarNotifCount','topbarNotifCount','mobileNotifCount'].map($);
+    const countSpans = badges;
+    document.querySelectorAll('[id$="NotifCount"]').forEach(el => {
+      el.textContent = n > 99 ? '99+' : String(n);
+      if (n > 0) el.classList.remove('sfl-hidden');
+      else        el.classList.add('sfl-hidden');
+    });
+  } catch(e) { /* silent */ }
+}
+
+/* ══════════════════════════════
+   Auth state
+   ══════════════════════════════ */
+onAuthStateChanged(auth, async user => {
+  _user = user;
+  $('authWall').classList.toggle('sfl-hidden', !!user);
+
+  if (user) {
+    try {
+      const snap = await getDoc(doc(db,'users',user.uid));
+      if (snap.exists()) _userData = snap.data();
+    } catch(e) {}
+    loadNotifCount(user.uid);
+    // Update profile links
+    const name = _userData?.displayName || _userData?.username || user.displayName || 'Profile';
+    if (_userData?.avatar) {
+      document.querySelectorAll('#sidebarProfileBtn .sfl-nav-icon').forEach(el => {
+        el.style.cssText = `width:22px;height:22px;border-radius:50%;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;`;
+        el.innerHTML = `<img src="${_userData.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="">`;
+      });
+    }
+  }
+
+  loadLiveRooms();
+  loadVideos(_activeTab, _activeCategory);
+});
+
+/* ══════════════════════════════
+   Tab switching
+   ══════════════════════════════ */
+document.querySelectorAll('.sfl-feed-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.sfl-feed-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    _activeTab = tab.dataset.tab;
+
+    if (_activeTab === 'following' && !_user) {
+      toast('Sign in to see videos from creators you follow.');
+      return;
+    }
+    loadVideos(_activeTab, _activeCategory);
+  });
+  tab.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') tab.click(); });
+});
+
+/* ══════════════════════════════
+   Category pills
+   ══════════════════════════════ */
+document.querySelectorAll('.sfl-cat-pill').forEach(pill => {
+  const activate = () => {
+    document.querySelectorAll('.sfl-cat-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    _activeCategory = pill.dataset.cat;
+    loadVideos(_activeTab, _activeCategory);
+  };
+  pill.addEventListener('click', activate);
+  pill.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') activate(); });
+});
+
+/* ══════════════════════════════
+   Create dropdown
+   ══════════════════════════════ */
+const createDropdown = $('createDropdown');
+function openCreateMenu(btn) {
+  const rect = btn.getBoundingClientRect();
+  createDropdown.classList.remove('sfl-hidden');
+  // Position above or below depending on space
+  const above = rect.top > 200;
+  if (above) {
+    createDropdown.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+    createDropdown.style.top = 'auto';
+  } else {
+    createDropdown.style.top  = `${rect.bottom + 8}px`;
+    createDropdown.style.bottom = 'auto';
+  }
+  createDropdown.style.right = `${window.innerWidth - rect.right}px`;
+  createDropdown.style.left  = 'auto';
+}
+function closeCreateMenu() { createDropdown.classList.add('sfl-hidden'); }
+
+$('mobileCreateBtn')?.addEventListener('click', e => {
+  e.preventDefault();
+  createDropdown.classList.contains('sfl-hidden') ? openCreateMenu(e.currentTarget) : closeCreateMenu();
+});
+document.addEventListener('click', e => {
+  if (!createDropdown.contains(e.target) && e.target !== $('mobileCreateBtn')) closeCreateMenu();
+});
+
+/* ══════════════════════════════
+   Go Live buttons → require auth
+   ══════════════════════════════ */
+function goLiveGuard(e) {
+  if (!_user) {
+    e.preventDefault();
+    toast('Sign in to go live.');
+    return;
+  }
+  // Navigate to live.html — existing feature gate handles the rest
+}
+$('sidebarGoLive')?.addEventListener('click', e => {
+  if (!_user) { e.preventDefault(); toast('Sign in to go live.'); return; }
+  window.location.href = 'live.html';
+});
+$('createGoLive')?.addEventListener('click', goLiveGuard);
+
+/* ══════════════════════════════
+   Sign Out
+   ══════════════════════════════ */
+$('sidebarLogout')?.addEventListener('click', async () => {
+  try { await signOut(auth); toast('Signed out.'); setTimeout(() => location.href='index.html', 900); }
+  catch(e) { toast('Error signing out.'); }
+});
+
+/* ══════════════════════════════
+   Particles + init
+   ══════════════════════════════ */
+spawnParticles();
+
+// Register service worker (reuse existing)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>

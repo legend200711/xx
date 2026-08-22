@@ -1,0 +1,512 @@
+rules_version = '2';
+
+//
+// ═══════════════════════════════════════════════════════════════════════════
+//  Shadow Nexus Wave — Firestore Security Rules
+//  Firebase project: shadow-nexus-wave
+//  DO NOT deploy these rules to Shadow Nexus Social (horr-a08f4)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Collections in this project:
+//   /users/{uid}                   — Wave user profiles + social graph
+//   /posts/{postId}                — feed posts (live_share, live, etc.)
+//   /stories/{storyId}             — live stories (live indicator in story bar)
+//   /videos/{videoId}              — uploaded video metadata
+//   /videoLikes/{likeId}           — who liked which video
+//   /liveRooms/{uid}               — live stream rooms (one per host)
+//   /liveUsers/{uid}               — live presence
+//   /liveConnections/{roomId}      — WebRTC signaling (Firestore path)
+//   /liveSignals/{roomId}          — legacy WebRTC signaling
+//   /waveDMs/{convId}              — Wave direct messages
+//   /waveBlocks/{blockId}          — Wave block records
+//   /notifications/{uid}/items     — per-user notifications
+//   /siteSettings/{doc}            — site-wide config / feature flags
+//   /featureFlags/{doc}            — client-readable feature toggles
+//   /reports/{docId}               — content reports
+//   /auditLog/{docId}              — admin audit trail
+//   /boxRequests/{requestId}       — guest box join requests
+//   /coHostRequests/{requestId}    — co-host invites
+//   /mediaFiles/{fileId}           — R2/Storage upload metadata
+//   /giftTransactions/{id}         — gift audit records (live.html gift watcher)
+//   /giftCatalog/{giftId}          — gift definitions
+//   /wallets/{uid}                 — coin balances (backend-written only)
+//   /coinPurchases/{id}            — purchase records
+//   /creatorEarnings/{uid}         — creator accumulated earnings
+//   /creatorPayouts/{id}           — cash-out requests
+//   /paypalAccounts/{uid}          — creator PayPal connection
+//   /testUsers/{accountId}         — test accounts (dev only)
+//   /testPosts/{postId}            — test posts (dev only)
+//   /founderStats/{docId}          — founder-only platform stats
+//
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isFounder() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'founder';
+    }
+
+    function isModerator() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+             in ['founder', 'moderator', 'admin'];
+    }
+
+    // Fields a signed-in user is allowed to write into ANOTHER user's doc
+    // (follow graph, push delivery, friend/family requests).
+    function isDeliveryUpdate() {
+      let allowed = [
+        'notifications',
+        'pushQueue',
+        'friendRequestsReceived',
+        'friendRequestsSent',
+        'familyInvitesReceived',
+        'familyInvitesSent',
+        'family',
+        'friends',
+        'followers',
+        'followerCount',
+        'following',
+        'followingCount'
+      ];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // Theme fields may only be written by the profile owner.
+    function touchesThemeFields() {
+      let themeFields = [
+        'profileTheme',
+        'profileSavedThemes',
+        'profileActiveThemeId',
+        'profileMusicSettings'
+      ];
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(themeFields);
+    }
+
+    // Role field may only be changed by a Founder.
+    function touchesRoleField() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+    }
+
+    // ── Users ──────────────────────────────────────────────────────────────
+    //
+    // Public profile info (username, displayName, avatar, followerCount, isLive)
+    // is readable without authentication — required for public search/profile pages.
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isOwner(uid);
+      allow delete: if isOwner(uid);
+      allow update: if
+        (isOwner(uid) && !touchesRoleField())
+        || (isSignedIn() && isDeliveryUpdate() && !touchesThemeFields())
+        || isModerator();
+
+      // Per-user notifications subcollection
+      match /items/{notifId} {
+        allow read:   if isOwner(uid);
+        allow create: if isSignedIn();
+        allow update, delete: if isOwner(uid) || isFounder();
+      }
+    }
+
+    // ── Notifications (top-level per-user collection) ────────────────────
+
+    match /notifications/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow write: if false; // only subcollection items are written
+
+      match /items/{notifId} {
+        allow read:   if isOwner(uid) || isFounder();
+        allow create: if isSignedIn();
+        allow update, delete: if isOwner(uid) || isFounder();
+      }
+    }
+
+    // ── Wave Direct Messages ─────────────────────────────────────────────
+    //
+    //   /waveDMs/{convId}
+    //     convId = sorted([uid1, uid2]).join('_')
+    //     participants: [uid1, uid2], lastMsgTs, updatedAt
+    //
+    //   /waveDMs/{convId}/msgs/{msgId}
+    //     senderUid, receiverUid, text, createdAt, read, deleted
+
+    match /waveDMs/{convId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isFounder());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isModerator());
+      allow delete: if isSignedIn()
+        && (request.auth.uid in resource.data.participants || isFounder());
+
+      match /msgs/{msgId} {
+        allow read: if isSignedIn()
+          && (request.auth.uid in get(/databases/$(database)/documents/waveDMs/$(convId)).data.participants
+              || isFounder());
+        allow create: if isSignedIn()
+          && request.resource.data.senderUid == request.auth.uid;
+        allow update: if isSignedIn()
+          && (request.auth.uid == resource.data.senderUid
+              || request.auth.uid == resource.data.receiverUid
+              || isModerator());
+        allow delete: if isSignedIn()
+          && (request.auth.uid == resource.data.senderUid || isFounder());
+      }
+    }
+
+    // ── Wave Blocks ────────────────────────────────────────────────────────
+    //
+    //   /waveBlocks/{docId}
+    //     docId = "{blockerId}_{blockedId}"
+    //     blockerId, blockedId, createdAt
+
+    match /waveBlocks/{blockId} {
+      allow read: if isSignedIn()
+        && (resource == null
+            || request.auth.uid == resource.data.blockerId
+            || isFounder());
+      allow create: if isSignedIn()
+        && request.resource.data.blockerId == request.auth.uid
+        && request.resource.data.blockedId != request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn()
+        && (resource.data.blockerId == request.auth.uid || isFounder());
+    }
+
+    // ── Videos ────────────────────────────────────────────────────────────
+    //
+    //   /videos/{videoId}
+    //   status values: uploading | processing | published | failed | cancelled
+
+    match /videos/{videoId} {
+      allow read: if isOwner(resource.data.creatorId)
+        || isModerator()
+        || (resource.data.status == 'published'
+            && (resource.data.visibility == 'public'
+                || (resource.data.visibility == 'followers'
+                    && isSignedIn()
+                    && request.auth.uid in get(/databases/$(database)/documents/users/$(resource.data.creatorId)).data.followers)));
+
+      allow create: if isSignedIn()
+        && request.resource.data.creatorId == request.auth.uid;
+
+      allow update: if isOwner(resource.data.creatorId)
+        || isModerator()
+        || (isSignedIn()
+            && resource.data.status == 'published'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['views', 'likes', 'likedBy', 'comments']));
+
+      allow delete: if isOwner(resource.data.creatorId) || isFounder();
+
+      // /videos/{videoId}/comments/{commentId}
+      match /comments/{commentId} {
+        allow read:   if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isSignedIn()
+          && (resource.data.authorId == request.auth.uid || isModerator());
+      }
+    }
+
+    // /videoLikes/{uid_videoId} — flat like index
+    match /videoLikes/{likeId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // ── Posts ────────────────────────────────────────────────────────────────
+    //
+    //   /posts/{postId}
+    //   Used by live.js for live_share posts and feed posts.
+
+    match /posts/{postId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && (
+          resource.data.uid == request.auth.uid
+          || request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['likes', 'comments', 'isLive'])
+          || isModerator()
+        );
+
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isModerator());
+    }
+
+    // ── Stories ──────────────────────────────────────────────────────────────
+    //
+    //   /stories/{storyId}
+    //   Used by live.js: _createLiveStory / _deleteLiveStory
+    //   storyId = "live_{uid}"
+
+    match /stories/{storyId} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+
+      allow delete: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isModerator());
+    }
+
+    // ── Live Rooms ──────────────────────────────────────────────────────────
+    //
+    //   /liveRooms/{uid}  — one doc per host, keyed by host uid.
+
+    match /liveRooms/{uid} {
+      allow read: if true;
+
+      allow create: if isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.hostId == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && (
+          resource.data.hostId == request.auth.uid
+          || request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(['viewers', 'likes'])
+          || (resource.data.hostId == request.auth.uid
+              && request.resource.data.diff(resource.data)
+                   .affectedKeys().hasOnly(['guestLayout', 'guestBoxSize']))
+        );
+
+      allow delete: if isSignedIn()
+        && (resource.data.hostId == request.auth.uid || isFounder());
+
+      match /liveMessages/{msgId} {
+        allow read:   if isSignedIn();
+        allow create: if isSignedIn();
+        allow delete: if isSignedIn()
+          && (
+            resource.data.userId == request.auth.uid
+            || get(/databases/$(database)/documents/liveRooms/$(uid)).data.hostId == request.auth.uid
+            || isFounder()
+          );
+        allow update: if false;
+      }
+    }
+
+    // ── Live Users (presence) ───────────────────────────────────────────────
+
+    match /liveUsers/{uid} {
+      allow read:          if isSignedIn();
+      allow create, update: if isOwner(uid);
+      allow delete:        if isOwner(uid) || isFounder();
+    }
+
+    // ── WebRTC Signaling (Firestore) ────────────────────────────────────────
+
+    match /liveConnections/{roomId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /liveSignals/{roomId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+
+      match /viewers/{viewerUid} {
+        allow read: if isSignedIn();
+        allow create: if isOwner(viewerUid);
+        allow update: if isSignedIn();
+        allow delete: if isOwner(viewerUid) || isFounder();
+
+        match /hostIce/{id} {
+          allow read:   if isSignedIn();
+          allow create: if isSignedIn();
+          allow delete: if isOwner(viewerUid) || isSignedIn();
+          allow update: if false;
+        }
+
+        match /viewerIce/{id} {
+          allow read:   if isSignedIn();
+          allow create: if isOwner(viewerUid);
+          allow delete: if isOwner(viewerUid) || isSignedIn();
+          allow update: if false;
+        }
+      }
+    }
+
+    // ── Box Requests ───────────────────────────────────────────────────────
+
+    match /boxRequests/{requestId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.viewerId
+            || request.auth.uid == resource.data.hostId
+            || isFounder());
+      allow create: if isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.viewerId == request.auth.uid;
+      allow update: if isSignedIn()
+        && (request.auth.uid == resource.data.hostId
+            || request.auth.uid == resource.data.viewerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isSignedIn()
+        && (request.auth.uid == resource.data.viewerId
+            || request.auth.uid == resource.data.hostId
+            || isFounder());
+    }
+
+    // ── Co-Host Requests ────────────────────────────────────────────────────
+
+    match /coHostRequests/{requestId} {
+      allow create: if isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous'
+        && request.resource.data.hostId == request.auth.uid;
+      allow read: if isSignedIn()
+        && (
+          request.auth.uid == resource.data.hostId
+          || request.auth.uid == resource.data.guestId
+          || resource.data.status == 'accepted'
+        );
+      allow update: if isSignedIn()
+        && (request.auth.uid == resource.data.guestId || request.auth.uid == resource.data.hostId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isSignedIn()
+        && (
+          request.auth.uid == resource.data.hostId
+          || request.auth.uid == resource.data.guestId
+          || isFounder()
+        );
+    }
+
+    // ── Site Settings / Feature Flags ───────────────────────────────────────
+
+    match /siteSettings/{docId} {
+      allow read: if true;
+      allow write: if isFounder();
+    }
+
+    match /featureFlags/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isFounder();
+    }
+
+    // ── Media Files (R2/Storage upload metadata) ────────────────────────────
+
+    match /mediaFiles/{fileId} {
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isSignedIn()
+        && (resource.data.ownerUid == request.auth.uid
+            || resource.data.visibility != 'private'
+            || isFounder());
+      allow update: if isSignedIn()
+        && (resource.data.ownerUid == request.auth.uid || isFounder());
+      allow delete: if isSignedIn()
+        && (resource.data.ownerUid == request.auth.uid || isFounder());
+    }
+
+    // ── Reports ─────────────────────────────────────────────────────────────
+
+    match /reports/{docId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isModerator();
+    }
+
+    // ── Audit Log ───────────────────────────────────────────────────────────
+
+    match /auditLog/{docId} {
+      allow create: if isSignedIn();
+      allow read: if isModerator();
+      allow update, delete: if false;
+    }
+
+    // ── Gifting & Monetization ──────────────────────────────────────────────
+    //
+    //   /giftTransactions/{id}   — immutable gift audit records
+    //   /giftCatalog/{giftId}    — gift definitions (public read)
+    //   /wallets/{uid}           — coin balances (backend-written only)
+    //   /coinPurchases/{id}      — purchase records
+    //   /creatorEarnings/{uid}   — creator earnings (backend-written only)
+    //   /creatorPayouts/{id}     — payout requests
+    //   /paypalAccounts/{uid}    — creator PayPal connection status
+
+    match /giftTransactions/{txId} {
+      // live.html listens to this collection to show incoming gift toasts.
+      allow read: if isSignedIn();
+      // Gifts are written by the backend only — clients never write directly.
+      allow write: if false;
+    }
+
+    match /giftCatalog/{giftId} {
+      allow read: if true;
+      allow write: if isFounder();
+    }
+
+    match /wallets/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow write: if false;  // backend only
+    }
+
+    match /coinPurchases/{purchaseId} {
+      allow read: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isFounder());
+      allow write: if false;  // backend only
+    }
+
+    match /creatorEarnings/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow write: if false;  // backend only
+    }
+
+    match /creatorPayouts/{payoutId} {
+      allow read: if isSignedIn()
+        && (resource.data.uid == request.auth.uid || isFounder());
+      allow write: if false;  // backend only
+    }
+
+    match /paypalAccounts/{uid} {
+      allow read: if isOwner(uid) || isFounder();
+      allow create, update: if isOwner(uid);
+      allow delete: if isOwner(uid) || isFounder();
+    }
+
+    // ── Founder Stats ───────────────────────────────────────────────────────
+
+    match /founderStats/{docId} {
+      allow read, write: if isFounder();
+    }
+
+    // ── Test Lab collections (dev only) ────────────────────────────────────
+
+    match /testUsers/{accountId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isFounder();
+    }
+
+    match /testPosts/{postId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn()
+        && (resource.data.authorId != null || isFounder());
+      allow update: if false;
+    }
+
+  }
+}
