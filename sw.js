@@ -17,7 +17,7 @@
 'use strict';
 
 /* ─── Version — bump this string to force a full cache refresh ─── */
-const CACHE_VERSION = 'sfl-v2';
+const CACHE_VERSION = 'sfl-v1';
 const CACHE_NAME    = `sfl-shell-${CACHE_VERSION}`;
 const MEDIA_CACHE   = `sfl-media-${CACHE_VERSION}`;
 

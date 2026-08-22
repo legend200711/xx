@@ -18,67 +18,27 @@ Firestore, Storage, or any backend infrastructure.
 
 | Provider | How it works |
 |---|---|
-| **Social Account bridge** | User clicks the **"Social Account"** tab on `sfl-login.html`, enters their Social email + password. The Wave Cloudflare Worker verifies credentials against Social Firebase server-side, then returns a **Wave Firebase custom token**. The browser calls `signInWithCustomToken()` → normal Wave session. Social password is discarded inside the Worker — never returned to the browser. |
+| **Email/Password** | User signs in on Wave with the **same email + same password** they use on Social. Wave Firebase Auth creates a new, separate Wave user record with a new UID. No password is copied — the user simply authenticates independently. |
 | **Google OAuth** | `signInWithPopup` is called against the Wave project. Firebase recognises the same Google account and creates a Wave-project UID. No Social tokens or sessions are used. |
-| **Direct Wave email/password** | User signs in on Wave directly with a Wave account (may share same email as Social — Wave creates an independent record). |
 | **New users** | Register on Wave using the Create Account tab. Completely independent account. |
-
-### Social→Wave Authentication Bridge — How It Works
-
-```
-Browser                 Wave Cloudflare Worker             Social Firebase (horr-a08f4)
-  │                            │                                     │
-  │  POST /auth/social-bridge  │                                     │
-  │  { email, password }       │                                     │
-  │──────────────────────────► │                                     │
-  │                            │  signInWithPassword REST API        │
-  │                            │────────────────────────────────────►│
-  │                            │◄────────────────────────────────────│
-  │                            │  { idToken, localId }               │
-  │                            │                                     │
-  │                            │  accounts:lookup (verify token)     │
-  │                            │────────────────────────────────────►│
-  │                            │◄────────────────────────────────────│
-  │                            │  { users[0].localId confirmed }     │
-  │                            │                                     │
-  │                            │  *** idToken discarded here ***     │
-  │                            │  Mint Wave custom JWT               │
-  │                            │  UID = "snx_social_{socialUID}"     │
-  │◄──────────────────────────│                                     │
-  │  { customToken, waveUid }  │                                     │
-  │                            │                                     │
-  │  signInWithCustomToken()   │                                     │
-  │  → Wave Firebase session   │                                     │
-  │  → ensureWaveProfile()     │                                     │
-  │  → redirect sfl-home.html  │                                     │
-```
 
 ### What happens on first login to Wave
 
 1. User signs in (any provider) → Wave Firebase Auth creates/returns a Wave UID.
 2. `ensureWaveProfile()` checks if `/users/{waveUID}` exists in Wave Firestore.
-3. If it doesn't exist → creates a full Wave profile document. Bridge accounts are
-   stamped with `socialOrigin: true`, `socialEmail`, and `provider: 'snx_social'`.
-4. If it already exists → only back-fills blank `avatar`/`displayName`. Never overwrites.
-5. User is redirected to `sfl-home.html` with a valid Wave Firebase session.
-
-### Bridge Wave UID namespace
-
-Bridged users receive the Wave UID `snx_social_{socialUID}`. This:
-- Namespaces Social-origin UIDs away from native Wave UIDs
-- Makes bridged accounts auditable (Founder Panel can filter on `socialOrigin: true`)
-- Prevents collisions even if Social and Wave assign the same UID string
+3. If it doesn't exist → creates a minimal Wave profile from Firebase Auth claims
+   (displayName, email, photoURL). Stores `socialEmail` field for cross-reference.
+4. If it already exists → only back-fills blank `avatar`/`displayName` from Google claims.
+5. User is redirected to `sfl-home.html` with a valid Wave session.
 
 ### Security guarantees
 
 - No password is ever copied, transmitted, or stored between projects.
-- No Social Auth token is ever returned to the browser.
+- No Social Auth token is ever used on Wave.
 - No Social Firestore data is ever read by Wave.
-- Social Firebase Admin credentials are never used — only the public Web API key.
 - The Wave UID is different from the Social UID (different Firebase projects = different UID spaces).
 - `socialEmail` stored in Wave Firestore is only the user's own email (which they provided during login).
-- Shadow Nexus Social's Auth, Firestore, Storage, Rules, and Cloudflare are **never touched**.
-- Wave can be fully logged out without affecting the Social session.
+- Shadow Nexus Social's Auth, Firestore, Storage, and Cloudflare are **never touched**.
 
 ---
 
@@ -314,11 +274,12 @@ https://console.firebase.google.com/project/shadow-nexus-wave/database
 
 **No data has been migrated.** The new Wave project starts with an empty database.
 
-Existing Social users access Wave via the **Social Account bridge** (see above).
-No user import, password copy, or Firebase Admin SDK migration is required.
-The bridge creates Wave accounts on-demand at first sign-in.
+Wave users will need to create new accounts in the Wave project. If you want to
+allow existing Shadow Nexus Social users to sign in to Wave with the same credentials,
+you would need to use Firebase's user import feature — but this requires a decision
+about whether Wave should share the same user base or have its own.
 
-**Do NOT migrate Social Firestore data to Wave.** The original Social data in
+**Do NOT migrate data without explicit sign-off.** The original Social data in
 `horr-a08f4` is preserved and untouched.
 
 ---
@@ -336,63 +297,7 @@ The bridge creates Wave accounts on-demand at first sign-in.
 | `database-wave.rules.json` | Wave Realtime Database rules |
 | `deploy-wave.sh` | Safe Wave-only Firebase deployment script |
 | **Cloudflare** | |
-| `wave-worker.js` | Wave Cloudflare Worker — includes `handleSocialBridge` + `_mintFirebaseCustomToken` |
-| `wrangler-wave.jsonc` | Wrangler config for Wave worker (bridge secrets documented) |
-| **Frontend** | |
-| `sfl-login.html` | Login page — includes "Social Account" tab and bridge form |
+| `wave-worker.js` | Wave Cloudflare Worker (adapted from upload-worker.js) |
+| `wrangler-wave.jsonc` | Wrangler config for Wave worker |
 | **Documentation** | |
 | `WAVE_SETUP.md` | This setup guide |
-
----
-
-## Social→Wave Bridge — Required Secrets
-
-Three Worker secrets must be set before the bridge works:
-
-```bash
-# 1. Social Firebase Web API key (public client key — NOT a service account)
-#    Value: AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y  (Social project horr-a08f4)
-npx wrangler secret put SOCIAL_FIREBASE_WEB_API_KEY --config wrangler-wave.jsonc
-
-# 2. Wave Firebase service account email
-#    Get from: Firebase Console → shadow-nexus-wave → Project Settings →
-#              Service Accounts → Generate new private key → JSON field "client_email"
-npx wrangler secret put WAVE_SA_CLIENT_EMAIL --config wrangler-wave.jsonc
-
-# 3. Wave Firebase service account private key (full PKCS8 PEM including newlines)
-#    Get from: same JSON file, field "private_key"
-#    Paste the full -----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY----- block
-npx wrangler secret put WAVE_SA_PRIVATE_KEY --config wrangler-wave.jsonc
-```
-
-After setting secrets, redeploy the Wave Worker:
-```bash
-npx wrangler deploy --config wrangler-wave.jsonc
-```
-
-### Health-check the bridge (optional)
-
-```bash
-curl -X POST https://shadow-nexus-wave.nthntjrn.workers.dev/auth/social-bridge \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"test@example.com","password":"wrongpassword"}'
-# Expected: 401 { "error": "No Shadow Nexus Social account found..." } or "Incorrect password..."
-# If 503: secrets not yet configured.
-```
-
----
-
-## Test Checklist — Authentication Bridge
-
-| # | Test | Expected |
-|---|---|---|
-| 1 | Open `sfl-login.html` → click **Social Account** tab | Bridge form visible; Sign In / Create Account forms hidden |
-| 2 | Enter a valid Social email + correct Social password → submit | Spinner shows; redirects to `sfl-home.html` with valid Wave session |
-| 3 | Sign in with same Social email a second time | No duplicate Wave account created; same `snx_social_{uid}` UID returned |
-| 4 | Enter valid Social email + wrong password | Error: "Incorrect password for your Shadow Nexus Social account." |
-| 5 | Enter email that has no Social account | Error: "No Shadow Nexus Social account found for this email." |
-| 6 | Open Shadow Nexus Social — still works, session intact | Social unaffected |
-| 7 | Log out of Wave | Wave session cleared; Social session untouched |
-| 8 | Verify `firebase-config.js` (Social) and Social Cloudflare worker (`yellow-term-11e6`) unchanged | `git diff` shows no changes to Social files |
-| 9 | Check Wave Firestore `/users/{snx_social_*}` doc | Contains `socialOrigin: true`, `socialEmail`, `provider: 'snx_social'` |
-| 10 | Bridge with secrets not yet configured | Error: "The authentication bridge is not yet configured on the server." (503) |
