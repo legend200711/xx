@@ -568,7 +568,7 @@ function buildLiveCard(roomId, room) {
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
   const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
   const a = document.createElement('a');
-  a.href = `live.html?room=${encodeURIComponent(roomId)}`;
+  a.href = `live-room.html?room=${encodeURIComponent(roomId)}`;
   a.className = 'sfl-live-card';
   a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
   a.innerHTML = `

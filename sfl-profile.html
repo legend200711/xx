@@ -517,7 +517,7 @@ function renderProfile(data) {
   // Live badge
   if (data.isLive && data.liveRoomId) {
     $('liveNowBadge').classList.remove('sfl-hidden');
-    $('liveNowBadge').href = `live.html?room=${data.liveRoomId}`;
+    $('liveNowBadge').href = `live-room.html?room=${encodeURIComponent(data.liveRoomId)}`;
     $('profileAvatar').classList.add('live');
   }
 
