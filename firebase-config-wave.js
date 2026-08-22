@@ -14,13 +14,13 @@
  */
 
 import { initializeApp, getApps, getApp }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getDatabase }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 // ── TARGET PROJECT VERIFICATION ────────────────────────────────────────────
 // This config must ALWAYS point to shadow-nexus-wave, NEVER to horr-a08f4.

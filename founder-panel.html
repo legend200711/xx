@@ -1158,15 +1158,15 @@
      JAVASCRIPT
      ══════════════════════════════ -->
 <script type="module">
-import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, setDoc,
   collection, query, where, orderBy, limit, serverTimestamp, getCountFromServer
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getDatabase, ref as dbRef, get as dbGet }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 // ── Firebase init — Shadow Nexus Wave project ────────────────────────────────
 /* TARGET PROJECT: shadow-nexus-wave  |  DO NOT change to horr-a08f4          */
@@ -2055,7 +2055,7 @@ document.querySelectorAll('.fp-modal-overlay').forEach(o => {
 
 // Sign Out
 $('fpSignOutBtn')?.addEventListener('click', async () => {
-  const { signOut } = await import('https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js');
+  const { signOut } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js');
   await signOut(auth).catch(() => {});
   window.location.href = 'sfl-login.html';
 });
