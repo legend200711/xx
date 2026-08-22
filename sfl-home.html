@@ -414,7 +414,7 @@
       <div class="sfl-create-opt-sub">Share a video with the world</div>
     </div>
   </a>
-  <a href="live-hub.html?host=1" class="sfl-create-opt" role="menuitem" id="createGoLive">
+  <a href="live.html" class="sfl-create-opt" role="menuitem" id="createGoLive">
     <span class="sfl-create-opt-icon">🔴</span>
     <div class="sfl-create-opt-info">
       <div class="sfl-create-opt-label">Go Live</div>
@@ -568,7 +568,7 @@ function buildLiveCard(roomId, room) {
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
   const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
   const a = document.createElement('a');
-  a.href = `live-room.html?room=${encodeURIComponent(roomId)}`;
+  a.href = `live.html#watch=${encodeURIComponent(roomId)}`;
   a.className = 'sfl-live-card';
   a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
   a.innerHTML = `
@@ -860,13 +860,13 @@ function goLiveGuard(e) {
     toast('Sign in to go live.');
     return;
   }
-  // Navigate to live-hub.html which handles the host flow
+  // Navigate to live.html — the working creator setup + live room
   e.preventDefault();
-  window.location.href = 'live-hub.html';
+  window.location.href = 'live.html';
 }
 $('sidebarGoLive')?.addEventListener('click', e => {
   if (!_user) { e.preventDefault(); toast('Sign in to go live.'); return; }
-  window.location.href = 'live-hub.html';
+  window.location.href = 'live.html';
 });
 $('createGoLive')?.addEventListener('click', goLiveGuard);
 

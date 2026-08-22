@@ -91,8 +91,8 @@
  *
  * Shows all active live rooms from Firestore (liveRooms collection, status == 'live').
  * Real-time updates via onSnapshot — no page refresh needed.
- * Go Live → navigates to live-room.html?host=1
- * Watch  → navigates to live-room.html?room=<roomId>
+ * Go Live → navigates to live.html (creator setup + live room)
+ * Watch  → navigates to live.html#watch=<roomId>
  */
 
 import { initializeApp, getApps, getApp }
@@ -211,7 +211,7 @@ async function _loadUserData() {
 
 /* ── Go Live ── */
 function _goLive() {
-  window.location.href = 'live-room.html?host=1';
+  window.location.href = 'live.html';
 }
 D.goLiveBtn      && D.goLiveBtn.addEventListener('click', _goLive);
 D.goLiveBtnEmpty && D.goLiveBtnEmpty.addEventListener('click', _goLive);
@@ -347,7 +347,7 @@ function _buildCard(room, rid) {
   `;
 
   const _goWatch = () => {
-    window.location.href = `live-room.html?room=${encodeURIComponent(rid)}`;
+    window.location.href = `live.html#watch=${encodeURIComponent(rid)}`;
   };
   card.querySelector('.hub-card-watch-btn').addEventListener('click', e => { e.stopPropagation(); _goWatch(); });
   card.querySelector('.hub-card-thumb').addEventListener('click', _goWatch);
