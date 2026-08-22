@@ -230,6 +230,48 @@ body.lr-is-viewer .lr-viewer-bar { display: flex; }
 }
 .lr-chat-send:hover { background: rgba(0,180,60,0.55); }
 
+/* Social bridge panel */
+#lrSocialPanel {
+  display: none; position: fixed; inset: 0; z-index: 8200;
+  background: rgba(2,9,19,0.88); backdrop-filter: blur(8px);
+  align-items: flex-end; justify-content: center;
+}
+#lrSocialPanel.visible { display: flex; }
+.lr-social-sheet {
+  width: 100%; max-width: 480px;
+  background: #0a1a2e; border: 1px solid rgba(0,174,239,0.25);
+  border-radius: 18px 18px 0 0;
+  padding: 24px 20px calc(env(safe-area-inset-bottom,0) + 24px);
+}
+.lr-social-sheet-title {
+  font-size: 16px; font-weight: 800; color: #d8eeff;
+  margin-bottom: 6px;
+}
+.lr-social-sheet-sub {
+  font-size: 13px; color: #5a8aaa; line-height: 1.55; margin-bottom: 20px;
+}
+.lr-social-row { display: flex; gap: 10px; justify-content: flex-end; }
+.lr-social-btn {
+  padding: 9px 22px; border-radius: 20px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  touch-action: manipulation; border: 1.5px solid;
+  transition: background 0.15s;
+}
+.lr-social-btn.primary {
+  background: rgba(0,174,239,0.16); border-color: rgba(0,174,239,0.5); color: #55ccff;
+}
+.lr-social-btn.primary:hover  { background: rgba(0,174,239,0.3); }
+.lr-social-btn.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.lr-social-btn.ghost {
+  background: transparent; border-color: rgba(255,255,255,0.15); color: #5a8aaa;
+}
+.lr-social-btn.ghost:hover { background: rgba(255,255,255,0.06); }
+.lr-social-msg {
+  font-size: 12px; margin: 10px 0 0; min-height: 18px; color: #5a8aaa;
+}
+.lr-social-msg.error   { color: #f07070; }
+.lr-social-msg.success { color: #44cc88; }
+
 /* Stream ended overlay */
 #lrEnded {
   display: none; position: fixed; inset: 0; z-index: 9500;
@@ -397,6 +439,7 @@ body.lr-is-viewer .lr-viewer-bar { display: flex; }
     <button class="lr-ctrl-btn" id="lrBtnFlip"       aria-label="Flip camera">🔄</button>
     <button class="lr-ctrl-btn" id="lrBtnFullscreen" aria-label="Fullscreen">⛶</button>
     <button class="lr-ctrl-btn" id="lrBtnShare"      aria-label="Share stream">📤</button>
+    <button class="lr-ctrl-btn" id="lrBtnSocial"     aria-label="Go Live to Shadow Nexus Social" title="Go Live to Social">🌐</button>
     <button class="lr-end-btn"  id="lrBtnEnd"        aria-label="End live stream">END LIVE</button>
   </div>
 
@@ -435,6 +478,20 @@ body.lr-is-viewer .lr-viewer-bar { display: flex; }
 
 <!-- Toast -->
 <div id="lrToast" role="alert" aria-live="assertive"></div>
+
+<!-- Social Bridge Panel -->
+<div id="lrSocialPanel" role="dialog" aria-modal="true" aria-labelledby="lrSocialTitle">
+  <div class="lr-social-sheet">
+    <div class="lr-social-sheet-title" id="lrSocialTitle">🌐 Go Live to Shadow Nexus Social</div>
+    <div class="lr-social-sheet-sub"   id="lrSocialSub">Loading connection status…</div>
+    <div class="lr-social-msg"         id="lrSocialMsg"></div>
+    <div class="lr-social-row">
+      <button class="lr-social-btn ghost"   id="lrSocialClose">Cancel</button>
+      <button class="lr-social-btn primary" id="lrSocialConfirm" style="display:none;">Bridge to Social</button>
+      <a href="sfl-settings.html#connected-accounts" class="lr-social-btn primary" id="lrSocialSettingsLink" style="display:none;text-decoration:none;">Open Settings</a>
+    </div>
+  </div>
+</div>
 
 
 <script type="module">
@@ -790,6 +847,9 @@ async function _startHostSession() {
 
   toast('🔴 You are now live!');
   _sysChat('Stream started — welcome to Shadow Nexus Wave!');
+
+  // Load Social connection state for the bridge button
+  _initSocialBridge().catch(() => {});
 
   // Wire host controls
   _wireHostControls();
@@ -1268,6 +1328,117 @@ function _shareStream() {
     navigator.clipboard?.writeText(url)
       .then(() => toast('📋 Link copied to clipboard!'))
       .catch(() => toast('Share: ' + url));
+  }
+}
+
+/* ════════════════════════════════════════
+   Social Bridge — "Go Live to Shadow Nexus Social"
+   ════════════════════════════════════════ */
+const WAVE_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+
+// Social connection state (loaded when host session starts)
+let _socialConnected     = false;
+let _socialEmail         = '';
+let _socialBridgeActive  = false;
+
+const _SP = {
+  panel:    document.getElementById('lrSocialPanel'),
+  title:    document.getElementById('lrSocialTitle'),
+  sub:      document.getElementById('lrSocialSub'),
+  msg:      document.getElementById('lrSocialMsg'),
+  confirm:  document.getElementById('lrSocialConfirm'),
+  settings: document.getElementById('lrSocialSettingsLink'),
+  close:    document.getElementById('lrSocialClose'),
+  btn:      document.getElementById('lrBtnSocial'),
+};
+
+function _setSocialMsg(type, text) {
+  _SP.msg.className = 'lr-social-msg' + (type ? ' ' + type : '');
+  _SP.msg.textContent = text || '';
+}
+
+async function _loadSocialConnection() {
+  if (!_user) return;
+  try {
+    const snap = await getDoc(doc(_db, 'socialConnections', _user.uid));
+    if (snap.exists() && snap.data().status === 'connected') {
+      _socialConnected = true;
+      _socialEmail     = snap.data().socialEmail || '';
+    } else {
+      _socialConnected = false;
+    }
+  } catch (_e) {
+    _socialConnected = false;
+  }
+}
+
+function _openSocialPanel() {
+  _setSocialMsg('', '');
+  _SP.confirm.style.display  = 'none';
+  _SP.settings.style.display = 'none';
+
+  if (_socialConnected) {
+    _SP.sub.textContent = `Your Shadow Nexus Social account (${_socialEmail}) is connected.\n\nTapping "Bridge to Social" will notify the bridge server that you are currently live on Wave — no credentials are transferred.`;
+    _SP.confirm.style.display  = '';
+    _SP.confirm.disabled       = _socialBridgeActive;
+    _SP.confirm.textContent    = _socialBridgeActive ? '✓ Bridged' : 'Bridge to Social';
+  } else {
+    _SP.sub.textContent = 'You have not connected your Shadow Nexus Social account yet.\n\nTo use cross-platform features, go to Settings → Connected Accounts and link your Social account first.';
+    _SP.settings.style.display = '';
+  }
+
+  _SP.panel.classList.add('visible');
+}
+
+function _closeSocialPanel() {
+  _SP.panel.classList.remove('visible');
+}
+
+_SP.close?.addEventListener('click', _closeSocialPanel);
+_SP.panel?.addEventListener('click', e => { if (e.target === _SP.panel) _closeSocialPanel(); });
+_SP.btn?.addEventListener('click', () => {
+  if (_mode !== 'host') return;
+  _openSocialPanel();
+});
+
+_SP.confirm?.addEventListener('click', async () => {
+  if (!_user || _socialBridgeActive) return;
+  _SP.confirm.disabled     = true;
+  _SP.confirm.textContent  = 'Bridging…';
+  _setSocialMsg('', '');
+
+  try {
+    const idToken = await _user.getIdToken();
+    const res = await fetch(`${WAVE_WORKER_URL}/live/social-bridge`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ waveIdToken: idToken, roomId: _roomId })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `Server error (${res.status})`);
+
+    _socialBridgeActive = true;
+    _SP.confirm.textContent = '✓ Bridged';
+    _setSocialMsg('success', '✓ Social bridge active — Social followers can see you are live.');
+    toast('🌐 Live bridge to Social active!', 4000);
+    _sysChat('🌐 Now bridged to Shadow Nexus Social!');
+  } catch (e) {
+    _setSocialMsg('error', e.message || 'Bridge failed. Please try again.');
+    _SP.confirm.disabled    = false;
+    _SP.confirm.textContent = 'Bridge to Social';
+  }
+});
+
+// Load connection when host session is fully ready
+// This is called after _startHostSession sets up the room
+async function _initSocialBridge() {
+  await _loadSocialConnection();
+  // Dim the social btn slightly if not connected
+  if (_SP.btn) {
+    _SP.btn.title = _socialConnected
+      ? `Go Live to Social (${_socialEmail})`
+      : 'Go Live to Social (not connected — tap to learn more)';
+    _SP.btn.style.opacity = _socialConnected ? '1' : '0.45';
   }
 }
 </script>

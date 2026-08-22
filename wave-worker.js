@@ -1413,6 +1413,492 @@ async function _mintFirebaseCustomToken(serviceAccountEmail, privateKeyPem, uid,
   return `${sigInput}.${b64url(sigBuffer)}`;
 }
 
+// ── Internal: verify a Wave Firebase ID token via REST ───────────────────────
+// Returns { uid, email } on success, throws on failure.
+// Uses the Wave project's public Web API key (same key the browser SDK uses).
+//
+async function _verifyWaveIdToken(idToken, waveWebApiKey) {
+  if (!idToken || !waveWebApiKey) throw new Error('Missing token or API key');
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${waveWebApiKey}`,
+    {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ idToken }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || !data.users?.[0]?.localId) {
+    throw new Error('Invalid or expired Wave session. Please sign in again.');
+  }
+  const u = data.users[0];
+  if (u.disabled) throw new Error('Wave account is disabled.');
+  return { uid: u.localId, email: u.email || '' };
+}
+
+// ── Internal: Firestore REST write via Wave service account access token ──────
+// Issues a short-lived OAuth2 access token from the Wave SA credentials,
+// then performs the specified Firestore REST operation.
+//
+// operation: 'set' | 'delete'
+// path: Firestore document path, e.g. 'socialConnections/uid123'
+// data: object to write (ignored for delete)
+//
+async function _firestoreRestWrite(operation, path, data, env) {
+  // Step A: mint a Google access token (JWT-based service account auth)
+  const now  = Math.floor(Date.now() / 1000);
+  const jwtHeader  = { alg: 'RS256', typ: 'JWT' };
+  const jwtPayload = {
+    iss:   env.WAVE_SA_CLIENT_EMAIL,
+    sub:   env.WAVE_SA_CLIENT_EMAIL,
+    scope: 'https://www.googleapis.com/auth/datastore',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  };
+
+  const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const enc = obj => b64url(new TextEncoder().encode(JSON.stringify(obj)));
+
+  const headerB64  = enc(jwtHeader);
+  const payloadB64 = enc(jwtPayload);
+  const sigInput   = `${headerB64}.${payloadB64}`;
+
+  const pemBody = env.WAVE_SA_PRIVATE_KEY
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s+/g, '');
+  const keyDer    = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', keyDer.buffer,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sigBuf  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(sigInput));
+  const saJwt   = `${sigInput}.${b64url(sigBuf)}`;
+
+  const tokenRes  = await fetch('https://oauth2.googleapis.com/token', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${saJwt}`,
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenRes.ok || !tokenData.access_token) {
+    throw new Error('Could not obtain Firestore service account token.');
+  }
+  const accessToken = tokenData.access_token;
+
+  // Step B: Firestore REST call
+  const project = 'shadow-nexus-wave';
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${path}`;
+
+  if (operation === 'delete') {
+    const delRes = await fetch(baseUrl, {
+      method:  'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!delRes.ok && delRes.status !== 404) {
+      const err = await delRes.json().catch(() => ({}));
+      throw new Error('Firestore delete failed: ' + (err?.error?.message || delRes.status));
+    }
+    return { deleted: true };
+  }
+
+  if (operation === 'set') {
+    // Convert JS object to Firestore REST format
+    function toFirestoreValue(v) {
+      if (v === null || v === undefined) return { nullValue: null };
+      if (typeof v === 'boolean')        return { booleanValue: v };
+      if (typeof v === 'number')         return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+      if (typeof v === 'string')         return { stringValue: v };
+      if (Array.isArray(v))              return { arrayValue: { values: v.map(toFirestoreValue) } };
+      if (typeof v === 'object')         return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, vv]) => [k, toFirestoreValue(vv)])) } };
+      return { stringValue: String(v) };
+    }
+    const fields = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, toFirestoreValue(v)]));
+
+    // Patch (merge) — uses PATCH with updateMask so we never overwrite other fields accidentally
+    const fieldPaths = Object.keys(data).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+    const patchUrl = `${baseUrl}?${fieldPaths}`;
+    const patchRes = await fetch(patchUrl, {
+      method:  'PATCH',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ fields }),
+    });
+    if (!patchRes.ok) {
+      const err = await patchRes.json().catch(() => ({}));
+      throw new Error('Firestore write failed: ' + (err?.error?.message || patchRes.status));
+    }
+    return await patchRes.json();
+  }
+
+  throw new Error('Unknown Firestore operation: ' + operation);
+}
+
+// ── Internal: read a Firestore doc via Wave service account ──────────────────
+async function _firestoreRestGet(path, env) {
+  const now  = Math.floor(Date.now() / 1000);
+  const jwtHeader  = { alg: 'RS256', typ: 'JWT' };
+  const jwtPayload = {
+    iss:   env.WAVE_SA_CLIENT_EMAIL,
+    sub:   env.WAVE_SA_CLIENT_EMAIL,
+    scope: 'https://www.googleapis.com/auth/datastore',
+    aud:   'https://oauth2.googleapis.com/token',
+    iat:   now,
+    exp:   now + 3600,
+  };
+  const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const enc = obj => b64url(new TextEncoder().encode(JSON.stringify(obj)));
+  const sigInput  = `${enc(jwtHeader)}.${enc(jwtPayload)}`;
+  const pemBody   = env.WAVE_SA_PRIVATE_KEY
+    .replace(/-----BEGIN PRIVATE KEY-----/, '').replace(/-----END PRIVATE KEY-----/, '').replace(/\s+/g, '');
+  const keyDer    = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey('pkcs8', keyDer.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuf    = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(sigInput));
+  const saJwt     = `${sigInput}.${b64url(sigBuf)}`;
+  const tokenRes  = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${saJwt}`,
+  });
+  const tokenData = await tokenRes.json();
+  if (!tokenRes.ok || !tokenData.access_token) throw new Error('SA token error');
+  const docRes = await fetch(
+    `https://firestore.googleapis.com/v1/projects/shadow-nexus-wave/databases/(default)/documents/${path}`,
+    { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
+  );
+  if (docRes.status === 404) return null;
+  if (!docRes.ok) throw new Error('Firestore read failed: ' + docRes.status);
+  const doc = await docRes.json();
+  // Convert Firestore fields back to plain JS
+  function fromFirestoreValue(v) {
+    if ('nullValue'    in v) return null;
+    if ('booleanValue' in v) return v.booleanValue;
+    if ('integerValue' in v) return parseInt(v.integerValue, 10);
+    if ('doubleValue'  in v) return v.doubleValue;
+    if ('stringValue'  in v) return v.stringValue;
+    if ('arrayValue'   in v) return (v.arrayValue.values || []).map(fromFirestoreValue);
+    if ('mapValue'     in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, vv]) => [k, fromFirestoreValue(vv)]));
+    return null;
+  }
+  if (!doc.fields) return {};
+  return Object.fromEntries(Object.entries(doc.fields).map(([k, v]) => [k, fromFirestoreValue(v)]));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  POST /auth/social-connect
+//
+//  Connects an authenticated Wave account to a Social account.
+//  Body: { waveIdToken, email, password }
+//
+//  Steps:
+//    1. Verify waveIdToken → get waveUid (proves the caller owns their Wave account)
+//    2. Verify Social email+password → get socialUid (proves ownership of Social account)
+//    3. Check no other Wave account already holds this socialUid
+//    4. Write socialConnections/{waveUid} via SA (server-side only, client cannot forge)
+//    5. Return { connected: true, socialEmail }
+//
+//  Returns: 200 { connected, socialEmail }
+//  Errors:  400 | 401 | 409 | 502 | 503
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleSocialConnect(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.SOCIAL_FIREBASE_WEB_API_KEY || !env.WAVE_SA_CLIENT_EMAIL || !env.WAVE_SA_PRIVATE_KEY || !env.FIREBASE_WEB_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Authentication bridge not configured on server.' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { waveIdToken, email, password } = body || {};
+  if (!waveIdToken || !email || !password) {
+    return new Response(JSON.stringify({ error: 'waveIdToken, email, and password are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 1: Verify Wave ID token — prove caller owns their Wave account ──────
+  let waveUid, waveEmail;
+  try {
+    ({ uid: waveUid, email: waveEmail } = await _verifyWaveIdToken(waveIdToken, env.FIREBASE_WEB_API_KEY));
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 2: Verify Social credentials — prove ownership of Social account ───
+  let socialLocalId, socialEmail;
+  try {
+    const signInRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, password, returnSecureToken: true }),
+      }
+    );
+    const signInData = await signInRes.json();
+    if (!signInRes.ok || !signInData.idToken) {
+      const code = signInData?.error?.message || '';
+      if (code === 'EMAIL_NOT_FOUND' || code === 'INVALID_EMAIL')
+        return new Response(JSON.stringify({ error: 'No Shadow Nexus Social account found for that email.', code: 'NOT_FOUND' }), {
+          status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      if (code === 'INVALID_PASSWORD' || code.startsWith('INVALID_LOGIN_CREDENTIALS'))
+        return new Response(JSON.stringify({ error: 'Incorrect password for your Shadow Nexus Social account.', code: 'WRONG_PASSWORD' }), {
+          status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      if (code === 'USER_DISABLED')
+        return new Response(JSON.stringify({ error: 'That Shadow Nexus Social account has been disabled.', code: 'DISABLED' }), {
+          status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      if (code === 'TOO_MANY_ATTEMPTS_TRY_LATER')
+        return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a moment and try again.', code: 'RATE_LIMITED' }), {
+          status: 429, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+        });
+      return new Response(JSON.stringify({ error: 'Social sign-in failed. Check your credentials.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    socialLocalId = signInData.localId;
+    socialEmail   = signInData.email;
+
+    // Verify the returned token to confirm it was issued by Social project
+    const verifyRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: signInData.idToken }) }
+    );
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || verifyData.users?.[0]?.localId !== socialLocalId) {
+      return new Response(JSON.stringify({ error: 'Social identity verification failed.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    // idToken discarded here — never returned to client
+  } catch (e) {
+    if (e.message && (e.message.includes('verification') || e.message.includes('disabled') || e.message.includes('incorrect') || e.message.includes('attempt'))) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    return new Response(JSON.stringify({ error: 'Could not reach Shadow Nexus Social. Try again shortly.' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 3: Write connection record via service account ──────────────────────
+  // socialConnections/{waveUid} is written server-side only.
+  // The client holds a Wave ID token that was verified above — this is the only
+  // way to establish a connection. A client cannot write this doc directly because
+  // Firestore rules deny client writes to socialConnections (write: if false).
+  try {
+    await _firestoreRestWrite('set', `socialConnections/${waveUid}`, {
+      waveUid,
+      socialUid:     socialLocalId,
+      socialEmail:   socialEmail || email,
+      status:        'connected',
+      connectedAt:   Date.now(),
+      updatedAt:     Date.now(),
+    }, env);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not save connection: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  return new Response(JSON.stringify({
+    connected:   true,
+    socialEmail: socialEmail || email,
+  }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  POST /auth/social-disconnect
+//
+//  Removes the Social connection for the authenticated Wave user.
+//  Body: { waveIdToken }
+//
+//  Steps:
+//    1. Verify waveIdToken → get waveUid
+//    2. Delete socialConnections/{waveUid} via SA
+//    3. Return { disconnected: true }
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleSocialDisconnect(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.WAVE_SA_CLIENT_EMAIL || !env.WAVE_SA_PRIVATE_KEY || !env.FIREBASE_WEB_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Bridge not configured.' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { waveIdToken } = body || {};
+  if (!waveIdToken) {
+    return new Response(JSON.stringify({ error: 'waveIdToken is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let waveUid;
+  try {
+    ({ uid: waveUid } = await _verifyWaveIdToken(waveIdToken, env.FIREBASE_WEB_API_KEY));
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  try {
+    await _firestoreRestWrite('delete', `socialConnections/${waveUid}`, {}, env);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not remove connection: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  return new Response(JSON.stringify({ disconnected: true }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  POST /live/social-bridge
+//
+//  Creates a live-bridge session record for a connected + authorized Wave user.
+//  Body: { waveIdToken, liveSessionId }
+//
+//  Steps:
+//    1. Verify waveIdToken → get waveUid
+//    2. Read socialConnections/{waveUid} via SA — confirm connection exists + status==connected
+//    3. Write liveBridgeSessions/{liveSessionId} via SA
+//    4. Return { bridgeCreated: true, socialUid, socialEmail, sessionId }
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleLiveSocialBridge(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.WAVE_SA_CLIENT_EMAIL || !env.WAVE_SA_PRIVATE_KEY || !env.FIREBASE_WEB_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Bridge not configured.' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { waveIdToken, liveSessionId } = body || {};
+  if (!waveIdToken || !liveSessionId) {
+    return new Response(JSON.stringify({ error: 'waveIdToken and liveSessionId are required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 1: Verify Wave ID token ───────────────────────────────────────────
+  let waveUid;
+  try {
+    ({ uid: waveUid } = await _verifyWaveIdToken(waveIdToken, env.FIREBASE_WEB_API_KEY));
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), {
+      status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 2: Verify Social connection exists (server-side read) ─────────────
+  let conn;
+  try {
+    conn = await _firestoreRestGet(`socialConnections/${waveUid}`, env);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not verify Social connection: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!conn || conn.status !== 'connected' || !conn.socialUid) {
+    return new Response(JSON.stringify({
+      error: 'No active Shadow Nexus Social connection found. Connect your Social account in Settings first.',
+      code:  'NOT_CONNECTED',
+    }), {
+      status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // Confirm the waveUid in the doc matches the token (paranoia check)
+  if (conn.waveUid && conn.waveUid !== waveUid) {
+    return new Response(JSON.stringify({ error: 'Connection record mismatch.' }), {
+      status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Step 3: Write bridge session record ────────────────────────────────────
+  const now = Date.now();
+  // Sanitize liveSessionId — only allow alphanumeric + _ + -
+  const safeSessionId = String(liveSessionId).replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 128);
+  if (!safeSessionId) {
+    return new Response(JSON.stringify({ error: 'Invalid liveSessionId' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  try {
+    await _firestoreRestWrite('set', `liveBridgeSessions/${safeSessionId}`, {
+      waveUid,
+      socialUid:   conn.socialUid,
+      socialEmail: conn.socialEmail || '',
+      sessionId:   safeSessionId,
+      status:      'active',
+      createdAt:   now,
+      startedAt:   now,
+      endedAt:     0,
+    }, env);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not create bridge session: ' + e.message }), {
+      status: 500, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  return new Response(JSON.stringify({
+    bridgeCreated: true,
+    socialUid:     conn.socialUid,
+    socialEmail:   conn.socialEmail || '',
+    sessionId:     safeSessionId,
+  }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
@@ -1447,11 +1933,21 @@ export default {
       });
     }
 
-    // ── Social→Wave authentication bridge ──
+    // ── Social→Wave authentication bridge (login flow) ──
     // POST /auth/social-bridge
     // Verifies a Social account server-side and issues a Wave custom token.
     // Never exposes Social credentials or tokens to the browser.
-    if (url.pathname === '/auth/social-bridge') return handleSocialBridge(request, env, cors, sec);
+    if (url.pathname === '/auth/social-bridge')    return handleSocialBridge(request, env, cors, sec);
+
+    // ── Social account connection (Settings → Connected Accounts) ──
+    // POST /auth/social-connect      — verify Social creds + write connection record
+    // POST /auth/social-disconnect   — verify Wave token  + delete connection record
+    if (url.pathname === '/auth/social-connect')   return handleSocialConnect(request, env, cors, sec);
+    if (url.pathname === '/auth/social-disconnect') return handleSocialDisconnect(request, env, cors, sec);
+
+    // ── Live Social Bridge ──
+    // POST /live/social-bridge — verify connection + create liveBridgeSessions doc
+    if (url.pathname === '/live/social-bridge')    return handleLiveSocialBridge(request, env, cors, sec);
 
     // ── LiveKit endpoints ──
     if (url.pathname === '/livekit-room')  return handleLiveKitRoom(request, env, cors, sec);

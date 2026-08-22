@@ -653,6 +653,12 @@ body.sfl-body {
   animation: sflLivePulse 2.5s infinite;
 }
 .sfl-btn-live:hover { box-shadow: var(--sfl-glow-live); }
+.sfl-btn-danger {
+  background: rgba(211,47,47,0.12);
+  color: #f07070;
+  border: 1px solid rgba(211,47,47,0.35);
+}
+.sfl-btn-danger:hover { background: rgba(211,47,47,0.22); color: #ff9090; }
 .sfl-btn-sm { padding: 6px 13px; font-size: 12px; }
 .sfl-btn-lg { padding: 12px 28px; font-size: 15px; }
 .sfl-btn-icon {
