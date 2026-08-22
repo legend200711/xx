@@ -86,28 +86,6 @@
 .settings-danger .settings-card { border-color: rgba(255,50,50,0.2); }
 .settings-danger .settings-row-label { color: #ff5566; }
 
-/* ── Social connection status badge ── */
-.snx-connected-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 700;
-  color: #4ade80;
-  background: rgba(0,180,80,0.1);
-  border: 1px solid rgba(0,180,80,0.25);
-  border-radius: var(--sfl-r-full);
-  padding: 3px 10px;
-  flex-shrink: 0;
-}
-.snx-not-connected-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 600;
-  color: var(--sfl-text-faint);
-  background: var(--sfl-bg-hover);
-  border: 1px solid var(--sfl-border);
-  border-radius: var(--sfl-r-full);
-  padding: 3px 10px;
-  flex-shrink: 0;
-}
-
 /* ── Image thumbnails in rows ── */
 .settings-avatar-thumb {
   width: 40px; height: 40px; border-radius: 50%;
@@ -535,29 +513,6 @@
         </div>
       </div>
 
-      <!-- CONNECTED ACCOUNTS section -->
-      <div class="settings-section">
-        <div class="settings-section-title">Connected Accounts</div>
-        <div class="settings-card">
-          <div class="settings-row" id="socialConnectRow">
-            <div class="settings-row-info">
-              <div class="settings-row-label">Shadow Nexus Social</div>
-              <div class="settings-row-sub" id="socialConnectSub">Loading connection status…</div>
-            </div>
-            <span id="socialConnectBadge"></span>
-          </div>
-          <div class="settings-row" id="socialConnectActionRow" style="display:none;">
-            <button class="settings-row-link" id="btnConnectSocial">
-              <div class="settings-row-info">
-                <div class="settings-row-label" id="socialConnectActionLabel">Connect Shadow Nexus Social</div>
-                <div class="settings-row-sub" id="socialConnectActionSub">Link your Social account for cross-platform features</div>
-              </div>
-              <span class="settings-chevron" id="socialConnectChevron">›</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- VIDEO section -->
       <div class="settings-section">
         <div class="settings-section-title">Video</div>
@@ -909,94 +864,33 @@
   </div>
 </div>
 
-<!-- Connect Social Account Modal -->
-<div class="acct-overlay" id="socialConnectOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="socialConnectTitle">
-  <div class="acct-modal">
-    <button class="acct-modal-close" id="socialConnectClose" aria-label="Close">✕</button>
-    <div class="acct-modal-title" id="socialConnectTitle">🔗 Connect Shadow Nexus Social</div>
-    <div class="acct-modal-sub" id="socialConnectModalSub">Enter your Shadow Nexus Social email and password to link your accounts. Your credentials are used only to sign in — they are never sent to the Wave server.</div>
-    <div class="acct-field">
-      <label for="socialConnectEmail">Social Email</label>
-      <input type="email" id="socialConnectEmail" placeholder="your@social-email.com" autocomplete="email">
-    </div>
-    <div class="acct-field" id="socialConnectPasswordField">
-      <label for="socialConnectPassword">Social Password</label>
-      <input type="password" id="socialConnectPassword" placeholder="Social account password" autocomplete="current-password">
-    </div>
-    <div class="acct-msg" id="socialConnectMsg"></div>
-    <div class="acct-actions">
-      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="socialConnectCancelBtn">Cancel</button>
-      <button class="sfl-btn sfl-btn-primary sfl-btn-sm" id="socialConnectSaveBtn">Link Account</button>
-    </div>
-  </div>
-</div>
-
-<!-- Disconnect Social Account Modal -->
-<div class="acct-overlay" id="socialDisconnectOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="socialDisconnectTitle">
-  <div class="acct-modal">
-    <button class="acct-modal-close" id="socialDisconnectClose" aria-label="Close">✕</button>
-    <div class="acct-modal-title" id="socialDisconnectTitle">🔓 Disconnect Shadow Nexus Social</div>
-    <div class="acct-modal-sub" id="socialDisconnectModalSub">Disconnecting will remove the link between your Social and Wave accounts. Your Social account and all your Wave data will remain untouched.</div>
-    <div class="acct-field" id="socialConnectedInfoField">
-      <label>Connected Social Account</label>
-      <div style="padding:8px 0; font-size:13px; color:var(--sfl-text-muted);" id="socialConnectedEmail">—</div>
-    </div>
-    <div class="acct-msg" id="socialDisconnectMsg"></div>
-    <div class="acct-actions">
-      <button class="sfl-btn sfl-btn-ghost sfl-btn-sm" id="socialDisconnectCancelBtn">Cancel</button>
-      <button class="sfl-btn sfl-btn-danger sfl-btn-sm" id="socialDisconnectConfirmBtn">Disconnect</button>
-    </div>
-  </div>
-</div>
-
 <!-- ════════════════════════════════════════
      JAVASCRIPT
      ════════════════════════════════════════ -->
 <script type="module">
-import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged, signOut,
   EmailAuthProvider, reauthenticateWithCredential,
-  updatePassword, verifyBeforeUpdateEmail,
-  signInWithEmailAndPassword
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+  updatePassword, verifyBeforeUpdateEmail
+} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, updateDoc, setDoc }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 const FIREBASE_CONFIG = {
-  apiKey:           'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:       'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:      'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:        'shadow-nexus-wave',
-  storageBucket:    'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId:'68850298302',
-  appId:            '1:68850298302:web:603bbb8539079903cb1def'
+  apiKey:           'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:       'horr-a08f4.firebaseapp.com',
+  databaseURL:      'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:        'horr-a08f4',
+  storageBucket:    'horr-a08f4.firebasestorage.app',
+  messagingSenderId:'933810617818',
+  appId:            '1:933810617818:web:efb24f123337dd987c14e3'
 };
 const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// ── Shadow Nexus Social Firebase app (separate project — horr-a08f4) ─────────
-// Used ONLY to authenticate the Social account client-side so that the
-// plaintext password never leaves the browser. The Social auth credential is
-// converted to a Social ID token here, and only the token is sent to the
-// Wave backend for server-side verification.
-// This app is initialised with a named instance so it never collides with the
-// Wave app above.
-const SOCIAL_FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:        'horr-a08f4.firebaseapp.com',
-  projectId:         'horr-a08f4',
-  storageBucket:     'horr-a08f4.firebasestorage.app',
-  messagingSenderId: '933810617818',
-  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
-};
-const _SNX_SOCIAL_APP_NAME = 'snx-social-bridge';
-const socialApp  = getApps().find(a => a.name === _SNX_SOCIAL_APP_NAME)
-  ?? initializeApp(SOCIAL_FIREBASE_CONFIG, _SNX_SOCIAL_APP_NAME);
-const socialAuth = getAuth(socialApp);
-
-/* ── Cloudflare R2 Worker — Shadow Nexus Wave worker (NOT the Social worker yellow-term-11e6) ── */
-const R2_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+/* ── Cloudflare R2 Worker — all media storage lives here ── */
+const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
 
 const $  = id => document.getElementById(id);
 const toast = (msg, dur = 3000) => {
@@ -1090,8 +984,6 @@ onAuthStateChanged(auth, async user => {
       $('btnPushNotifs').textContent = '✓ Enabled';
       $('btnPushNotifs').disabled = true;
     }
-    // Signal that user is ready so Connected Accounts section can load
-    document.dispatchEvent(new CustomEvent('_waveUserReady', { detail: { uid: user.uid } }));
   } catch(e) { console.error('loadUser:', e); }
 });
 
@@ -1848,220 +1740,15 @@ $('coverSaveBtn').addEventListener('click', async () => {
   }
 });
 
-/* ════════════════════════════════════════
-   Connected Accounts — Social ↔ Wave Bridge
-   ════════════════════════════════════════ */
-const WAVE_WORKER = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
-
-// State
-let _socialConnection = null; // null = loading, false = not connected, object = connected
-
-/** Load connection status from Firestore socialConnections/{uid} */
-async function _loadSocialConnection(uid) {
-  try {
-    const snap = await getDoc(doc(db, 'socialConnections', uid));
-    _socialConnection = snap.exists() ? snap.data() : false;
-  } catch (_e) {
-    _socialConnection = false;
-  }
-  _renderSocialConnectionUI();
-}
-
-/** Update the Connected Accounts section UI */
-function _renderSocialConnectionUI() {
-  const badge  = $('socialConnectBadge');
-  const sub    = $('socialConnectSub');
-  const row    = $('socialConnectActionRow');
-  const label  = $('socialConnectActionLabel');
-  const subTxt = $('socialConnectActionSub');
-  const chevron= $('socialConnectChevron');
-
-  if (_socialConnection && _socialConnection.status === 'connected') {
-    badge.className   = 'snx-connected-badge';
-    badge.textContent = '✓ Connected';
-    sub.textContent   = `Linked to ${_socialConnection.socialEmail || 'Social account'}`;
-    label.textContent = 'Disconnect Shadow Nexus Social';
-    subTxt.textContent= 'Remove the link between your Social and Wave accounts';
-    chevron.style.display = 'none';
-    row.style.display = '';
-  } else if (_socialConnection === false) {
-    badge.className   = 'snx-not-connected-badge';
-    badge.textContent = 'Not Connected';
-    sub.textContent   = 'Link your Shadow Nexus Social account';
-    label.textContent = 'Connect Shadow Nexus Social';
-    subTxt.textContent= 'Link your Social account for cross-platform features';
-    chevron.style.display = '';
-    row.style.display = '';
-  } else {
-    // still loading
-    badge.textContent = '';
-    sub.textContent   = 'Loading…';
-    row.style.display = 'none';
-  }
-}
-
-// Hook into auth state — load after user is known
-const _origOnAuth = onAuthStateChanged;
-// We piggyback on the existing onAuthStateChanged — just load after _currentUser is set
-// Use a MutationObserver-free approach: check after accountInfoRow is populated
-document.addEventListener('_waveUserReady', e => {
-  if (e.detail?.uid) _loadSocialConnection(e.detail.uid);
-});
-
-/* ── Connect modal ── */
-function _openConnectModal() {
-  $('socialConnectEmail').value    = '';
-  $('socialConnectPassword').value = '';
-  setMsg('socialConnectMsg', '');
-  $('socialConnectTitle').textContent    = '🔗 Connect Shadow Nexus Social';
-  $('socialConnectModalSub').textContent = 'Enter your Shadow Nexus Social email and password to link your accounts. Your credentials are used only to sign in — they are never sent to the Wave server.';
-  $('socialConnectPasswordField').style.display = '';
-  $('socialConnectSaveBtn').disabled    = false;
-  $('socialConnectSaveBtn').textContent = 'Link Account';
-  openOverlay('socialConnectOverlay');
-  setTimeout(() => $('socialConnectEmail').focus(), 80);
-}
-function _closeConnectModal() {
-  closeOverlay('socialConnectOverlay');
-  // Always clear credentials from the DOM on close.
-  $('socialConnectEmail').value    = '';
-  $('socialConnectPassword').value = '';
-}
-
-$('socialConnectClose').addEventListener('click',     _closeConnectModal);
-$('socialConnectCancelBtn').addEventListener('click', _closeConnectModal);
-$('socialConnectOverlay').addEventListener('click', e => { if (e.target === $('socialConnectOverlay')) _closeConnectModal(); });
-
-$('socialConnectSaveBtn').addEventListener('click', async () => {
-  const user = auth.currentUser;
-  if (!user) return;
-  const email = $('socialConnectEmail').value.trim().toLowerCase();
-  const pw    = $('socialConnectPassword').value;
-  if (!email) { setMsg('socialConnectMsg', 'error', 'Please enter your Social email address.'); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg('socialConnectMsg', 'error', 'Please enter a valid email address.'); return; }
-  if (!pw)    { setMsg('socialConnectMsg', 'error', 'Please enter your Social password.'); return; }
-
-  $('socialConnectSaveBtn').disabled    = true;
-  $('socialConnectSaveBtn').textContent = 'Linking…';
-  setMsg('socialConnectMsg', '');
-
-  let socialUserCredential = null;
-  try {
-    // ── Step 1: Authenticate with Shadow Nexus Social directly ──────────────
-    // The password is used ONLY here, by the Firebase SDK, to sign in.
-    // It is handled internally by Firebase Auth (HTTPS to Google's servers).
-    // The plaintext password is never passed to the Wave worker.
-    socialUserCredential = await signInWithEmailAndPassword(socialAuth, email, pw);
-
-    // ── Step 2: Get Social ID token ──────────────────────────────────────────
-    // This is a signed JWT issued by the Social Firebase project.
-    // It proves ownership of the Social account without revealing the password.
-    const socialIdToken = await socialUserCredential.user.getIdToken();
-
-    // ── Step 3: Get Wave ID token ────────────────────────────────────────────
-    // Proves ownership of the Wave account to the Wave worker.
-    const waveIdToken = await user.getIdToken();
-
-    // ── Step 4: Send both tokens to the Wave worker ──────────────────────────
-    // The worker verifies both tokens server-side and writes the connection.
-    // No password is included in this request.
-    const res = await fetch(`${WAVE_WORKER}/auth/social-connect`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ waveIdToken, socialIdToken })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || `Server error (${res.status})`);
-
-    // Reload connection state from Firestore
-    await _loadSocialConnection(user.uid);
-    _closeConnectModal();
-    toast('🔗 Shadow Nexus Social linked!', 4000);
-  } catch (e) {
-    let msg = e.message || 'Could not link account. Please try again.';
-    // Firebase Auth error codes from the client-side Social sign-in
-    if (msg.includes('auth/invalid-credential') || msg.includes('auth/wrong-password') || msg.includes('INVALID_LOGIN_CREDENTIALS'))
-      msg = 'Incorrect Social email or password.';
-    else if (msg.includes('auth/user-not-found') || msg.includes('USER_NOT_FOUND'))
-      msg = 'No Shadow Nexus Social account found with that email.';
-    else if (msg.includes('auth/too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS'))
-      msg = 'Too many attempts. Please wait and try again.';
-    else if (msg.includes('auth/user-disabled') || msg.includes('DISABLED'))
-      msg = 'That Shadow Nexus Social account has been disabled.';
-    else if (msg.includes('TOKEN_EXPIRED') || msg.includes('Social session expired'))
-      msg = 'Social session expired. Please try again.';
-    setMsg('socialConnectMsg', 'error', msg);
-    $('socialConnectSaveBtn').disabled    = false;
-    $('socialConnectSaveBtn').textContent = 'Link Account';
-  } finally {
-    // Sign out of the temporary Social auth session — Wave does not maintain
-    // a persistent Social session. The connection is recorded server-side.
-    if (socialUserCredential) {
-      socialAuth.signOut().catch(() => {});
-    }
-  }
-});
-$('socialConnectPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('socialConnectSaveBtn').click(); });
-
-/* ── Disconnect modal ── */
-function _openDisconnectModal() {
-  setMsg('socialDisconnectMsg', '');
-  $('socialConnectedEmail').textContent = _socialConnection?.socialEmail || '—';
-  $('socialDisconnectConfirmBtn').disabled    = false;
-  $('socialDisconnectConfirmBtn').textContent = 'Disconnect';
-  openOverlay('socialDisconnectOverlay');
-}
-function _closeDisconnectModal() { closeOverlay('socialDisconnectOverlay'); }
-
-$('socialDisconnectClose').addEventListener('click',      _closeDisconnectModal);
-$('socialDisconnectCancelBtn').addEventListener('click',  _closeDisconnectModal);
-$('socialDisconnectOverlay').addEventListener('click', e => { if (e.target === $('socialDisconnectOverlay')) _closeDisconnectModal(); });
-
-$('socialDisconnectConfirmBtn').addEventListener('click', async () => {
-  const user = auth.currentUser;
-  if (!user) return;
-  $('socialDisconnectConfirmBtn').disabled    = true;
-  $('socialDisconnectConfirmBtn').textContent = 'Disconnecting…';
-  setMsg('socialDisconnectMsg', '');
-  try {
-    const idToken = await user.getIdToken();
-    const res = await fetch(`${WAVE_WORKER}/auth/social-disconnect`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ waveIdToken: idToken })
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || `Server error (${res.status})`);
-    await _loadSocialConnection(user.uid);
-    _closeDisconnectModal();
-    toast('🔓 Social account disconnected.', 3500);
-  } catch (e) {
-    setMsg('socialDisconnectMsg', 'error', e.message || 'Could not disconnect. Please try again.');
-    $('socialDisconnectConfirmBtn').disabled    = false;
-    $('socialDisconnectConfirmBtn').textContent = 'Disconnect';
-  }
-});
-
-/** Unified button handler: connect or disconnect depending on current state */
-$('btnConnectSocial').addEventListener('click', () => {
-  if (_socialConnection && _socialConnection.status === 'connected') {
-    _openDisconnectModal();
-  } else {
-    _openConnectModal();
-  }
-});
-
 /* ── Escape key ── */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if ($('reAuthOverlay').style.display          !== 'none') closeReAuth();
-  if ($('emailOverlay').style.display           !== 'none') closeOverlay('emailOverlay');
-  if ($('pwOverlay').style.display              !== 'none') closeOverlay('pwOverlay');
-  if ($('profileInfoOverlay').style.display     !== 'none') closeOverlay('profileInfoOverlay');
-  if ($('avatarOverlay').style.display          !== 'none') closeAvatarModal();
-  if ($('coverOverlay').style.display           !== 'none') closeCoverModal();
-  if ($('socialConnectOverlay').style.display   !== 'none') _closeConnectModal();
-  if ($('socialDisconnectOverlay').style.display!== 'none') _closeDisconnectModal();
+  if ($('reAuthOverlay').style.display      !== 'none') closeReAuth();
+  if ($('emailOverlay').style.display       !== 'none') closeOverlay('emailOverlay');
+  if ($('pwOverlay').style.display          !== 'none') closeOverlay('pwOverlay');
+  if ($('profileInfoOverlay').style.display !== 'none') closeOverlay('profileInfoOverlay');
+  if ($('avatarOverlay').style.display      !== 'none') closeAvatarModal();
+  if ($('coverOverlay').style.display       !== 'none') closeCoverModal();
 });
 </script>
 
