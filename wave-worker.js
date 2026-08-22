@@ -1622,12 +1622,16 @@ async function handleSocialConnect(request, env, cors, sec) {
     });
   }
 
-  const { waveIdToken, email, password } = body || {};
-  if (!waveIdToken || !email || !password) {
-    return new Response(JSON.stringify({ error: 'waveIdToken, email, and password are required' }), {
+  const { waveIdToken, socialEmail: socialEmailInput, socialPassword: socialPasswordInput } = body || {};
+  if (!waveIdToken || !socialEmailInput || !socialPasswordInput) {
+    return new Response(JSON.stringify({ error: 'waveIdToken, socialEmail, and socialPassword are required' }), {
       status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
   }
+  // Bind to local vars used by the Social sign-in block below.
+  // socialPasswordInput is consumed once for server-side Firebase auth and never persisted.
+  const email    = socialEmailInput;
+  const password = socialPasswordInput;
 
   // ── Step 1: Verify Wave ID token — prove caller owns their Wave account ──────
   let waveUid, waveEmail;
