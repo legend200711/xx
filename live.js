@@ -383,11 +383,18 @@ async function _loadUserData() {
 
 /* ── Decide mode from URL hash ── */
 async function _resolveMode() {
-  const hash = location.hash;
+  const hash   = location.hash;
+  const params = new URLSearchParams(location.search);
   localStorage.removeItem('snx_live_intent');
 
-  if (hash.startsWith('#watch=')) {
-    _roomId = hash.slice(7);   // roomId is plain [a-zA-Z0-9_] — no decoding needed
+  // Viewer entry via hash:  live.html#watch=<roomId>  (Share/Join links)
+  // Viewer entry via query: live.html?room=<roomId>   (home/search/notifications/profile cards)
+  const watchRoomId = hash.startsWith('#watch=')
+    ? hash.slice(7)
+    : (params.get('room') || null);
+
+  if (watchRoomId) {
+    _roomId = watchRoomId;
     _mode   = 'viewer';
     document.body.classList.add('is-viewer');
     await _startViewer();
