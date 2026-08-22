@@ -79,6 +79,19 @@
   content: ''; flex: 1; height: 1px; background: var(--sfl-border);
 }
 
+/* Social bridge notice box */
+.social-bridge-notice {
+  background: rgba(0,174,239,0.07);
+  border: 1px solid rgba(0,174,239,0.22);
+  border-radius: var(--sfl-r-sm);
+  padding: 11px 14px;
+  font-size: 12px;
+  color: var(--sfl-text-muted);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.social-bridge-notice strong { color: var(--sfl-blue); }
+
 /* Avatar picker */
 .avatar-pick-row {
   display: flex; align-items: center; gap: 14px; margin-bottom: 16px;
@@ -123,6 +136,7 @@
     <div class="login-tabs">
       <div class="login-tab active" id="tabSignIn">Sign In</div>
       <div class="login-tab" id="tabRegister">Create Account</div>
+      <div class="login-tab" id="tabSocial">Social Account</div>
     </div>
 
     <!-- Error / Success messages -->
@@ -197,6 +211,33 @@
       </button>
     </form>
 
+    <!-- Social→Wave bridge form (hidden by default) -->
+    <form id="formSocial" autocomplete="on" novalidate class="sfl-hidden">
+      <div class="social-bridge-notice">
+        Already have a <strong>Shadow Nexus Social</strong> account? Sign in below
+        using your Social email and password. Your identity is verified
+        server-side — your password is never stored or shared with Wave.
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="snxEmail">Shadow Nexus Social Email</label>
+        <input class="sfl-input" id="snxEmail" type="email" placeholder="your@social-email.com"
+          autocomplete="email" required>
+      </div>
+      <div class="sfl-form-group">
+        <label class="sfl-label" for="snxPassword">Shadow Nexus Social Password</label>
+        <input class="sfl-input" id="snxPassword" type="password" placeholder="Your Social password"
+          autocomplete="current-password" required>
+      </div>
+      <button class="sfl-btn sfl-btn-primary sfl-btn-lg" id="btnSocialBridge"
+        type="submit" style="width:100%;margin-top:4px;">
+        Sign In with Social Account
+      </button>
+      <div style="text-align:center;margin-top:10px;font-size:11px;color:var(--sfl-text-faint);">
+        A separate Wave account will be created (or retrieved) automatically.
+        Your Social account is not modified.
+      </div>
+    </form>
+
     <!-- Google sign-in -->
     <div class="login-divider">or</div>
     <button class="sfl-btn sfl-btn-ghost" id="btnGoogle" type="button"
@@ -222,7 +263,8 @@ import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18
 import {
   getAuth, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, updateProfile,
+  signInWithCustomToken
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
@@ -240,8 +282,12 @@ const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// R2 Worker endpoint — same as used by sfl-settings.html
-const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+// Wave Cloudflare Worker — all Wave server-side operations go here
+const WAVE_WORKER_URL  = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+// Social→Wave bridge endpoint (POST /auth/social-bridge on the Wave Worker)
+const SOCIAL_BRIDGE_URL = `${WAVE_WORKER_URL}/auth/social-bridge`;
+// R2 file upload uses the same Wave Worker (kept as alias for clarity)
+const R2_WORKER_URL    = WAVE_WORKER_URL;
 
 const $ = id => document.getElementById(id);
 const params   = new URLSearchParams(location.search);
@@ -259,15 +305,19 @@ onAuthStateChanged(auth, user => {
 /* ── Tab switching ── */
 $('tabSignIn').addEventListener('click', () => showTab('signin'));
 $('tabRegister').addEventListener('click', () => showTab('register'));
+$('tabSocial').addEventListener('click', () => showTab('social'));
 
-// Pre-select register tab if ?mode=register
+// Pre-select register tab if ?mode=register, social tab if ?mode=social
 if(params.get('mode') === 'register') showTab('register');
+else if(params.get('mode') === 'social') showTab('social');
 
 function showTab(tab) {
   $('tabSignIn').classList.toggle('active', tab === 'signin');
   $('tabRegister').classList.toggle('active', tab === 'register');
+  $('tabSocial').classList.toggle('active', tab === 'social');
   $('formSignIn').classList.toggle('sfl-hidden', tab !== 'signin');
   $('formRegister').classList.toggle('sfl-hidden', tab !== 'register');
+  $('formSocial').classList.toggle('sfl-hidden', tab !== 'social');
   clearMessages();
 }
 
@@ -439,29 +489,7 @@ $('btnGoogle').addEventListener('click', async () => {
   try {
     const provider = new GoogleAuthProvider();
     const cred = await signInWithPopup(auth, provider);
-    // Ensure user doc exists
-    const uid = cred.user.uid;
-    const userRef = doc(db, 'users', uid);
-    const existing = await getDoc(userRef);
-    if(!existing.exists()) {
-      await setDoc(userRef, {
-        uid,
-        displayName:    cred.user.displayName || '',
-        username:       '',
-        email:          cred.user.email || '',
-        avatar:         cred.user.photoURL || '',
-        bio:            '',
-        role:           'member',
-        followers:      [],
-        following:      [],
-        followerCount:  0,
-        followingCount: 0,
-        isLive:         false,
-        liveRoomId:     null,
-        createdAt:      serverTimestamp(),
-        updatedAt:      serverTimestamp(),
-      });
-    }
+    await ensureWaveProfile(cred.user);
     // onAuthStateChanged will redirect
   } catch(e) {
     showError(friendlyError(e));
@@ -478,6 +506,155 @@ $('forgotLink').addEventListener('click', async () => {
     showSuccess('Password reset email sent. Check your inbox.');
   } catch(e) {
     showError(friendlyError(e));
+  }
+});
+
+// ── ensureWaveProfile ─────────────────────────────────────────────────────────
+// Called after ANY sign-in (email, Google, or Social bridge) to guarantee
+// the Wave Firestore user document exists.
+//
+// For bridge accounts the document is stamped with:
+//   socialOrigin: true     — marks this as a Social-bridged account
+//   socialEmail            — the verified email from Social (same as Wave email)
+//   provider: 'snx_social' — audit trail
+//
+// The function is idempotent: if the doc already exists it only back-fills blank
+// avatar / displayName from Firebase Auth claims. It never overwrites existing data.
+//
+async function ensureWaveProfile(user, { socialEmail = null, isBridged = false } = {}) {
+  const userRef  = doc(db, 'users', user.uid);
+  const snapshot = await getDoc(userRef);
+
+  if (!snapshot.exists()) {
+    // Brand-new Wave account — create full profile document
+    const baseDoc = {
+      uid:            user.uid,
+      displayName:    user.displayName || (socialEmail ? socialEmail.split('@')[0] : 'Wave User'),
+      username:       '',
+      email:          user.email || socialEmail || '',
+      avatar:         user.photoURL  || '',
+      bio:            '',
+      role:           'member',
+      followers:      [],
+      following:      [],
+      followerCount:  0,
+      followingCount: 0,
+      isLive:         false,
+      liveRoomId:     null,
+      createdAt:      serverTimestamp(),
+      updatedAt:      serverTimestamp(),
+    };
+    // Stamp bridge-origin accounts so they are auditable in the Founder Panel
+    if (isBridged) {
+      baseDoc.socialOrigin = true;
+      baseDoc.socialEmail  = socialEmail || user.email || '';
+      baseDoc.provider     = 'snx_social';
+    }
+    await setDoc(userRef, baseDoc);
+  } else {
+    // Existing account — only back-fill blank fields (never overwrite real data)
+    const existing = snapshot.data();
+    const updates  = {};
+    if (!existing.avatar      && user.photoURL)    updates.avatar      = user.photoURL;
+    if (!existing.displayName && user.displayName) updates.displayName = user.displayName;
+    if (Object.keys(updates).length) {
+      updates.updatedAt = serverTimestamp();
+      await setDoc(userRef, updates, { merge: true });
+    }
+  }
+}
+
+// ── Social→Wave Authentication Bridge ────────────────────────────────────────
+//
+// Flow:
+//   1. POST /auth/social-bridge  (Wave Worker)
+//      Worker verifies Social Firebase credentials server-side via Identity Toolkit REST.
+//      Password is consumed and discarded inside the Worker — never returned to browser.
+//      Worker mints a Wave Firebase custom token for UID "snx_social_{socialUID}".
+//   2. signInWithCustomToken(waveAuth, customToken)
+//      Firebase issues a normal Wave session. The Social password is gone.
+//   3. ensureWaveProfile() creates/retrieves the Wave Firestore document.
+//
+// Rate limit: browser-side debounce prevents hammering the Worker endpoint.
+//
+let _bridgeInFlight = false;
+
+$('formSocial').addEventListener('submit', async e => {
+  e.preventDefault();
+  clearMessages();
+
+  const email = $('snxEmail').value.trim();
+  const pass  = $('snxPassword').value;
+  if (!email || !pass) { showError('Please enter your Shadow Nexus Social email and password.'); return; }
+
+  // Prevent double-submit / rapid retries
+  if (_bridgeInFlight) return;
+  _bridgeInFlight = true;
+
+  const btn = $('btnSocialBridge');
+  btn.disabled    = true;
+  btn.textContent = 'Verifying Social account…';
+
+  try {
+    // ── Step 1: Call the bridge endpoint on the Wave Worker ──
+    // The Worker verifies the Social credentials and returns a Wave custom token.
+    // The Social password is never echoed back in the response.
+    let bridgeRes;
+    try {
+      bridgeRes = await fetch(SOCIAL_BRIDGE_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, password: pass }),
+      });
+    } catch (networkErr) {
+      showError('Network error — could not reach the authentication server. Check your connection.');
+      return;
+    }
+
+    const bridgeData = await bridgeRes.json().catch(() => ({}));
+
+    if (!bridgeRes.ok || !bridgeData.customToken) {
+      // Surface the translated error from the Worker (rate limit, wrong password, etc.)
+      const msg = bridgeData?.error || 'Social account verification failed. Check your credentials.';
+      if (bridgeRes.status === 429) {
+        showError('Too many sign-in attempts. Please wait a moment and try again.');
+      } else if (bridgeRes.status === 503) {
+        showError('The authentication bridge is not yet configured on the server. Contact the administrator.');
+      } else {
+        showError(msg);
+      }
+      return;
+    }
+
+    // ── Step 2: Sign into Wave Firebase using the custom token ──
+    // At this point the Social password has been discarded — only the Wave custom
+    // token remains. signInWithCustomToken gives us a normal Wave Firebase session.
+    btn.textContent = 'Creating Wave session…';
+    let waveCred;
+    try {
+      waveCred = await signInWithCustomToken(auth, bridgeData.customToken);
+    } catch (tokenErr) {
+      showError('Failed to establish Wave session: ' + friendlyError(tokenErr));
+      return;
+    }
+
+    // ── Step 3: Create or retrieve the Wave Firestore profile ──
+    btn.textContent = 'Setting up your Wave profile…';
+    await ensureWaveProfile(waveCred.user, {
+      socialEmail: bridgeData.email || email,
+      isBridged:   true,
+    });
+
+    // onAuthStateChanged will redirect to sfl-home.html (or ?next= param)
+    // If it fires before this line we're already gone; if not, force it.
+    window.location.href = redirect;
+
+  } catch (err) {
+    showError(friendlyError(err) || 'Sign-in failed. Please try again.');
+  } finally {
+    _bridgeInFlight = false;
+    btn.disabled    = false;
+    btn.textContent = 'Sign In with Social Account';
   }
 });
 </script>

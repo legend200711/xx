@@ -1634,10 +1634,13 @@ export default {
     // is not multipart/form-data or application/x-www-form-urlencoded.
     // Check the Content-Type upfront and return a clear error rather than letting
     // the runtime throw a confusing exception.
+    // NOTE: empty Content-Type is also rejected — the browser must set it automatically
+    // (i.e. never set Content-Type manually when sending FormData; let the browser
+    // generate the multipart/form-data boundary).
     const ct = (request.headers.get('Content-Type') || '').toLowerCase();
-    if (ct && !ct.startsWith('multipart/form-data') && !ct.startsWith('application/x-www-form-urlencoded')) {
+    if (!ct.startsWith('multipart/form-data') && !ct.startsWith('application/x-www-form-urlencoded')) {
       return new Response(JSON.stringify({
-        error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${ct}`
+        error: `This endpoint expects a multipart/form-data file upload. Received Content-Type: ${ct || '(none)'}`
       }), {
         status: 400,
         headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })

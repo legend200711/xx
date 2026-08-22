@@ -901,7 +901,7 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
     const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
     if (streamId) {
       try {
-        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
+        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/stream/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
@@ -917,7 +917,7 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
     const r2Key = vidData.r2Key || vidData.storageKey || null;
     if (r2Key && !streamId) {
       try {
-        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
+        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/r2/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),

@@ -889,8 +889,8 @@ const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-/* ── Cloudflare R2 Worker — all media storage lives here ── */
-const R2_WORKER_URL = 'https://yellow-term-11e6.nthntjrn.workers.dev';
+/* ── Cloudflare R2 Worker — Shadow Nexus Wave worker (NOT the Social worker yellow-term-11e6) ── */
+const R2_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
 
 const $  = id => document.getElementById(id);
 const toast = (msg, dur = 3000) => {
