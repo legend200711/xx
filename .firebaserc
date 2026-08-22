@@ -1,9 +1,5 @@
 {
   "projects": {
-    "default": "horr-a08f4",
-    "social": "horr-a08f4",
-    "wave": "shadow-nexus-wave"
-  },
-  "targets": {},
-  "etags": {}
+    "default": "shadow-nexus-wave"
+  }
 }

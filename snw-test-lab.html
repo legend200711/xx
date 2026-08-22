@@ -445,17 +445,16 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp, getApps }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import { getAuth, onAuthStateChanged }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore,
   collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
   query, orderBy, limit, serverTimestamp, arrayUnion, arrayRemove, writeBatch,
   where
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
-/* ── Shadow Nexus Wave Firebase config ── */
 const FIREBASE_CONFIG = {
   apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
   authDomain:        'shadow-nexus-wave.firebaseapp.com',
@@ -465,8 +464,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: '68850298302',
   appId:             '1:68850298302:web:603bbb8539079903cb1def'
 };
-const _SNW_APP_NAME = 'shadow-nexus-wave';
-const app  = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(FIREBASE_CONFIG, _SNW_APP_NAME);
+const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 

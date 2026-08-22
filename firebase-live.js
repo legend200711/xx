@@ -19,24 +19,24 @@
  */
 
 import { initializeApp, getApps } from
-  'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+  'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged,
   browserLocalPersistence,
   setPersistence
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore,
   doc, setDoc, getDoc, updateDoc, deleteDoc,
   collection, addDoc, query, orderBy, limit,
   onSnapshot, serverTimestamp, increment, where, getDocs
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 import {
   getDatabase,
   ref, set, push, onValue, onChildAdded, remove, off
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
 
 /* ─── Shadow Nexus Wave Firebase config ──────────────────────────────── */
 const FIREBASE_CONFIG = {

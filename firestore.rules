@@ -50,7 +50,6 @@ service cloud.firestore {
     }
 
     // Fields a signed-in user is allowed to deliver into ANOTHER user's document.
-    // Includes follow-relationship fields so any authenticated user can follow/unfollow.
     function isDeliveryUpdate() {
       let allowed = [
         'notifications',
@@ -60,11 +59,7 @@ service cloud.firestore {
         'familyInvitesReceived',
         'familyInvitesSent',
         'family',
-        'friends',
-        'followers',
-        'followerCount',
-        'following',
-        'followingCount'
+        'friends'
       ];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
@@ -82,12 +77,6 @@ service cloud.firestore {
                .hasAny(themeFields);
     }
 
-    // Returns true if the update attempts to change the 'role' field.
-    // Only a Founder may elevate or change any user's role — never via self-service.
-    function touchesRoleField() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
-    }
-
     // ── Users ─────────────────────────────────────────────────────────────────
 
     match /users/{uid} {
@@ -100,7 +89,7 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
 
       allow update: if
-        (isOwner(uid) && !touchesRoleField())
+        isOwner(uid)
         || (isSignedIn() && isDeliveryUpdate() && !touchesThemeFields())
         || isModerator();
 
@@ -813,107 +802,6 @@ service cloud.firestore {
         && (resource.data.authorId != null || isFounder());
       // No updates allowed on test posts
       allow update: if false;
-    }
-
-    // ── Founder Panel — platform stats cache ──────────────────────────────────
-    //
-    //   /founderStats/{docId}
-    //     Platform-wide aggregate stats written and read by the Founder only.
-    //     Prevents platform data from leaking to regular users.
-
-    match /founderStats/{docId} {
-      allow read, write: if isFounder();
-    }
-
-    // ── Founder Panel — feature flags ─────────────────────────────────────────
-    //
-    //   /featureFlags/{docId}
-    //     Platform feature toggles written by Founder; readable by any signed-in
-    //     user so features can be gated on the client.
-
-    match /featureFlags/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isFounder();
-    }
-
-    // ══════════════════════════════════════════════════════════
-    //  Shadow Nexus Wave — User-created relationship collections
-    //  ISOLATED from Shadow Nexus Social chats/messages/blocks
-    // ══════════════════════════════════════════════════════════
-
-    // ── Wave Blocks ──────────────────────────────────────────────────────────────
-    //
-    //   /waveBlocks/{docId}
-    //     docId = "{blockerId}_{blockedId}"
-    //     blockerId, blockedId, createdAt
-    //
-    //   Only the blocker can create/delete their own block record.
-    //   Only the blocker can read their own block records (for UI state check).
-    //   Backend enforces ownership: blockerId must match auth.uid.
-    //
-    //   NOTE: resource == null is explicitly allowed on reads so that checking
-    //   whether a block document exists (i.e. is the user blocked?) does not
-    //   produce a permission-denied error when no block record exists yet.
-    //   Without this, resource.data is null for absent docs and the rule throws.
-
-    match /waveBlocks/{blockId} {
-      // Blocker can read their own block doc.
-      // resource == null covers the case where the doc does not yet exist —
-      // the client receives snap.exists()=false rather than permission-denied.
-      allow read: if isSignedIn()
-        && (resource == null
-            || request.auth.uid == resource.data.blockerId
-            || isFounder());
-      // Only the blocker can create a block — and the blockerId must equal their uid
-      allow create: if isSignedIn()
-        && request.resource.data.blockerId == request.auth.uid
-        && request.resource.data.blockedId != request.auth.uid;
-      // Updates not allowed — block is either present or deleted
-      allow update: if false;
-      // Only the blocker (or Founder) can delete
-      allow delete: if isSignedIn()
-        && (resource.data.blockerId == request.auth.uid || isFounder());
-    }
-
-    // ── Wave Direct Messages ─────────────────────────────────────────────────────
-    //
-    //   /waveDMs/{convId}
-    //     convId = sorted([uid1, uid2]).join('_')
-    //     participants: [uid1, uid2], lastMsgTs, updatedAt
-    //
-    //   /waveDMs/{convId}/msgs/{msgId}
-    //     senderUid, receiverUid, text, createdAt, read, deleted
-    //
-    //   Only participants (or Founder) may access conversation and messages.
-    //   Any signed-in user may create a conversation document (setDoc+merge).
-    //   Only participants may update conversation metadata.
-
-    match /waveDMs/{convId} {
-      allow read: if isSignedIn()
-        && (request.auth.uid in resource.data.participants || isFounder());
-      allow create: if isSignedIn();
-      allow update: if isSignedIn()
-        && (request.auth.uid in resource.data.participants || isModerator());
-      allow delete: if isSignedIn()
-        && (request.auth.uid in resource.data.participants || isFounder());
-
-      match /msgs/{msgId} {
-        // Only participants may read messages
-        allow read: if isSignedIn()
-          && (request.auth.uid in get(/databases/$(database)/documents/waveDMs/$(convId)).data.participants
-              || isFounder());
-        // Any signed-in user can create — senderUid must match auth.uid
-        allow create: if isSignedIn()
-          && request.resource.data.senderUid == request.auth.uid;
-        // Sender can soft-delete; recipient can mark as read
-        allow update: if isSignedIn()
-          && (request.auth.uid == resource.data.senderUid
-              || request.auth.uid == resource.data.receiverUid
-              || isModerator());
-        // Only sender or Founder can hard-delete
-        allow delete: if isSignedIn()
-          && (request.auth.uid == resource.data.senderUid || isFounder());
-      }
     }
 
   }

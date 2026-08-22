@@ -216,11 +216,11 @@ html, body {
 
 <script type="module">
 import { initializeApp, getApps }
-  from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getFirestore, doc, onSnapshot }
-  from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 
 /* TARGET PROJECT: shadow-nexus-wave  |  DO NOT change to horr-a08f4          */
 const FB_CONFIG = {
@@ -256,7 +256,7 @@ onSnapshot(doc(db, 'siteSettings', 'config'), snap => {
 onAuthStateChanged(auth, async user => {
   if (!user) return;
   try {
-    const { getDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+    const { getDoc } = await import("https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js");
     const snap = await getDoc(doc(db, 'users', user.uid));
     if (snap.exists() && snap.data().role === 'founder') {
       window.location.replace('index.html');
