@@ -899,11 +899,11 @@
   }
 
   async function _importRTDB() {
-    return await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    return await import('https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js');
   }
 
   async function _importFirestore() {
-    return await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    return await import('https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js');
   }
 
   /* ═══════════════════════════════════════════════════════════════════════════
