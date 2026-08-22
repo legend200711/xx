@@ -273,39 +273,6 @@ service cloud.firestore {
         && (resource.data.uid == request.auth.uid || isModerator());
     }
 
-    // ── Social Account Connections ──────────────────────────────────────────
-    //
-    //   /socialConnections/{waveUid}
-    //
-    //   Written ONLY by the Wave service account via Cloudflare Worker
-    //   (POST /auth/social-connect and /auth/social-disconnect).
-    //   Client code is allowed to READ its own doc so the Settings page can
-    //   display connection status, but clients can NEVER write directly.
-    //   This prevents a user from forging isConnected = true client-side.
-
-    match /socialConnections/{waveUid} {
-      // Owner can read their own connection record (to show status in Settings)
-      allow read: if isOwner(waveUid);
-      // No client writes — only the Wave service account (via Worker) writes here.
-      // The Worker verifies both Wave and Social identity before writing.
-      allow write: if false;
-    }
-
-    // ── Live Bridge Sessions ─────────────────────────────────────────────────
-    //
-    //   /liveBridgeSessions/{sessionId}
-    //
-    //   Written ONLY by the Wave service account (POST /live/social-bridge).
-    //   The Worker verifies the Social connection before creating a session.
-    //   Owner can read their own session (to display bridge status in the live UI).
-
-    match /liveBridgeSessions/{sessionId} {
-      // The host can read their own bridge session
-      allow read: if isSignedIn() && resource.data.waveUid == request.auth.uid;
-      // No client writes — Worker-only
-      allow write: if false;
-    }
-
     // ── Live Rooms ──────────────────────────────────────────────────────────
     //
     //   /liveRooms/{uid}  — one doc per host, keyed by host uid.
