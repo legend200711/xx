@@ -1111,6 +1111,56 @@ async function _notifyFollowersLive(creatorData) {
 async function _startViewer() {
   let roomData = null;
 
+  /* ── Resolve the real RTDB roomId ──────────────────────────────────────────
+     Live cards on the home/search/index pages pass the Firestore doc key,
+     which is the creator's UID (e.g. "abc123").  The RTDB room lives at
+     liveRooms/<safeUid>_<timestamp36> — the composite key stored in the
+     `roomId` field of that same Firestore doc.
+     Share/Join links already use the composite key via #watch=<roomId>, so
+     they arrive here correctly.
+     Strategy:
+       1. Try RTDB directly with whatever _roomId we received.
+       2. If nothing is found there, treat _roomId as a Firestore doc key and
+          read liveRooms/{_roomId} to get the real `roomId` field.
+       3. Retry step 1 with the resolved composite key.
+     This resolves both the UID-keyed case (cards) and the composite-key case
+     (Share/Join) without changing any creator code or database structure.
+  ── */
+  const _resolveRoomId = async () => {
+    // Fast path: try RTDB directly (works for Share/Join links)
+    try {
+      const snap = await get(ref(_liveDB, `liveRooms/${_roomId}`));
+      if (snap.exists()) return _roomId;   // composite key — already correct
+    } catch (_) {}
+
+    // Slow path: _roomId is a Firestore doc key (creator UID from live cards).
+    // Read the Firestore mirror doc to get the composite roomId field.
+    try {
+      const fsSnap = await getDoc(doc(_db, 'liveRooms', _roomId));
+      if (fsSnap.exists()) {
+        const data = fsSnap.data();
+        const compositeId = data.roomId || null;
+        if (compositeId && compositeId !== _roomId) {
+          // Verify the composite key actually exists in RTDB before committing
+          try {
+            const rtSnap = await get(ref(_liveDB, `liveRooms/${compositeId}`));
+            if (rtSnap.exists()) return compositeId;
+          } catch (_) {}
+          // RTDB not yet written — return the composite key anyway so the
+          // retry loop below can poll for it.
+          return compositeId;
+        }
+      }
+    } catch (_) {}
+
+    return _roomId;   // fallback: return unchanged
+  };
+
+  // Resolve the correct RTDB key before starting the retry loop.
+  // On first viewer open the creator may have just written the Firestore doc
+  // but not yet the RTDB node, so we allow one resolution retry.
+  _roomId = await _resolveRoomId();
+
   const _MAX_RETRIES = 8;
   const _RETRY_MS    = 2000;
 
