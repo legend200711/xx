@@ -1,15 +1,15 @@
 /**
- * Shadow Nexus Live — live.js
+ * Shadow Nexus Wave — live.js
  *
  * Firebase split architecture:
  *
- *  MAIN Firebase (horr-a08f4) — Firestore:
+ *  MAIN Firebase (shadow-nexus-wave) — Firestore:
  *    - Auth / user profiles
  *    - Feed posts, stories, notifications
  *    - Live chat messages  (liveRooms/{roomId}/liveMessages)
  *    - Likes counter       (liveRooms/{roomId}.likes)
  *
- *  LIVE Firebase (Shadow Nexus Live) — Realtime Database:
+ *  LIVE Firebase (Shadow Nexus Wave) — Realtime Database:
  *    - Room status             (liveRooms/{roomId})
  *    - WebRTC per-viewer slots (liveConnections/{roomId}/viewers/{viewerUid})
  *      host writes offer+hostCandidates; viewer writes answer+viewerCandidates
@@ -43,36 +43,36 @@
 'use strict';
 
 /* ── Main Firebase imports (Firestore + Auth) ── */
-import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import {
   getAuth, onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
   getFirestore,
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
   collection, query, orderBy, limit, onSnapshot,
-  serverTimestamp, increment, where, deleteField, arrayUnion
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  serverTimestamp, increment, where, deleteField, arrayUnion, arrayRemove
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 /* ── Realtime Database imports (signaling + room status) ── */
 import {
   getDatabase,
   ref, set, get, update, remove, push, onValue, off, onDisconnect,
   serverTimestamp as rtdbTimestamp
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
 
 /* ════════════════════════════════════════════════════
    MAIN Firebase — live.html is a standalone page.
    index.html is NOT loaded here — no conflict exists.
    ════════════════════════════════════════════════════ */
 const _CFG = {
-  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
-  authDomain:        'horr-a08f4.firebaseapp.com',
-  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
-  projectId:         'horr-a08f4',
-  storageBucket:     'horr-a08f4.firebasestorage.app',
-  messagingSenderId: '933810617818',
-  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
+  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
+  authDomain:        'shadow-nexus-wave.firebaseapp.com',
+  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
+  projectId:         'shadow-nexus-wave',
+  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
+  messagingSenderId: '68850298302',
+  appId:             '1:68850298302:web:603bbb8539079903cb1def',
 };
 
 const _app    = initializeApp(_CFG);
@@ -132,10 +132,7 @@ const _VIEWER_PRESENCE_HB_MS = 30000; // 30 s keep-alive write to RTDB
 let _chatUnsub        = null;
 let _viewerCountRef   = null;   // RTDB ref for viewer count listener
 let _viewerCountUnsub = null;
-let _hostLikeCountRef = null;   // RTDB ref for host like-count listener
-let _hostLikeCountUnsub = null; // unsubscribe fn for host like-count listener
 let _roomWatchRef     = null;   // saved RTDB ref so we can call off() on it
-let _offerWaitUnsub   = null;   // viewer: unsubscribe for offer-arrival watcher (must survive _viewerLeave)
 let _toastTimer       = null;
 let _viewerLeftFlag   = false;  // guard: prevent double-decrement on mobile
 let _creatorEndedFlag = false;  // guard: prevent beforeunload re-running endLive cleanup
@@ -559,11 +556,8 @@ async function startLive() {
   // Sanitize uid — strip any chars forbidden in RTDB keys (. # $ / [ ])
   const _safeUid = _user.uid.replace(/[.#$/\[\]]/g, '_');
   _roomId = `${_safeUid}_${Date.now().toString(36)}`;
-  _roomHostId = _user.uid;   // creator is always their own host
 
-  // Expose for gift integration
-  window._liveRoomId  = _roomId;
-  window._liveHostUid = _roomHostId;
+  _roomHostId = _user.uid;   // creator is always their own host
 
   const creatorData = {
     roomId:       _roomId,
@@ -571,7 +565,7 @@ async function startLive() {
     hostName:     _userData.displayName || _user.email?.split('@')[0] || 'Creator',
     hostUsername: _userData.username || '',
     hostAvatar:   _userData.avatar || _userData.profilePicture || '',
-    title:        titleVal || 'Shadow Nexus LIVE',
+    title:        titleVal || 'Shadow Nexus Wave',
     status:       'live',
     isLive:       true,
     viewers:      0,
@@ -687,12 +681,6 @@ async function startLive() {
     user: _user, userData: _userData,
     roomId: _roomId, isHost: true,
   }}));
-
-  // FIX 3: Start the live gift watcher for the HOST so incoming gifts show
-  // the notification/animation on the host screen in real time.
-  if (typeof window._snxgStartLiveGiftWatch === 'function') {
-    window._snxgStartLiveGiftWatch(_roomId);
-  }
 
   // ── Start optional systems (respects their individual ON/OFF state) ──
   _liveTimerOnLiveStart();
@@ -819,14 +807,6 @@ function _subscribeViewerCount() {
       updateDoc(doc(_db, 'liveRooms', _user.uid), { viewers: v }).catch(() => {});
     }
   });
-
-  // FIX 1: Host like-count listener — update D.likeCount in real time as viewers send likes.
-  if (_hostLikeCountRef) { try { off(_hostLikeCountRef); } catch(_) {} }
-  _hostLikeCountRef   = ref(_liveDB, `liveRooms/${_roomId}/likes`);
-  _hostLikeCountUnsub = onValue(_hostLikeCountRef, snap => {
-    const l = snap.val() || 0;
-    if (D.likeCount) D.likeCount.textContent = '❤️ ' + l;
-  });
 }
 
 /* ═══════════════════════════════════════════════════
@@ -951,7 +931,6 @@ async function endLive() {
   _hostTeardownAllRelayPeers();
   if (_chatUnsub)        { _chatUnsub();         _chatUnsub        = null; }
   if (_viewerCountUnsub) { try { _viewerCountUnsub(); } catch(_) {} _viewerCountRef = null; _viewerCountUnsub = null; }
-  if (_hostLikeCountRef) { try { off(_hostLikeCountRef); } catch(_) {} _hostLikeCountRef = null; _hostLikeCountUnsub = null; }
 
   /* ── Remove WebRTC signaling from LIVE RTDB ── */
   if (_roomId) {
@@ -1040,7 +1019,7 @@ async function _createLiveFeedPost(creatorData) {
       authorAvatar:  creatorData.hostAvatar   || '',
       liveRoomId:    _roomId,
       isLive:        true,
-      title:         creatorData.title        || 'Shadow Nexus LIVE',
+      title:         creatorData.title        || 'Shadow Nexus Wave',
       text:          (creatorData.hostName || 'Someone') + ' is Live now 🔴',
       timestamp:     Date.now(),
       createdAt:     Date.now(),
@@ -1070,7 +1049,7 @@ async function _createLiveStory(creatorData) {
       authorAvatar: creatorData.hostAvatar   || '',
       type:         'live',
       liveRoomId:   _roomId,
-      title:        creatorData.title        || 'Shadow Nexus LIVE',
+      title:        creatorData.title        || 'Shadow Nexus Wave',
       createdAt:    now,
       expiresAt,
     });
@@ -1102,9 +1081,9 @@ async function _notifyFollowersLive(creatorData) {
       fromName:   creatorData.hostName    || '',
       fromAvatar: creatorData.hostAvatar  || '',
       roomId:     _roomId,
-      roomTitle:  creatorData.title       || 'Shadow Nexus LIVE',
+      roomTitle:  creatorData.title       || 'Shadow Nexus Wave',
       title:      '🔴 ' + (creatorData.hostName || 'Someone') + ' is Live',
-      body:       `${creatorData.hostName || 'Someone'} is live: ${creatorData.title || 'Shadow Nexus LIVE'}`,
+      body:       `${creatorData.hostName || 'Someone'} is live: ${creatorData.title || 'Shadow Nexus Wave'}`,
       url:        'live.html#watch=' + _roomId,
       ts:         Date.now(),
       read:       false,
@@ -1160,9 +1139,6 @@ async function _startViewer() {
 
   _roomHostId = roomData.hostId || null;   // store real host uid for chat badge
 
-  // Expose host UID for gift integration
-  window.dispatchEvent(new CustomEvent('snxLiveHostReady', { detail: { hostId: _roomHostId } }));
-
   _hideLoading();
   _showStage();
   _hideConnBanner();
@@ -1176,11 +1152,6 @@ async function _startViewer() {
     user: _user, userData: _userData,
     roomId: _roomId, isHost: false,
   }}));
-
-  // ── Start watching for live gifts (gift toasts) ──
-  if (typeof window._snxgStartLiveGiftWatch === 'function') {
-    window._snxgStartLiveGiftWatch(_roomId);
-  }
 
   /* ── Subscribe to live guest presence (shows guest boxes to viewers) ── */
   _startViewerGuestGrid();
@@ -1350,11 +1321,6 @@ async function _viewerLeave() {
   // Fix: stop frozen video watchdog
   _stopFrozenVideoWatchdog();
 
-  // FIX 2: Cancel offer-arrival watcher so a stale callback cannot re-enter _startViewerWebRTC
-  // after the viewer has left. Without this, the listener fires after re-entry and launches a
-  // second concurrent WebRTC setup, causing a black screen.
-  if (_offerWaitUnsub) { try { _offerWaitUnsub(); } catch(_) {} _offerWaitUnsub = null; }
-
   if (_rtcPc) {
     _rtcPc.ontrack = null; _rtcPc.onconnectionstatechange = null;
     _rtcPc.oniceconnectionstatechange = null; _rtcPc.onicecandidate = null;
@@ -1389,9 +1355,71 @@ function _setupViewerControls(roomData) {
   if (D.profileBtn) {
     D.profileBtn.style.display = 'flex';
     D.profileBtn.onclick = () => {
-      window.open('index.html#profile=' + roomData.hostId, '_blank');
+      window.location.href = 'sfl-profile.html?uid=' + roomData.hostId;
     };
   }
+
+  // Follow button — shown to viewers who are not the host
+  const followBtn      = document.getElementById('btnFollowCreator');
+  const followLabel    = document.getElementById('btnFollowCreatorLabel');
+  const hostId         = roomData.hostId;
+  if (!followBtn || !followLabel || !hostId) return;
+  // Don't show follow button on your own stream
+  if (_user && _user.uid === hostId) return;
+
+  followBtn.style.display = 'flex';
+
+  // Check current follow state
+  let _liveFollowing = false;
+  if (_user && _userData && Array.isArray(_userData.following)) {
+    _liveFollowing = _userData.following.includes(hostId);
+  }
+  function _updateLiveFollowBtn() {
+    followLabel.textContent = _liveFollowing ? '✓ Following' : 'Follow';
+    followBtn.style.opacity = _liveFollowing ? '0.7' : '1';
+  }
+  _updateLiveFollowBtn();
+
+  followBtn.addEventListener('click', async () => {
+    if (!_user) { toast('Sign in to follow creators.'); return; }
+    if (!hostId || hostId === _user.uid) return;
+    followBtn.disabled = true;
+    try {
+      const creatorRef = doc(_db, 'users', hostId);
+      const myRef      = doc(_db, 'users', _user.uid);
+      if (_liveFollowing) {
+        await updateDoc(creatorRef, { followers: arrayRemove(_user.uid) });
+        await updateDoc(myRef,      { following: arrayRemove(hostId) });
+        _liveFollowing = false;
+        toast('Unfollowed.');
+      } else {
+        await updateDoc(creatorRef, { followers: arrayUnion(_user.uid) });
+        await updateDoc(myRef,      { following: arrayUnion(hostId) });
+        _liveFollowing = true;
+        toast('Following ' + (roomData.hostName || 'creator') + '!');
+
+        // Send follow notification
+        const myName   = _userData?.displayName || _userData?.username || _user.displayName || 'Someone';
+        const myAvatar = _userData?.avatar || _user.photoURL || '';
+        addDoc(collection(_db, 'notifications', hostId, 'items'), {
+          type:        'follow',
+          fromUid:     _user.uid,
+          fromName:    myName,
+          fromAvatar:  myAvatar,
+          fromProfile: 'sfl-profile.html?uid=' + _user.uid,
+          message:     myName + ' started following you.',
+          read:        false,
+          ts:          serverTimestamp(),
+          createdAt:   Date.now(),
+        }).catch(() => {});
+      }
+      _updateLiveFollowBtn();
+    } catch(e) {
+      toast('Error updating follow.');
+    } finally {
+      followBtn.disabled = false;
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1955,10 +1983,7 @@ async function _startViewerWebRTC(roomData) {
   const sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
   // Write viewer presence so the host knows to create a peer for this viewer.
-  // Use set() not update() — this clears any stale offer/answer/candidates from a
-  // previous session so the polling loop below never picks up an old offer and
-  // enters a renegotiation loop with the host.
-  try { await set(slotRef, { sessionId, viewerCandidates: {} }); }
+  try { await update(slotRef, { sessionId, viewerCandidates: {} }); }
   catch(e) { _showConnBanner('Waiting for stream…', ''); return; }
 
   // Poll for the host's offer (up to 15 s)
@@ -1972,13 +1997,10 @@ async function _startViewerWebRTC(roomData) {
 
   if (!slotSnap) {
     _showConnBanner('Waiting for stream…', '');
-    // FIX 2: Use module-level _offerWaitUnsub so _viewerLeave() can cancel this listener
-    // and prevent a stale callback from re-starting WebRTC after the viewer has left.
-    if (_offerWaitUnsub) { try { _offerWaitUnsub(); } catch(_) {} _offerWaitUnsub = null; }
+    let _offerWaitUnsub;
     _offerWaitUnsub = onValue(slotRef, async snap => {
       if (!snap.exists() || !snap.val().offer) return;
       if (_offerWaitUnsub) { try { _offerWaitUnsub(); } catch(_) {} _offerWaitUnsub = null; }
-      if (_viewerLeftFlag) return;  // viewer left while waiting — do not reconnect
       _startViewerWebRTC(roomData);
     });
     return;
@@ -2716,7 +2738,7 @@ function _openShareModal() {
     _closeShareModal();
     if (navigator.share) {
       navigator.share({
-        title: '🔴 Watch me live on Shadow Nexus!',
+        title: '🔴 Watch me live on Shadow Nexus Wave!',
         text:  shareMsg,
         url,
       }).catch(() => {});
@@ -4935,11 +4957,11 @@ let _shadowBotHourReset    = null;     // hourly counter reset timer
 let _shadowBotActive       = false;    // true only when live is running
 
 const _SHADOW_BOT_MESSAGES = [
-  'Welcome to Shadow Nexus Live! 🌑',
+  'Welcome to Shadow Nexus Wave! 🔥',
   'Thanks for being here — keep the chat positive! ✨',
-  'Great to see everyone here on Shadow Nexus Live! 🔴',
+  'Great to see everyone here on Shadow Nexus Wave! 🔴',
   "You're all amazing — thanks for watching! 🙌",
-  'This live is powered by the Shadow Nexus community. Welcome! 💙',
+  'This live is powered by the Shadow Nexus Wave community. Welcome! 💙',
   'Enjoying the stream? Share it with a friend! 📤',
 ];
 
