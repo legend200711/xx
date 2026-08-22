@@ -675,6 +675,13 @@ $('formSocialBridge').addEventListener('submit', async e => {
     // waveUid = "snx_social_{socialLocalId}" — server-assigned, never trusted from browser
     btn.textContent = 'Linking profile…';
     const waveUid  = waveUser.uid;  // confirmed server-assigned value from custom token
+
+    // Extract the Social local ID from the Wave UID (format: snx_social_{socialLocalId}).
+    // This is the Social Firebase Auth UID — the permanent cross-project link key.
+    const shadowNexusSocialUserId = waveUid.startsWith('snx_social_')
+      ? waveUid.slice('snx_social_'.length)
+      : waveUid;
+
     const userRef  = doc(db, 'users', waveUid);
     const existing = await getDoc(userRef);
 
@@ -683,20 +690,36 @@ $('formSocialBridge').addEventListener('submit', async e => {
     // They are never sourced from the browser, from Wave-side user input, or from
     // the Wave Firebase Auth user object (which has no profile for custom-token users).
     const sp = bridgeData.socialProfile || {};
-    const socialDisplayName = sp.displayName || bridgeData.email?.split('@')[0] || '';
-    const socialUsername    = sp.username    || socialDisplayName.toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
-    const socialAvatar      = sp.avatar      || '';
-    const socialBio         = sp.bio         || '';
+
+    // displayName: use Social Firestore value; fall back to email prefix if empty.
+    const socialDisplayName = sp.displayName
+      || bridgeData.email?.split('@')[0]
+      || '';
+
+    // username: use Social Firestore value; derive from displayName as fallback.
+    const socialUsername = sp.username
+      || socialDisplayName.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30)
+      || '';
+
+    // avatar: Social Firestore field (may be Cloudflare R2 URL or Firebase Storage URL).
+    const socialAvatar = sp.avatar || '';
+
+    // bio: Social Firestore field.
+    const socialBio = sp.bio || '';
 
     if (existing.exists()) {
       const data = existing.data();
-      // If the doc already has a shadowNexusSocialUserId that is DIFFERENT from the
-      // one now logging in — conflict (a different Social account already claimed this Wave UID,
-      // which cannot happen given deterministic UIDs, but guard defensively anyway).
-      if (data.shadowNexusSocialUserId && data.shadowNexusSocialUserId !== waveUid.replace('snx_social_', '')) {
+      // Conflict guard: if the existing doc's shadowNexusSocialUserId is set to
+      // a DIFFERENT Social UID than the one now logging in, refuse the login.
+      // With deterministic UIDs (snx_social_{socialLocalId}) this cannot normally
+      // happen, but we guard defensively in case of any edge-case inconsistency.
+      if (
+        data.shadowNexusSocialUserId &&
+        data.shadowNexusSocialUserId !== shadowNexusSocialUserId
+      ) {
         // Sign out immediately to avoid leaving a partial session
-        await auth.signOut?.();
-        showError('This Shadow Nexus Social account is already linked to another Shadow Nexus Wave account.');
+        await signOut(auth).catch(() => {});
+        showError('This Shadow Nexus Social account is already linked to a different Wave account.');
         btn.disabled = false;
         btn.textContent = 'Log In';
         return;
@@ -704,12 +727,13 @@ $('formSocialBridge').addEventListener('submit', async e => {
       // Existing linked profile — sync the 4 Social-controlled fields on every login.
       // Wave-specific data (followers, credits, live history, etc.) is NOT touched.
       await updateDoc(userRef, {
-        // ── Social-controlled fields (always refreshed from Social) ──
+        // ── Social-controlled fields (always refreshed from Social on login) ──
         displayName:               socialDisplayName,
         username:                  socialUsername,
         avatar:                    socialAvatar,
         bio:                       socialBio,
-        // ── Link metadata ──
+        // ── Link metadata (re-written to ensure it's always present) ──
+        shadowNexusSocialUserId:   shadowNexusSocialUserId,
         linkedToShadowNexusSocial: true,
         linkedAt:                  serverTimestamp(),
         updatedAt:                 serverTimestamp(),
@@ -735,7 +759,7 @@ $('formSocialBridge').addEventListener('submit', async e => {
         isLive:          false,
         liveRoomId:      null,
         // ── Linking fields ──
-        shadowNexusSocialUserId:   waveUid.replace('snx_social_', ''),
+        shadowNexusSocialUserId:   shadowNexusSocialUserId,
         linkedToShadowNexusSocial: true,
         linkedAt:                  serverTimestamp(),
         createdAt:                 serverTimestamp(),

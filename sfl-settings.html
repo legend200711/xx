@@ -473,6 +473,46 @@
         </div>
       </div>
 
+      <!-- SHADOW NEXUS SOCIAL LINK section — shown only for Social-linked accounts -->
+      <div class="settings-section sfl-hidden" id="socialLinkSection">
+        <div class="settings-section-title">Shadow Nexus Social</div>
+        <div class="settings-card">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">🌑 Linked to Shadow Nexus Social</div>
+              <div class="settings-row-sub" id="socialLinkSub">
+                Your display name, bio, and profile picture sync automatically from your Shadow Nexus Social account.
+              </div>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Display Name</div>
+              <div class="settings-row-sub" id="socialLinkDisplayName" style="color:var(--sfl-text);">—</div>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Username</div>
+              <div class="settings-row-sub" id="socialLinkUsername" style="color:var(--sfl-text);">—</div>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Bio</div>
+              <div class="settings-row-sub" id="socialLinkBio" style="color:var(--sfl-text);white-space:pre-wrap;max-width:400px;">—</div>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Sync Profile Now</div>
+              <div class="settings-row-sub">Pull the latest profile info from Shadow Nexus Social right now.</div>
+            </div>
+            <button class="sfl-btn sfl-btn-outline sfl-btn-sm" id="btnSyncSocial" style="flex-shrink:0;">Sync</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ACCOUNT section -->
       <div class="settings-section">
         <div class="settings-section-title">Account</div>
@@ -874,7 +914,7 @@ import {
   EmailAuthProvider, reauthenticateWithCredential,
   updatePassword, verifyBeforeUpdateEmail
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
-import { getFirestore, doc, getDoc, updateDoc, setDoc }
+import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 const FIREBASE_CONFIG = {
   apiKey:           'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
@@ -984,7 +1024,93 @@ onAuthStateChanged(auth, async user => {
       $('btnPushNotifs').textContent = '✓ Enabled';
       $('btnPushNotifs').disabled = true;
     }
+
+    // ── Social link section ────────────────────────────────────────────────
+    // Show the Shadow Nexus Social section only for Social-linked accounts.
+    // Social-linked Wave UIDs always start with "snx_social_".
+    if (_userData.linkedToShadowNexusSocial || user.uid.startsWith('snx_social_')) {
+      $('socialLinkSection').classList.remove('sfl-hidden');
+      $('socialLinkDisplayName').textContent = _userData.displayName || '—';
+      $('socialLinkUsername').textContent    = _userData.username ? `@${_userData.username}` : '—';
+      $('socialLinkBio').textContent         = _userData.bio || '—';
+      // Edit Profile Info button should be read-only for Social-linked users
+      // (Social is the source of truth; edits are ignored on next login sync).
+      const editProfileRow = $('btnEditProfile')?.closest('.settings-row');
+      if (editProfileRow) {
+        editProfileRow.title = 'Profile info is controlled by Shadow Nexus Social.';
+        const sub = editProfileRow.querySelector('.settings-row-sub');
+        if (sub) sub.textContent = 'Managed by Shadow Nexus Social — use Sync to update';
+      }
+    }
   } catch(e) { console.error('loadUser:', e); }
+});
+
+/* ════════════════════════════════════════
+   Shadow Nexus Social — Sync Profile
+   ════════════════════════════════════════ */
+const WAVE_WORKER_URL_SETTINGS = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
+
+$('btnSyncSocial')?.addEventListener('click', async () => {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const btn = $('btnSyncSocial');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+
+  try {
+    // Get a fresh Wave ID token to authenticate the refresh request.
+    const waveIdToken = await user.getIdToken(/* forceRefresh */ false);
+
+    const res = await fetch(`${WAVE_WORKER_URL_SETTINGS}/auth/refresh-social-profile`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ waveIdToken }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.socialProfile) {
+      toast(data.error || 'Could not sync profile from Shadow Nexus Social.');
+      return;
+    }
+
+    const sp = data.socialProfile;
+    const newDisplayName = sp.displayName || _userData.displayName || '';
+    const newUsername    = sp.username    || _userData.username    || '';
+    const newAvatar      = sp.avatar      || _userData.avatar      || '';
+    const newBio         = sp.bio         != null ? sp.bio : (_userData.bio || '');
+
+    // Write the refreshed fields to the Wave Firestore profile.
+    const updates = {
+      displayName:               newDisplayName,
+      username:                  newUsername,
+      avatar:                    newAvatar,
+      bio:                       newBio,
+      linkedToShadowNexusSocial: true,
+      updatedAt:                 serverTimestamp(),
+    };
+    await updateDoc(doc(db, 'users', user.uid), updates);
+
+    // Update in-memory cache and UI
+    Object.assign(_userData, updates);
+    $('settingsDisplayName').textContent   = newDisplayName || _userData.username || 'User';
+    const nameLabel = newDisplayName || newUsername || '';
+    $('settingsUserName').textContent      = nameLabel ? `@${newUsername} · ${nameLabel}` : 'Display name, bio, links';
+    $('socialLinkDisplayName').textContent = newDisplayName || '—';
+    $('socialLinkUsername').textContent    = newUsername ? `@${newUsername}` : '—';
+    $('socialLinkBio').textContent         = newBio || '—';
+    if (newAvatar) {
+      const t = $('settingsAvatarThumb'); t.src = newAvatar; t.style.display = '';
+    }
+
+    toast('✓ Profile synced from Shadow Nexus Social!', 4000);
+  } catch(e) {
+    console.error('Social sync error:', e);
+    toast('Could not sync profile. Please try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sync';
+  }
 });
 
 /* ════════════════════════════════════════

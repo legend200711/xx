@@ -1332,17 +1332,27 @@ async function handleSocialBridge(request, env, cors, sec) {
     });
   }
 
-  // ── Step 2b: Read the Social Firestore user document for username + bio ─────
-  // Social Firestore rules: allow read: if true (public profile data).
-  // We use the Firestore REST API — no Social admin key required.
-  // The Social Firebase project ID is hardcoded here because the Wave Worker
-  // must never be pointed at Social's project dynamically.
-  // This read is entirely server-side; nothing from Social Firestore is
-  // forwarded to the browser except the 4 approved profile fields.
+  // ── Step 2b: Read the Social Firestore user document for all 4 profile fields ─
+  //
+  // Social Firestore security rules: allow read: if true (public profile data).
+  // We use the Firestore REST API with the Social Web API key so the request is
+  // authenticated at the project level — this ensures it works even if the Social
+  // project ever tightens its rules to require a valid API key in the query string.
+  //
+  // The Social Firebase project ID is hardcoded here; the Wave Worker must never
+  // accept it dynamically.
+  //
+  // Field name fallback chain (Social may store the avatar under any of these):
+  //   avatar → photoURL → profilePhotoURL → profilePicture
+  // displayName: Firestore value is preferred over Auth-level if present (more
+  //   up-to-date when the user edits their Social profile without re-authing).
+  //
+  // Nothing from Social Firestore is forwarded to the browser except the
+  // 4 approved profile fields.
   const _SOCIAL_PROJECT_ID = 'horr-a08f4';
   try {
     const fsRes = await fetch(
-      `https://firestore.googleapis.com/v1/projects/${_SOCIAL_PROJECT_ID}/databases/(default)/documents/users/${socialLocalId}`,
+      `https://firestore.googleapis.com/v1/projects/${_SOCIAL_PROJECT_ID}/databases/(default)/documents/users/${socialLocalId}?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
       { method: 'GET', headers: { 'Accept': 'application/json' } }
     );
     if (fsRes.ok) {
@@ -1350,21 +1360,33 @@ async function handleSocialBridge(request, env, cors, sec) {
       // Firestore REST API wraps values in typed objects, e.g. { stringValue: "..." }
       const fields = fsData.fields || {};
       const strVal = f => (f && f.stringValue) ? f.stringValue.trim() : '';
+
+      // username — only Social Firestore has this
       socialProfile.username = strVal(fields.username);
-      socialProfile.bio      = strVal(fields.bio);
-      // If Auth displayName is empty, fall back to Firestore displayName
-      if (!socialProfile.displayName) {
-        socialProfile.displayName = strVal(fields.displayName);
-      }
-      // If Auth avatar is empty, fall back to Firestore avatar field
-      if (!socialProfile.avatar) {
-        socialProfile.avatar = strVal(fields.avatar) || strVal(fields.photoURL);
-      }
+
+      // bio — only Social Firestore has this
+      socialProfile.bio = strVal(fields.bio);
+
+      // displayName — Firestore is preferred (user may have updated it in Social
+      // settings without that change propagating back to Firebase Auth)
+      const fsDisplayName = strVal(fields.displayName);
+      if (fsDisplayName) socialProfile.displayName = fsDisplayName;
+
+      // avatar / profile photo — check all field names Social may use
+      // Priority: Firestore avatar > photoURL > profilePhotoURL > profilePicture
+      // Auth-level photoUrl (already in socialProfile.avatar) is kept as final fallback.
+      const fsAvatar =
+        strVal(fields.avatar) ||
+        strVal(fields.photoURL) ||
+        strVal(fields.profilePhotoURL) ||
+        strVal(fields.profilePicture);
+      if (fsAvatar) socialProfile.avatar = fsAvatar;
     }
-    // If the Firestore read fails (network, doc not yet created, etc.)
-    // we continue with Auth-level fields only — do not block login.
+    // If the Firestore read fails (network error, doc not yet created, rules, etc.)
+    // we continue with the Auth-level fields already in socialProfile — do NOT
+    // block login just because the profile doc is unavailable.
   } catch (_) {
-    // Non-fatal: profile sync degrades gracefully to Auth fields only
+    // Non-fatal: profile sync degrades gracefully to Auth-level fields only.
   }
 
   // ── Step 3: Mint a Wave Firebase custom token ────────────────────────────────
@@ -1401,7 +1423,158 @@ async function handleSocialBridge(request, env, cors, sec) {
     customToken,
     waveUid,
     email:         socialEmail || email,
-    socialProfile: socialProfile || { displayName: '', avatar: '', username: '', bio: '' },
+    socialProfile: {
+      displayName: socialProfile.displayName || '',
+      avatar:      socialProfile.avatar      || '',
+      username:    socialProfile.username    || '',
+      bio:         socialProfile.bio         || '',
+    },
+  }), {
+    status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+  });
+}
+
+// ── POST /auth/refresh-social-profile ────────────────────────────────────────
+//
+// Allows a currently-authenticated Social-linked Wave user to re-pull the latest
+// Social profile fields (displayName, avatar, username, bio) without a full
+// credential re-entry.  The caller provides their Wave Firebase ID token so we
+// can verify which Wave user is making the request, then we re-read Social
+// Firestore using the socialLocalId extracted from the Wave UID
+// (format: "snx_social_{socialLocalId}").
+//
+// Security:
+//   - Only works for Wave UIDs that start with "snx_social_" — rejects all others.
+//   - Wave ID token is verified against Wave project before reading Social data.
+//   - Social credentials are NOT involved; we read Social Firestore
+//     (allow read: if true) via the REST API.
+//   - Returns ONLY the 4 approved profile field values; never Social auth tokens.
+//
+// Required Worker secrets: SOCIAL_FIREBASE_WEB_API_KEY, FIREBASE_WEB_API_KEY
+//
+async function handleRefreshSocialProfile(request, env, cors, sec) {
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  if (!env.SOCIAL_FIREBASE_WEB_API_KEY || !env.FIREBASE_WEB_API_KEY) {
+    return new Response(JSON.stringify({ error: 'Refresh endpoint not fully configured on server.' }), {
+      status: 503, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const { waveIdToken } = body || {};
+  if (!waveIdToken) {
+    return new Response(JSON.stringify({ error: 'waveIdToken is required' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Verify the Wave ID token to extract the Wave UID ─────────────────────────
+  let waveUid;
+  try {
+    const verRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_WEB_API_KEY}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ idToken: waveIdToken }),
+      }
+    );
+    const verData = await verRes.json();
+    if (!verRes.ok || !verData.users?.[0]?.localId) {
+      return new Response(JSON.stringify({ error: 'Wave session invalid or expired. Please log in again.' }), {
+        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+    waveUid = verData.users[0].localId;
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Could not verify Wave session.' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  // ── Only Social-linked Wave accounts can be refreshed via this endpoint ──────
+  if (!waveUid.startsWith('snx_social_')) {
+    return new Response(JSON.stringify({ error: 'This account is not linked to Shadow Nexus Social.' }), {
+      status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  const socialLocalId = waveUid.replace('snx_social_', '');
+  const _SOCIAL_PROJECT_ID = 'horr-a08f4';
+
+  // ── Re-read the Social Firestore profile ─────────────────────────────────────
+  let refreshedProfile = { displayName: '', avatar: '', username: '', bio: '' };
+  try {
+    const fsRes = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${_SOCIAL_PROJECT_ID}/databases/(default)/documents/users/${socialLocalId}?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+      { method: 'GET', headers: { 'Accept': 'application/json' } }
+    );
+    if (fsRes.ok) {
+      const fsData = await fsRes.json();
+      const fields = fsData.fields || {};
+      const strVal = f => (f && f.stringValue) ? f.stringValue.trim() : '';
+
+      refreshedProfile.username    = strVal(fields.username);
+      refreshedProfile.bio         = strVal(fields.bio);
+      refreshedProfile.displayName = strVal(fields.displayName);
+      refreshedProfile.avatar      =
+        strVal(fields.avatar) ||
+        strVal(fields.photoURL) ||
+        strVal(fields.profilePhotoURL) ||
+        strVal(fields.profilePicture);
+
+      // Also try Social Firebase Auth for displayName and avatar as fallbacks
+      // via getAccountInfo — only if Firestore didn't supply them.
+      if (!refreshedProfile.displayName || !refreshedProfile.avatar) {
+        try {
+          const authRes = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ localId: [socialLocalId] }),
+            }
+          );
+          if (authRes.ok) {
+            const authData = await authRes.json();
+            const authUser = authData.users?.[0];
+            if (authUser) {
+              if (!refreshedProfile.displayName && authUser.displayName) {
+                refreshedProfile.displayName = authUser.displayName;
+              }
+              if (!refreshedProfile.avatar && authUser.photoUrl) {
+                refreshedProfile.avatar = authUser.photoUrl;
+              }
+            }
+          }
+        } catch (_) { /* non-fatal — use what we already have */ }
+      }
+    } else {
+      return new Response(JSON.stringify({ error: 'Could not reach Shadow Nexus Social profile.' }), {
+        status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+      });
+    }
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Error reading Shadow Nexus Social profile.' }), {
+      status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    });
+  }
+
+  return new Response(JSON.stringify({
+    waveUid,
+    socialProfile: refreshedProfile,
   }), {
     status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
   });
@@ -1502,6 +1675,12 @@ export default {
     // Verifies a Social account server-side and issues a Wave custom token.
     // Never exposes Social credentials or tokens to the browser.
     if (url.pathname === '/auth/social-bridge') return handleSocialBridge(request, env, cors, sec);
+
+    // ── Social profile refresh ──
+    // POST /auth/refresh-social-profile
+    // Re-reads the Social Firestore profile for an already-linked Wave user and
+    // returns the 4 approved profile fields. Requires a valid Wave ID token.
+    if (url.pathname === '/auth/refresh-social-profile') return handleRefreshSocialProfile(request, env, cors, sec);
 
     // ── LiveKit endpoints ──
     if (url.pathname === '/livekit-room')  return handleLiveKitRoom(request, env, cors, sec);
