@@ -31,8 +31,8 @@ const ALLOWED_ORIGINS = [
   'https://www.shadownexussocial.online',
   'https://shadowfirelive.com',
   'https://www.shadowfirelive.com',
-  'https://shadow-nexus-wave.web.app',
-  'https://shadow-nexus-wave.firebaseapp.com',
+  'https://horr-a08f4.web.app',
+  'https://horr-a08f4.firebaseapp.com',
   'https://legend200711.github.io',  // GitHub Pages hosting (SFL pages live here)
   'http://localhost',
   'http://127.0.0.1'
@@ -986,7 +986,7 @@ async function handleStreamDelete(request, env, cors, sec) {
 
   // ── Verify Firebase ID token ──────────────────────────────────────────────
   // Uses Google's tokeninfo endpoint — no Firebase Admin SDK required.
-  const projectId = env.FIREBASE_PROJECT_ID || 'shadow-nexus-wave';
+  const projectId = env.FIREBASE_PROJECT_ID || 'horr-a08f4';
   let verifiedUid;
   try {
     const tokenRes = await fetch(
