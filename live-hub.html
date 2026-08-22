@@ -196,6 +196,13 @@ onAuthStateChanged(_auth, async user => {
   const enabled = await _checkFeatureFlag();
   if (!enabled) return;
   await _loadUserData();
+
+  // ?host=1 — skip the hub and go straight to the creator room
+  if (_hubAutoHost) {
+    _goLive();
+    return;
+  }
+
   _block(D.main);
   _subscribeRooms();
 });
@@ -215,6 +222,11 @@ function _goLive() {
 }
 D.goLiveBtn      && D.goLiveBtn.addEventListener('click', _goLive);
 D.goLiveBtnEmpty && D.goLiveBtnEmpty.addEventListener('click', _goLive);
+
+// If ?host=1 is in the URL (e.g. linked from sfl-home.html Go Live button),
+// immediately redirect to the host session once the auth state resolves.
+// The auth gate already sets up the hub — we just navigate at the right time.
+const _hubAutoHost = new URLSearchParams(location.search).get('host') === '1';
 
 /* ── Subscribe to live rooms (real-time) ── */
 function _subscribeRooms() {

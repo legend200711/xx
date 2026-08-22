@@ -246,7 +246,7 @@
     <a href="sfl-search.html" class="sfl-nav-item">
       <span class="sfl-nav-icon">🔍</span> Discover
     </a>
-    <a href="live.html" class="sfl-nav-item">
+    <a href="live-hub.html" class="sfl-nav-item">
       <span class="sfl-nav-icon">📡</span> Live
     </a>
     <a href="sfl-home.html#following" class="sfl-nav-item">
@@ -338,12 +338,12 @@
             <span class="sfl-live-dot"></span>
             LIVE NOW
           </div>
-          <a href="live.html" class="sfl-section-see-all">See all</a>
+          <a href="live-hub.html" class="sfl-section-see-all">See all</a>
         </div>
         <div class="sfl-live-row" id="liveNowRow" aria-label="Live streams">
           <!-- Cards injected by JS -->
           <div class="sfl-live-empty-card" id="liveNowEmpty" style="width:100%;">
-            No one is live right now — <a href="live.html" style="color:var(--sfl-blue);">be the first!</a>
+            No one is live right now — <a href="live-hub.html" style="color:var(--sfl-blue);">be the first!</a>
           </div>
         </div>
       </section>
@@ -414,7 +414,7 @@
       <div class="sfl-create-opt-sub">Share a video with the world</div>
     </div>
   </a>
-  <a href="live.html" class="sfl-create-opt" role="menuitem" id="createGoLive">
+  <a href="live-hub.html?host=1" class="sfl-create-opt" role="menuitem" id="createGoLive">
     <span class="sfl-create-opt-icon">🔴</span>
     <div class="sfl-create-opt-info">
       <div class="sfl-create-opt-label">Go Live</div>
@@ -568,7 +568,7 @@ function buildLiveCard(roomId, room) {
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
   const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
   const a = document.createElement('a');
-  a.href = `live.html?room=${encodeURIComponent(roomId)}`;
+  a.href = `live-room.html?room=${encodeURIComponent(roomId)}`;
   a.className = 'sfl-live-card';
   a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
   a.innerHTML = `
@@ -693,24 +693,52 @@ function loadLiveRooms() {
 
   if (_liveUnsub) { _liveUnsub(); _liveUnsub = null; }
 
-  const q = query(
-    collection(db,'liveRooms'),
-    where('status','==','live'),
-    orderBy('viewers','desc'),
-    limit(20)
-  );
-
-  _liveUnsub = onSnapshot(q, snap => {
-    // Remove old cards but keep empty placeholder
+  function _applySnap(snap) {
     row.querySelectorAll('.sfl-live-card').forEach(c => c.remove());
-    if (snap.empty) {
+    // Filter client-side: only truly live rooms, skip stale ones older than 4 hours
+    const now = Date.now();
+    const liveDocs = snap.docs.filter(d => {
+      const r = d.data();
+      if (r.status !== 'live' && !r.isLive) return false;
+      const age = now - (r.createdAt || 0);
+      return age < 4 * 60 * 60 * 1000;
+    });
+    if (!liveDocs.length) {
       empty.classList.remove('sfl-hidden');
       return;
     }
     empty.classList.add('sfl-hidden');
-    snap.docs.forEach(d => row.insertBefore(buildLiveCard(d.id, d.data()), empty));
-  }, () => {
-    empty.classList.remove('sfl-hidden');
+    liveDocs.forEach(d => row.insertBefore(buildLiveCard(d.id, d.data()), empty));
+  }
+
+  // Primary query: status==live ordered by viewers desc (requires composite index)
+  const qPrimary = query(
+    collection(db, 'liveRooms'),
+    where('status', '==', 'live'),
+    orderBy('viewers', 'desc'),
+    limit(20)
+  );
+
+  _liveUnsub = onSnapshot(qPrimary, _applySnap, () => {
+    // Index missing or permission error — fall back to unordered query
+    const qFallback = query(
+      collection(db, 'liveRooms'),
+      where('status', '==', 'live'),
+      limit(20)
+    );
+    if (_liveUnsub) { try { _liveUnsub(); } catch(_e) {} }
+    _liveUnsub = onSnapshot(qFallback, _applySnap, () => {
+      // Last resort: query on isLive boolean
+      const qLast = query(
+        collection(db, 'liveRooms'),
+        where('isLive', '==', true),
+        limit(20)
+      );
+      if (_liveUnsub) { try { _liveUnsub(); } catch(_e) {} }
+      _liveUnsub = onSnapshot(qLast, _applySnap, () => {
+        empty.classList.remove('sfl-hidden');
+      });
+    });
   });
 }
 
@@ -832,11 +860,13 @@ function goLiveGuard(e) {
     toast('Sign in to go live.');
     return;
   }
-  // Navigate to live.html — existing feature gate handles the rest
+  // Navigate to live-hub.html which handles the host flow
+  e.preventDefault();
+  window.location.href = 'live-hub.html';
 }
 $('sidebarGoLive')?.addEventListener('click', e => {
   if (!_user) { e.preventDefault(); toast('Sign in to go live.'); return; }
-  window.location.href = 'live.html';
+  window.location.href = 'live-hub.html';
 });
 $('createGoLive')?.addEventListener('click', goLiveGuard);
 

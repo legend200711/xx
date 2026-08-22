@@ -14,14 +14,40 @@
 </head>
 <body>
 
-<!-- ── Feature gate: checked before any Firebase code runs ── -->
+<!-- ── Compatibility redirect: forward ?room= and ?host=1 to live-room.html ──
+     live.html is the legacy page (live.js multi-feature stream engine).
+     live-room.html is the new streamlined viewer/host page.
+     Any link or bookmark using live.html?room=X or live.html?host=1 is
+     transparently forwarded so viewers always land in the correct player. ── -->
 <script>
 (function() {
+  var sp = new URLSearchParams(location.search);
+  var room = sp.get('room');
+  var host = sp.get('host');
+  // Also handle legacy hash routing: live.html#watch=roomId
+  var hashRoom = location.hash.replace(/^#watch=/, '').replace(/^#room=/, '');
+
+  if (room) {
+    // Viewer: forward to the new live-room player
+    location.replace('live-room.html?room=' + encodeURIComponent(room));
+    throw new Error('redirecting');
+  }
+  if (host === '1') {
+    // Host: forward to live-hub which has the Go Live button
+    location.replace('live-hub.html');
+    throw new Error('redirecting');
+  }
+  if (hashRoom && hashRoom !== location.hash) {
+    location.replace('live-room.html?room=' + encodeURIComponent(hashRoom));
+    throw new Error('redirecting');
+  }
+
+  // No redirect params — load live.html normally (creator setup flow via live.js)
+  // Feature gate: still respect founder localStorage override if set to false
   try {
     var ctrl = JSON.parse(localStorage.getItem('founderFeatureControls') || '{}');
-    // liveEnabled must be explicitly true — defaults OFF until Founder enables
-    var enabled = ctrl.liveEnabled === true;
-    if (!enabled) {
+    // liveEnabled defaults to true unless founder explicitly sets false
+    if (ctrl.liveEnabled === false) {
       document.documentElement.style.background = '#0B1F3A';
       document.write(
         '<style>*{margin:0;padding:0;box-sizing:border-box;}</style>' +
@@ -40,7 +66,7 @@
       throw new Error('live_disabled');
     }
   } catch(e) {
-    if (e.message !== 'live_disabled') {
+    if (e.message !== 'live_disabled' && e.message !== 'redirecting') {
       // localStorage unavailable — allow page to load normally
     }
   }
