@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "shadow-nexus-wave"
+    "default": "horr-a08f4"
   },
   "firestore": {
     "rules": "firestore.rules",

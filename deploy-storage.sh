@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shadow Nexus Wave — deploy Firebase Storage rules + CORS
 # Run this AFTER Firebase Storage has been initialized at:
-# https://console.firebase.google.com/project/shadow-nexus-wave/storage
+# https://console.firebase.google.com/project/horr-a08f4/storage
 #
 # Prerequisites:
 #   gcloud CLI installed and authenticated:  gcloud auth login
@@ -13,8 +13,8 @@
 
 set -e
 
-PROJECT_ID="shadow-nexus-wave"
-BUCKET="shadow-nexus-wave.firebasestorage.app"
+PROJECT_ID="horr-a08f4"
+BUCKET="horr-a08f4.firebasestorage.app"
 
 echo "=== Shadow Nexus Wave — Storage Deploy ==="
 echo "Project : $PROJECT_ID"
