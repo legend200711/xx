@@ -19,40 +19,42 @@
  */
 
 import { initializeApp, getApps } from
-  'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+  'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged,
   browserLocalPersistence,
   setPersistence
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import {
   getFirestore,
   doc, setDoc, getDoc, updateDoc, deleteDoc,
   collection, addDoc, query, orderBy, limit,
   onSnapshot, serverTimestamp, increment, where, getDocs
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import {
   getDatabase,
   ref, set, push, onValue, onChildAdded, remove, off
-} from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
 
-/* ─── Shadow Nexus Wave Firebase config ──────────────────────────────── */
+/* ─── Firebase config ─────────────────────────────────────────────────── */
 const FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:        'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:         'shadow-nexus-wave',
-  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId: '68850298302',
-  appId:             '1:68850298302:web:603bbb8539079903cb1def'
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3'
 };
 
 /* ─── Singleton init ──────────────────────────────────────────────────── */
-const _SNW_APP_NAME = 'shadow-nexus-wave';
-const _app  = getApps().find(a => a.name === _SNW_APP_NAME) ||
-              initializeApp(FIREBASE_CONFIG, _SNW_APP_NAME);
+// Re-use the app if the main site already initialised it on this page,
+// otherwise create a secondary named app so both can coexist.
+const _app  = getApps().find(a => a.name === '[DEFAULT]') ||
+              getApps().find(a => a.name === 'live-page')  ||
+              initializeApp(FIREBASE_CONFIG, 'live-page');
 export const _auth = getAuth(_app);
 
 // Ensure the live page reads the same persisted session that index.html wrote.

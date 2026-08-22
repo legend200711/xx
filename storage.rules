@@ -3,7 +3,7 @@ rules_version = '2';
 //
 // Shadow Nexus Wave — Firebase Storage Security Rules
 //
-// Bucket: shadow-nexus-wave.firebasestorage.app
+// Bucket: horr-a08f4.firebasestorage.app
 //
 // Paths:
 //   videos/{uid}/{videoId}/video.{ext}   — uploaded video files

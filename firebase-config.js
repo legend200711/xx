@@ -1,33 +1,34 @@
 /**
  * firebase-config.js
- * Shadow Nexus SOCIAL — Firebase configuration.
+ * Shadow Nexus — shared Firebase configuration.
  *
- * ⚠️  THIS FILE IS FOR SHADOW NEXUS SOCIAL ONLY (project: horr-a08f4).
- * ⚠️  DO NOT import this file from Shadow Nexus Wave pages.
- * ⚠️  For Shadow Nexus Wave pages, use: firebase-config-wave.js
+ * Import this module from any page that needs Firebase instead of
+ * re-defining the config inline.  live.js keeps its own inline config
+ * for backward compatibility; this file is the canonical reference for
+ * new pages (e.g. live-hub.html).
  *
  * Usage (ES module):
  *   import { app, auth, db, liveDB } from './firebase-config.js';
  */
 
 import { initializeApp, getApps, getApp }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getDatabase }
-  from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js';
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 /* ── Firebase project credentials ── */
 const _CONFIG = {
-  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:        'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:         'shadow-nexus-wave',
-  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId: '68850298302',
-  appId:             '1:68850298302:web:603bbb8539079903cb1def',
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
 };
 
 /*

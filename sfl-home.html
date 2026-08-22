@@ -279,11 +279,6 @@
     <a href="sfl-settings.html" class="sfl-nav-item">
       <span class="sfl-nav-icon">⚙️</span> Settings
     </a>
-    <!-- Founder Panel link — shown by JS only if role === 'founder' -->
-    <a href="founder-panel.html" class="sfl-nav-item sfl-hidden" id="sidebarFounderLink"
-       style="color:#00AEEF;border:1px solid rgba(0,174,239,0.2);border-radius:8px;margin-top:4px;">
-      <span class="sfl-nav-icon">🌑</span> Founder Panel
-    </a>
     <button class="sfl-nav-item" id="sidebarLogout">
       <span class="sfl-nav-icon">🚪</span> Sign Out
     </button>
@@ -435,22 +430,21 @@ import { getAuth, onAuthStateChanged, signOut }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import {
   getFirestore, collection, query, where, orderBy, limit,
-  getDocs, onSnapshot, doc, getDoc, setDoc, Timestamp, deleteDoc, serverTimestamp
+  getDocs, onSnapshot, doc, getDoc, Timestamp, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-/* ── Shadow Nexus Wave Firebase config ── */
+/* ── Reuse existing Firebase config ── */
 const FIREBASE_CONFIG = {
-  apiKey:            'AIzaSyBO4IIDLMp-SKgBaA3RINsYaj-UELLUXZE',
-  authDomain:        'shadow-nexus-wave.firebaseapp.com',
-  databaseURL:       'https://shadow-nexus-wave-default-rtdb.firebaseio.com',
-  projectId:         'shadow-nexus-wave',
-  storageBucket:     'shadow-nexus-wave.firebasestorage.app',
-  messagingSenderId: '68850298302',
-  appId:             '1:68850298302:web:603bbb8539079903cb1def'
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  databaseURL:       'https://horr-a08f4-default-rtdb.firebaseio.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3'
 };
 
-const _SNW_APP_NAME = 'shadow-nexus-wave';
-const app = getApps().find(a => a.name === _SNW_APP_NAME) ?? initializeApp(FIREBASE_CONFIG, _SNW_APP_NAME);
+const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
@@ -573,11 +567,8 @@ function buildLiveCard(roomId, room) {
     ? `<img src="${room.hostAvatar}" class="sfl-live-avatar" alt="" loading="lazy">`
     : `<div class="sfl-live-avatar" style="display:flex;align-items:center;justify-content:center;font-size:12px;">👤</div>`;
   const viewers = room.viewers != null ? fmtNum(room.viewers) : (room.viewerCount != null ? fmtNum(room.viewerCount) : '0');
-  // Prefer the roomId field stored in the document (RTDB key) over the Firestore doc ID.
-  // The Firestore doc is keyed by uid but the RTDB room is keyed by uid_timestamp.
-  const linkRoomId = room.roomId || roomId;
   const a = document.createElement('a');
-  a.href = `live.html?room=${encodeURIComponent(linkRoomId)}`;
+  a.href = `live.html?room=${encodeURIComponent(roomId)}`;
   a.className = 'sfl-live-card';
   a.setAttribute('aria-label', `${room.hostName} is live: ${room.title || 'Live stream'}`);
   a.innerHTML = `
@@ -616,121 +607,81 @@ function renderVideos(docs) {
 }
 
 /* ══════════════════════════════
-   Load videos by tab — real-time listener
+   Load videos by tab
    ══════════════════════════════ */
-function loadVideos(tab, category) {
+async function loadVideos(tab, category) {
   const grid   = $('videoGrid');
   const loader = $('videoGridLoader');
   const empty  = $('videoGridEmpty');
-
-  // Cancel any existing video listener before starting a new one
-  if (_videoUnsub) { _videoUnsub(); _videoUnsub = null; }
-
   grid.innerHTML = '';
   empty.classList.add('sfl-hidden');
   loader.classList.remove('sfl-hidden');
   grid.appendChild(loader);
 
-  // Following tab with no followees — show empty state without Firestore query
-  if (tab === 'following' && _user) {
-    const following = _userData?.following || [];
-    if (!following.length) {
-      loader.classList.add('sfl-hidden');
-      grid.innerHTML = '';
-      empty.classList.remove('sfl-hidden');
-      $('videoGridEmptyIcon').textContent = '👥';
-      $('videoGridEmptyTitle').textContent = 'Follow creators to see their videos and live streams here.';
-      $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Nexus Wave.';
-      $('videoGridEmptyActions').innerHTML = '<a href="sfl-search.html" class="sfl-btn sfl-btn-primary">Discover Creators</a>';
-      return;
-    }
-  }
-
-  const READY_STATUSES = new Set(['published', 'ready', undefined, null, '']);
-  const videosRef = collection(db, 'videos');
-  let q;
-
   try {
+    let q;
+    const videosRef = collection(db, 'videos');
+
     if (tab === 'following' && _user) {
-      const batch = (_userData?.following || []).slice(0, 30);
+      // Get followed users' videos
+      const following = _userData?.following || [];
+      if (!following.length) {
+        // Show helpful empty state
+        const grid   = $('videoGrid');
+        const loader = $('videoGridLoader');
+        const empty  = $('videoGridEmpty');
+        loader.classList.add('sfl-hidden');
+        grid.innerHTML = '';
+        empty.classList.remove('sfl-hidden');
+        $('videoGridEmptyIcon').textContent = '👥';
+        $('videoGridEmptyTitle').textContent = 'Follow creators to see their videos and live streams here.';
+        $('videoGridEmptySub').textContent   = 'Discover great creators on Shadow Nexus Wave.';
+        $('videoGridEmptyActions').innerHTML = '<a href="sfl-search.html" class="sfl-btn sfl-btn-primary">Discover Creators</a>';
+        return;
+      }
+      // Firestore 'in' max 30 items
+      const batch = following.slice(0,30);
       q = query(videosRef,
-        where('creatorId', 'in', batch),
-        where('status', '==', 'published'),
-        where('visibility', '==', 'public'),
-        orderBy('createdAt', 'desc'), limit(30));
+        where('creatorId','in', batch),
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('createdAt','desc'), limit(30));
     } else if (tab === 'trending') {
       q = query(videosRef,
-        where('status', '==', 'published'),
-        where('visibility', '==', 'public'),
-        orderBy('views', 'desc'), limit(40));
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('views','desc'), limit(40));
     } else {
+      // Recommended (newest public)
       q = query(videosRef,
-        where('status', '==', 'published'),
-        where('visibility', '==', 'public'),
-        orderBy('createdAt', 'desc'), limit(40));
+        where('status','==','published'),
+        where('visibility','==','public'),
+        orderBy('createdAt','desc'), limit(40));
     }
-  } catch(e) {
-    loader.classList.add('sfl-hidden');
-    console.error('loadVideos query build:', e);
-    renderVideos([]);
-    return;
-  }
 
-  _videoUnsub = onSnapshot(q, snap => {
-    let docs = snap.docs.filter(d => READY_STATUSES.has(d.data().status));
+    let snap = await getDocs(q);
+    let docs = snap.docs;
 
-    // Apply category filter client-side (avoids needing an extra composite index)
+    // Only show videos that are ready to play (published or legacy 'ready' status)
+    // Filter out uploading / processing / failed docs so the feed stays clean
+    const READY_STATUSES = new Set(['published', 'ready', undefined, null, '']);
+    docs = docs.filter(d => {
+      const s = d.data().status;
+      return READY_STATUSES.has(s);
+    });
+
+    // Filter by category if not 'all'
     if (category !== 'all') {
       docs = docs.filter(d => d.data().category === category);
     }
 
-    // Rebuild the grid, preserving existing DOM nodes to avoid flicker
+    renderVideos(docs);
+  } catch(e) {
     loader.classList.add('sfl-hidden');
-
-    if (!docs.length) {
-      // Remove any cards that may be present, leave loader (which is hidden)
-      grid.querySelectorAll('[data-video-id]').forEach(el => el.remove());
-      empty.classList.remove('sfl-hidden');
-      return;
-    }
-    empty.classList.add('sfl-hidden');
-
-    // Determine which video IDs are currently rendered
-    const rendered = new Set();
-    grid.querySelectorAll('[data-video-id]').forEach(el => rendered.add(el.dataset.videoId));
-
-    const incoming = new Set(docs.map(d => d.id));
-
-    // Remove cards that are no longer in the result set
-    grid.querySelectorAll('[data-video-id]').forEach(el => {
-      if (!incoming.has(el.dataset.videoId)) el.remove();
-    });
-
-    // Add new cards (only if not already present)
-    docs.forEach(d => {
-      if (!rendered.has(d.id)) {
-        const card = buildVideoCard(d.id, d.data());
-        card.dataset.videoId = d.id;
-        grid.appendChild(card);
-      }
-    });
-
-    // Re-order DOM nodes that have data-video-id to match query order (skip non-card nodes like loader)
-    const cardEls = Array.from(grid.querySelectorAll('[data-video-id]'));
-    docs.forEach((d, i) => {
-      const el = cardEls.find(c => c.dataset.videoId === d.id);
-      if (el && cardEls[i] !== el) {
-        grid.insertBefore(el, cardEls[i] || null);
-        // Update the local array to reflect the new order
-        cardEls.splice(cardEls.indexOf(el), 1);
-        cardEls.splice(i, 0, el);
-      }
-    });
-  }, err => {
-    loader.classList.add('sfl-hidden');
-    console.error('loadVideos onSnapshot:', err);
+    console.error('loadVideos:', e);
+    // Show graceful empty state instead of crashing
     renderVideos([]);
-  });
+  }
 }
 
 /* ══════════════════════════════
@@ -742,7 +693,15 @@ function loadLiveRooms() {
 
   if (_liveUnsub) { _liveUnsub(); _liveUnsub = null; }
 
-  function _applySnap(snap) {
+  const q = query(
+    collection(db,'liveRooms'),
+    where('status','==','live'),
+    orderBy('viewers','desc'),
+    limit(20)
+  );
+
+  _liveUnsub = onSnapshot(q, snap => {
+    // Remove old cards but keep empty placeholder
     row.querySelectorAll('.sfl-live-card').forEach(c => c.remove());
     if (snap.empty) {
       empty.classList.remove('sfl-hidden');
@@ -750,28 +709,8 @@ function loadLiveRooms() {
     }
     empty.classList.add('sfl-hidden');
     snap.docs.forEach(d => row.insertBefore(buildLiveCard(d.id, d.data()), empty));
-  }
-
-  // Primary query: status==live + ordered by viewers descending (requires composite index).
-  // Falls back to status-only query if the index is missing.
-  const qPrimary = query(
-    collection(db,'liveRooms'),
-    where('status','==','live'),
-    orderBy('viewers','desc'),
-    limit(20)
-  );
-
-  _liveUnsub = onSnapshot(qPrimary, _applySnap, () => {
-    // Composite index missing — fall back to status-only query (no ordering)
-    if (_liveUnsub) { try { _liveUnsub(); } catch(_e) {} }
-    const qFallback = query(
-      collection(db,'liveRooms'),
-      where('status','==','live'),
-      limit(20)
-    );
-    _liveUnsub = onSnapshot(qFallback, _applySnap, () => {
-      empty.classList.remove('sfl-hidden');
-    });
+  }, () => {
+    empty.classList.remove('sfl-hidden');
   });
 }
 
@@ -797,37 +736,6 @@ async function loadNotifCount(uid) {
 }
 
 /* ══════════════════════════════
-   ensureWaveProfile — auto-provision Wave Firestore user doc
-   ══════════════════════════════ */
-async function ensureWaveProfile(user) {
-  if (!user) return null;
-  const ref  = doc(db, 'users', user.uid);
-  const snap = await getDoc(ref);
-  if (snap.exists()) return snap.data();
-  // First login on Wave — create a minimal profile from Firebase Auth claims.
-  const profile = {
-    uid:           user.uid,
-    displayName:   user.displayName || '',
-    username:      '',
-    email:         user.email       || '',
-    avatar:        user.photoURL    || '',
-    bio:           '',
-    role:          'member',
-    followers:     [],
-    following:     [],
-    followerCount: 0,
-    followingCount:0,
-    isLive:        false,
-    liveRoomId:    null,
-    socialEmail:   user.email || null,
-    createdAt:     serverTimestamp(),
-    updatedAt:     serverTimestamp(),
-  };
-  await setDoc(ref, profile).catch(() => {});
-  return profile;
-}
-
-/* ══════════════════════════════
    Auth state
    ══════════════════════════════ */
 onAuthStateChanged(auth, async user => {
@@ -836,10 +744,8 @@ onAuthStateChanged(auth, async user => {
 
   if (user) {
     try {
-      _userData = await ensureWaveProfile(user);
-      if (_userData?.role === 'founder') {
-        $('sidebarFounderLink')?.classList.remove('sfl-hidden');
-      }
+      const snap = await getDoc(doc(db,'users',user.uid));
+      if (snap.exists()) _userData = snap.data();
     } catch(e) {}
     loadNotifCount(user.uid);
     // Update profile links
@@ -947,12 +853,6 @@ $('sidebarLogout')?.addEventListener('click', async () => {
    ══════════════════════════════ */
 spawnParticles();
 
-// Clean up real-time listeners when navigating away
-window.addEventListener('pagehide', () => {
-  if (_videoUnsub) { _videoUnsub(); _videoUnsub = null; }
-  if (_liveUnsub)  { _liveUnsub();  _liveUnsub  = null; }
-});
-
 // SW registration + install prompt handled by pwa-install.js (loaded below)
 
 /* ══════════════════════════════
@@ -1001,7 +901,7 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
     const streamId = vidData.streamId || vidData.cloudflareStreamId || null;
     if (streamId) {
       try {
-        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/stream/delete', {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/stream/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, streamId, ownerId: liveUser.uid }),
@@ -1017,7 +917,7 @@ $('homeDeleteConfirm').addEventListener('click', async () => {
     const r2Key = vidData.r2Key || vidData.storageKey || null;
     if (r2Key && !streamId) {
       try {
-        const wRes = await fetch('https://shadow-nexus-wave.nthntjrn.workers.dev/r2/delete', {
+        const wRes = await fetch('https://yellow-term-11e6.nthntjrn.workers.dev/r2/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ idToken, r2Key, ownerId: liveUser.uid }),

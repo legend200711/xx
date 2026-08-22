@@ -26,15 +26,15 @@ firebase projects:list --json &>/dev/null || {
 
 echo ""
 echo "Deploying Firestore security rules..."
-firebase deploy --only firestore:rules --project shadow-nexus-wave
+firebase deploy --only firestore:rules --project horr-a08f4
 
 echo ""
 echo "Deploying Firestore indexes..."
-firebase deploy --only firestore:indexes --project shadow-nexus-wave
+firebase deploy --only firestore:indexes --project horr-a08f4
 
 echo ""
 echo "Deploying updated hosting files (sfl-upload.html etc.)..."
-firebase deploy --only hosting --project shadow-nexus-wave
+firebase deploy --only hosting --project horr-a08f4
 
 echo ""
 echo "=== DONE ==="
