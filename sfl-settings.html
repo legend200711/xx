@@ -914,7 +914,7 @@
   <div class="acct-modal">
     <button class="acct-modal-close" id="socialConnectClose" aria-label="Close">✕</button>
     <div class="acct-modal-title" id="socialConnectTitle">🔗 Connect Shadow Nexus Social</div>
-    <div class="acct-modal-sub" id="socialConnectModalSub">Enter your Shadow Nexus Social credentials to link your accounts. Your password is verified server-side and never stored.</div>
+    <div class="acct-modal-sub" id="socialConnectModalSub">Enter your Shadow Nexus Social email and password to link your accounts. Your credentials are used only to sign in — they are never sent to the Wave server.</div>
     <div class="acct-field">
       <label for="socialConnectEmail">Social Email</label>
       <input type="email" id="socialConnectEmail" placeholder="your@social-email.com" autocomplete="email">
@@ -957,7 +957,8 @@ import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/12.18
 import {
   getAuth, onAuthStateChanged, signOut,
   EmailAuthProvider, reauthenticateWithCredential,
-  updatePassword, verifyBeforeUpdateEmail
+  updatePassword, verifyBeforeUpdateEmail,
+  signInWithEmailAndPassword
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, updateDoc, setDoc }
   from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
@@ -973,6 +974,26 @@ const FIREBASE_CONFIG = {
 const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db   = getFirestore(app);
+
+// ── Shadow Nexus Social Firebase app (separate project — horr-a08f4) ─────────
+// Used ONLY to authenticate the Social account client-side so that the
+// plaintext password never leaves the browser. The Social auth credential is
+// converted to a Social ID token here, and only the token is sent to the
+// Wave backend for server-side verification.
+// This app is initialised with a named instance so it never collides with the
+// Wave app above.
+const SOCIAL_FIREBASE_CONFIG = {
+  apiKey:            'AIzaSyByZRmp6R9HY17T2_WdJUFWeeaLNOP6y2Y',
+  authDomain:        'horr-a08f4.firebaseapp.com',
+  projectId:         'horr-a08f4',
+  storageBucket:     'horr-a08f4.firebasestorage.app',
+  messagingSenderId: '933810617818',
+  appId:             '1:933810617818:web:efb24f123337dd987c14e3',
+};
+const _SNX_SOCIAL_APP_NAME = 'snx-social-bridge';
+const socialApp  = getApps().find(a => a.name === _SNX_SOCIAL_APP_NAME)
+  ?? initializeApp(SOCIAL_FIREBASE_CONFIG, _SNX_SOCIAL_APP_NAME);
+const socialAuth = getAuth(socialApp);
 
 /* ── Cloudflare R2 Worker — Shadow Nexus Wave worker (NOT the Social worker yellow-term-11e6) ── */
 const R2_WORKER_URL = 'https://shadow-nexus-wave.nthntjrn.workers.dev';
@@ -1893,14 +1914,19 @@ function _openConnectModal() {
   $('socialConnectPassword').value = '';
   setMsg('socialConnectMsg', '');
   $('socialConnectTitle').textContent    = '🔗 Connect Shadow Nexus Social';
-  $('socialConnectModalSub').textContent = 'Enter your Shadow Nexus Social credentials to link your accounts. Your password is verified server-side and never stored.';
+  $('socialConnectModalSub').textContent = 'Enter your Shadow Nexus Social email and password to link your accounts. Your credentials are used only to sign in — they are never sent to the Wave server.';
   $('socialConnectPasswordField').style.display = '';
   $('socialConnectSaveBtn').disabled    = false;
   $('socialConnectSaveBtn').textContent = 'Link Account';
   openOverlay('socialConnectOverlay');
   setTimeout(() => $('socialConnectEmail').focus(), 80);
 }
-function _closeConnectModal() { closeOverlay('socialConnectOverlay'); }
+function _closeConnectModal() {
+  closeOverlay('socialConnectOverlay');
+  // Always clear credentials from the DOM on close.
+  $('socialConnectEmail').value    = '';
+  $('socialConnectPassword').value = '';
+}
 
 $('socialConnectClose').addEventListener('click',     _closeConnectModal);
 $('socialConnectCancelBtn').addEventListener('click', _closeConnectModal);
@@ -1919,13 +1945,30 @@ $('socialConnectSaveBtn').addEventListener('click', async () => {
   $('socialConnectSaveBtn').textContent = 'Linking…';
   setMsg('socialConnectMsg', '');
 
+  let socialUserCredential = null;
   try {
-    // Get Wave ID token (never sent to Social — only used to prove Wave identity to our own worker)
-    const idToken = await user.getIdToken();
+    // ── Step 1: Authenticate with Shadow Nexus Social directly ──────────────
+    // The password is used ONLY here, by the Firebase SDK, to sign in.
+    // It is handled internally by Firebase Auth (HTTPS to Google's servers).
+    // The plaintext password is never passed to the Wave worker.
+    socialUserCredential = await signInWithEmailAndPassword(socialAuth, email, pw);
+
+    // ── Step 2: Get Social ID token ──────────────────────────────────────────
+    // This is a signed JWT issued by the Social Firebase project.
+    // It proves ownership of the Social account without revealing the password.
+    const socialIdToken = await socialUserCredential.user.getIdToken();
+
+    // ── Step 3: Get Wave ID token ────────────────────────────────────────────
+    // Proves ownership of the Wave account to the Wave worker.
+    const waveIdToken = await user.getIdToken();
+
+    // ── Step 4: Send both tokens to the Wave worker ──────────────────────────
+    // The worker verifies both tokens server-side and writes the connection.
+    // No password is included in this request.
     const res = await fetch(`${WAVE_WORKER}/auth/social-connect`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ waveIdToken: idToken, socialEmail: email, socialPassword: pw })
+      body:    JSON.stringify({ waveIdToken, socialIdToken })
     });
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || `Server error (${res.status})`);
@@ -1936,15 +1979,26 @@ $('socialConnectSaveBtn').addEventListener('click', async () => {
     toast('🔗 Shadow Nexus Social linked!', 4000);
   } catch (e) {
     let msg = e.message || 'Could not link account. Please try again.';
-    if (msg.includes('INVALID_LOGIN_CREDENTIALS') || msg.includes('wrong-password') || msg.includes('invalid-credential'))
+    // Firebase Auth error codes from the client-side Social sign-in
+    if (msg.includes('auth/invalid-credential') || msg.includes('auth/wrong-password') || msg.includes('INVALID_LOGIN_CREDENTIALS'))
       msg = 'Incorrect Social email or password.';
-    else if (msg.includes('USER_NOT_FOUND') || msg.includes('user-not-found'))
-      msg = 'No Social account found with that email.';
-    else if (msg.includes('TOO_MANY_ATTEMPTS') || msg.includes('too-many-requests'))
+    else if (msg.includes('auth/user-not-found') || msg.includes('USER_NOT_FOUND'))
+      msg = 'No Shadow Nexus Social account found with that email.';
+    else if (msg.includes('auth/too-many-requests') || msg.includes('TOO_MANY_ATTEMPTS'))
       msg = 'Too many attempts. Please wait and try again.';
+    else if (msg.includes('auth/user-disabled') || msg.includes('DISABLED'))
+      msg = 'That Shadow Nexus Social account has been disabled.';
+    else if (msg.includes('TOKEN_EXPIRED') || msg.includes('Social session expired'))
+      msg = 'Social session expired. Please try again.';
     setMsg('socialConnectMsg', 'error', msg);
     $('socialConnectSaveBtn').disabled    = false;
     $('socialConnectSaveBtn').textContent = 'Link Account';
+  } finally {
+    // Sign out of the temporary Social auth session — Wave does not maintain
+    // a persistent Social session. The connection is recorded server-side.
+    if (socialUserCredential) {
+      socialAuth.signOut().catch(() => {});
+    }
   }
 });
 $('socialConnectPassword').addEventListener('keydown', e => { if (e.key === 'Enter') $('socialConnectSaveBtn').click(); });

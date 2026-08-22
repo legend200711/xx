@@ -1589,18 +1589,31 @@ async function _firestoreRestGet(path, env) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  POST /auth/social-connect
 //
-//  Connects an authenticated Wave account to a Social account.
-//  Body: { waveIdToken, email, password }
+//  Connects an authenticated Wave account to a Shadow Nexus Social account.
+//
+//  Body: { waveIdToken, socialIdToken }
+//
+//    waveIdToken   — Firebase ID token from the Wave project (shadow-nexus-wave).
+//                    Proves the caller owns their Wave account.
+//    socialIdToken — Firebase ID token from the Social project (horr-a08f4).
+//                    Obtained by the browser calling signInWithEmailAndPassword()
+//                    directly against the Social Firebase SDK. The plaintext
+//                    password is NEVER sent to this endpoint.
 //
 //  Steps:
-//    1. Verify waveIdToken → get waveUid (proves the caller owns their Wave account)
-//    2. Verify Social email+password → get socialUid (proves ownership of Social account)
-//    3. Check no other Wave account already holds this socialUid
-//    4. Write socialConnections/{waveUid} via SA (server-side only, client cannot forge)
-//    5. Return { connected: true, socialEmail }
+//    1. Verify waveIdToken against Wave project  → extract waveUid
+//    2. Verify socialIdToken against Social project → extract socialUid + socialEmail
+//    3. Write socialConnections/{waveUid} via service account (server-side only)
+//    4. Return { connected: true, socialEmail }
+//
+//  Security:
+//    - Passwords are never sent to or processed by this endpoint.
+//    - Both tokens are verified server-side; client-supplied identity is never trusted.
+//    - The Social ID token is discarded after verification and never returned.
+//    - The Firestore write uses the Wave service account; the client cannot forge it.
 //
 //  Returns: 200 { connected, socialEmail }
-//  Errors:  400 | 401 | 409 | 502 | 503
+//  Errors:  400 | 401 | 403 | 503
 // ═══════════════════════════════════════════════════════════════════════════
 async function handleSocialConnect(request, env, cors, sec) {
   if (request.method !== 'POST') {
@@ -1622,100 +1635,92 @@ async function handleSocialConnect(request, env, cors, sec) {
     });
   }
 
-  const { waveIdToken, socialEmail: socialEmailInput, socialPassword: socialPasswordInput } = body || {};
-  if (!waveIdToken || !socialEmailInput || !socialPasswordInput) {
-    return new Response(JSON.stringify({ error: 'waveIdToken, socialEmail, and socialPassword are required' }), {
+  // Only waveIdToken and socialIdToken are accepted.
+  // Passwords must never be sent to this endpoint.
+  const { waveIdToken, socialIdToken } = body || {};
+  if (!waveIdToken || !socialIdToken) {
+    return new Response(JSON.stringify({ error: 'waveIdToken and socialIdToken are required' }), {
       status: 400, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
   }
-  // Bind to local vars used by the Social sign-in block below.
-  // socialPasswordInput is consumed once for server-side Firebase auth and never persisted.
-  const email    = socialEmailInput;
-  const password = socialPasswordInput;
 
   // ── Step 1: Verify Wave ID token — prove caller owns their Wave account ──────
-  let waveUid, waveEmail;
+  // UIDs and emails are extracted from the verified server-side token response,
+  // never from client-supplied fields in the request body.
+  let waveUid;
   try {
-    ({ uid: waveUid, email: waveEmail } = await _verifyWaveIdToken(waveIdToken, env.FIREBASE_WEB_API_KEY));
+    ({ uid: waveUid } = await _verifyWaveIdToken(waveIdToken, env.FIREBASE_WEB_API_KEY));
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), {
       status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
   }
 
-  // ── Step 2: Verify Social credentials — prove ownership of Social account ───
+  // ── Step 2: Verify Social ID token — prove caller owns their Social account ──
+  // The browser obtained this token by signing in to the Social Firebase project
+  // directly (signInWithEmailAndPassword). The password was never sent here.
+  // We verify the token server-side via the Social project's Identity Toolkit.
   let socialLocalId, socialEmail;
   try {
-    const signInRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
+    const verifyRes = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email, password, returnSecureToken: true }),
+        body:    JSON.stringify({ idToken: socialIdToken }),
       }
     );
-    const signInData = await signInRes.json();
-    if (!signInRes.ok || !signInData.idToken) {
-      const code = signInData?.error?.message || '';
-      if (code === 'EMAIL_NOT_FOUND' || code === 'INVALID_EMAIL')
-        return new Response(JSON.stringify({ error: 'No Shadow Nexus Social account found for that email.', code: 'NOT_FOUND' }), {
-          status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
-        });
-      if (code === 'INVALID_PASSWORD' || code.startsWith('INVALID_LOGIN_CREDENTIALS'))
-        return new Response(JSON.stringify({ error: 'Incorrect password for your Shadow Nexus Social account.', code: 'WRONG_PASSWORD' }), {
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || !verifyData.users?.[0]?.localId) {
+      const code = verifyData?.error?.message || '';
+      if (code.includes('TOKEN_EXPIRED') || code.includes('INVALID_ID_TOKEN'))
+        return new Response(JSON.stringify({ error: 'Social session expired. Please sign in to Social again.', code: 'TOKEN_EXPIRED' }), {
           status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
         });
       if (code === 'USER_DISABLED')
         return new Response(JSON.stringify({ error: 'That Shadow Nexus Social account has been disabled.', code: 'DISABLED' }), {
           status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
         });
-      if (code === 'TOO_MANY_ATTEMPTS_TRY_LATER')
-        return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a moment and try again.', code: 'RATE_LIMITED' }), {
-          status: 429, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
-        });
-      return new Response(JSON.stringify({ error: 'Social sign-in failed. Check your credentials.' }), {
+      return new Response(JSON.stringify({ error: 'Invalid or expired Social session token.' }), {
         status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
       });
     }
-    socialLocalId = signInData.localId;
-    socialEmail   = signInData.email;
-
-    // Verify the returned token to confirm it was issued by Social project
-    const verifyRes = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.SOCIAL_FIREBASE_WEB_API_KEY}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: signInData.idToken }) }
-    );
-    const verifyData = await verifyRes.json();
-    if (!verifyRes.ok || verifyData.users?.[0]?.localId !== socialLocalId) {
-      return new Response(JSON.stringify({ error: 'Social identity verification failed.' }), {
-        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
+    const socialUser = verifyData.users[0];
+    if (socialUser.disabled) {
+      return new Response(JSON.stringify({ error: 'That Shadow Nexus Social account has been disabled.', code: 'DISABLED' }), {
+        status: 403, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
       });
     }
-    // idToken discarded here — never returned to client
+    // Identity extracted exclusively from the server-verified token response.
+    socialLocalId = socialUser.localId;
+    socialEmail   = socialUser.email || '';
+    // socialIdToken is discarded here — never stored, logged, or returned to client.
   } catch (e) {
-    if (e.message && (e.message.includes('verification') || e.message.includes('disabled') || e.message.includes('incorrect') || e.message.includes('attempt'))) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: 401, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
-      });
-    }
-    return new Response(JSON.stringify({ error: 'Could not reach Shadow Nexus Social. Try again shortly.' }), {
+    return new Response(JSON.stringify({ error: 'Could not verify Social account. Try again shortly.' }), {
       status: 502, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
     });
   }
 
   // ── Step 3: Write connection record via service account ──────────────────────
-  // socialConnections/{waveUid} is written server-side only.
-  // The client holds a Wave ID token that was verified above — this is the only
-  // way to establish a connection. A client cannot write this doc directly because
-  // Firestore rules deny client writes to socialConnections (write: if false).
+  // socialConnections/{waveUid} is written server-side only via the Wave service
+  // account. The client cannot write this document because Firestore rules deny
+  // all direct client writes to socialConnections (write: if false).
+  // Only the minimum fields required for the bridge are persisted — no passwords,
+  // no ID tokens.
+  const now = Date.now();
   try {
     await _firestoreRestWrite('set', `socialConnections/${waveUid}`, {
-      waveUid,
-      socialUid:     socialLocalId,
-      socialEmail:   socialEmail || email,
-      status:        'connected',
-      connectedAt:   Date.now(),
-      updatedAt:     Date.now(),
+      waveUserUid:            waveUid,
+      shadowNexusSocialUid:   socialLocalId,
+      socialEmail:            socialEmail,
+      connectionStatus:       'connected',
+      createdAt:              now,
+      updatedAt:              now,
+      // Legacy aliases kept for read-compatibility with existing queries.
+      waveUid:                waveUid,
+      socialUid:              socialLocalId,
+      status:                 'connected',
+      connectedAt:            now,
     }, env);
   } catch (e) {
     return new Response(JSON.stringify({ error: 'Could not save connection: ' + e.message }), {
@@ -1725,7 +1730,7 @@ async function handleSocialConnect(request, env, cors, sec) {
 
   return new Response(JSON.stringify({
     connected:   true,
-    socialEmail: socialEmail || email,
+    socialEmail: socialEmail,
   }), {
     status: 200, headers: mergeHeaders(cors, sec, { 'Content-Type': 'application/json' })
   });
